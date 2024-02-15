@@ -46,7 +46,7 @@ pub struct CallOptions {
 }
 
 impl CallOptions {
-    fn new() -> Self {
+    pub fn new() -> Self {
         CallOptions {
             candidate_count: None,
             max_tokens: None,
