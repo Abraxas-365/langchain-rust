@@ -2,24 +2,21 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-// FunctionCallBehavior is the behavior to use when calling functions.
 #[derive(Clone, Copy, Debug)]
-enum FunctionCallBehavior {
+pub enum FunctionCallBehavior {
     None,
     Auto,
 }
 
-// FunctionDefinition is a definition of a function that can be called by the model.
 #[derive(Clone, Debug)]
-struct FunctionDefinition {
+pub struct FunctionDefinition {
     name: String,
     description: String,
-    parameters: HashMap<String, String>, // Assuming parameters as a simple key-value pair for simplicity
+    parameters: HashMap<String, String>,
 }
 
-// CallOptions is a set of options for calling models, Not all the llms have all this options.
 #[derive(Clone)]
-struct CallOptions {
+pub struct CallOptions {
     candidate_count: Option<usize>,
     max_tokens: Option<u16>,
     temperature: Option<f32>,
@@ -59,83 +56,89 @@ impl CallOptions {
             function_call_behavior: None,
         }
     }
-}
 
-// CallOption is a function that configures a CallOptions.
-type CallOption = Box<dyn FnOnce(&mut CallOptions)>;
-
-// Builder pattern for CallOptions
-impl CallOptions {
-    fn with_option(mut self, opt: CallOption) -> Self {
-        opt(&mut self);
+    // Refactored "with" functions as methods of CallOptions
+    fn with_max_tokens(&mut self, max_tokens: u16) -> &mut Self {
+        self.max_tokens = Some(max_tokens);
         self
     }
-}
 
-fn with_max_tokens(max_tokens: u16) -> CallOption {
-    Box::new(move |opts| opts.max_tokens = Some(max_tokens))
-}
+    fn with_candidate_count(&mut self, candidate_count: usize) -> &mut Self {
+        self.candidate_count = Some(candidate_count);
+        self
+    }
 
-fn with_candidate_count(candidate_count: usize) -> CallOption {
-    Box::new(move |opts| opts.candidate_count = Some(candidate_count))
-}
+    fn with_temperature(&mut self, temperature: f32) -> &mut Self {
+        self.temperature = Some(temperature);
+        self
+    }
 
-fn with_temperature(temperature: f32) -> CallOption {
-    Box::new(move |opts| opts.temperature = Some(temperature))
-}
+    fn with_stop_words(&mut self, stop_words: Vec<String>) -> &mut Self {
+        self.stop_words = Some(stop_words);
+        self
+    }
 
-fn with_stop_words(stop_words: Vec<String>) -> CallOption {
-    Box::new(move |opts| opts.stop_words = Some(stop_words))
-}
+    fn with_streaming_func<F>(&mut self, func: F) -> &mut Self
+    where
+        F: FnMut(Vec<u8>) -> Result<(), ()> + Send + 'static,
+    {
+        let func = Arc::new(Mutex::new(func));
+        self.streaming_func = Some(func);
+        self
+    }
 
-fn with_streaming_func<F>(func: F) -> CallOption
-where
-    F: FnMut(Vec<u8>) -> Result<(), ()> + Send + 'static,
-{
-    let func = Arc::new(Mutex::new(func));
-    Box::new(move |opts| opts.streaming_func = Some(func.clone()))
-}
+    fn with_top_k(&mut self, top_k: usize) -> &mut Self {
+        self.top_k = Some(top_k);
+        self
+    }
 
-fn with_top_k(top_k: usize) -> CallOption {
-    Box::new(move |opts| opts.top_k = Some(top_k))
-}
+    fn with_top_p(&mut self, top_p: f32) -> &mut Self {
+        self.top_p = Some(top_p);
+        self
+    }
 
-fn with_top_p(top_p: f32) -> CallOption {
-    Box::new(move |opts| opts.top_p = Some(top_p))
-}
+    fn with_seed(&mut self, seed: usize) -> &mut Self {
+        self.seed = Some(seed);
+        self
+    }
 
-fn with_seed(seed: usize) -> CallOption {
-    Box::new(move |opts| opts.seed = Some(seed))
-}
+    fn with_min_length(&mut self, min_length: usize) -> &mut Self {
+        self.min_length = Some(min_length);
+        self
+    }
 
-fn with_min_length(min_length: usize) -> CallOption {
-    Box::new(move |opts| opts.min_length = Some(min_length))
-}
+    fn with_max_length(&mut self, max_length: usize) -> &mut Self {
+        self.max_length = Some(max_length);
+        self
+    }
 
-fn with_max_length(max_length: usize) -> CallOption {
-    Box::new(move |opts| opts.max_length = Some(max_length))
-}
+    fn with_n(&mut self, n: usize) -> &mut Self {
+        self.n = Some(n);
+        self
+    }
 
-fn with_n(n: usize) -> CallOption {
-    Box::new(move |opts| opts.n = Some(n))
-}
+    fn with_repetition_penalty(&mut self, repetition_penalty: f32) -> &mut Self {
+        self.repetition_penalty = Some(repetition_penalty);
+        self
+    }
 
-fn with_repetition_penalty(repetition_penalty: f32) -> CallOption {
-    Box::new(move |opts| opts.repetition_penalty = Some(repetition_penalty))
-}
+    fn with_frequency_penalty(&mut self, frequency_penalty: f32) -> &mut Self {
+        self.frequency_penalty = Some(frequency_penalty);
+        self
+    }
 
-fn with_frequency_penalty(frequency_penalty: f32) -> CallOption {
-    Box::new(move |opts| opts.frequency_penalty = Some(frequency_penalty))
-}
+    fn with_presence_penalty(&mut self, presence_penalty: f32) -> &mut Self {
+        self.presence_penalty = Some(presence_penalty);
+        self
+    }
 
-fn with_presence_penalty(presence_penalty: f32) -> CallOption {
-    Box::new(move |opts| opts.presence_penalty = Some(presence_penalty))
-}
+    fn with_functions(&mut self, functions: Vec<FunctionDefinition>) -> &mut Self {
+        self.functions = Some(functions);
+        self
+    }
 
-fn with_functions(functions: Vec<FunctionDefinition>) -> CallOption {
-    Box::new(move |opts| opts.functions = Some(functions))
-}
-
-fn with_function_call_behavior(behavior: FunctionCallBehavior) -> CallOption {
-    Box::new(move |opts| opts.function_call_behavior = Some(behavior))
+    fn with_function_call_behavior(&mut self, behavior: FunctionCallBehavior) -> &mut Self {
+        self.function_call_behavior = Some(behavior);
+        self
+    }
 }
