@@ -17,7 +17,7 @@ struct FunctionDefinition {
     parameters: HashMap<String, String>, // Assuming parameters as a simple key-value pair for simplicity
 }
 
-// CallOptions is a set of options for calling models.
+// CallOptions is a set of options for calling models, Not all the llms have all this options.
 #[derive(Clone)]
 struct CallOptions {
     candidate_count: Option<usize>,
