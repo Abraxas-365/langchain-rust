@@ -3,3 +3,4 @@ pub mod chain;
 pub mod llm;
 pub mod memory;
 pub mod messages;
+pub mod prompt;
