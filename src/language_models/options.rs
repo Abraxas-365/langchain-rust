@@ -15,6 +15,16 @@ pub struct FunctionDefinition {
     pub parameters: Value,
 }
 
+impl FunctionDefinition {
+    pub fn new(name: &str, description: &str, parameters: Value) -> Self {
+        FunctionDefinition {
+            name: name.to_string(),
+            description: description.to_string(),
+            parameters,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct CallOptions {
     pub candidate_count: Option<usize>,
