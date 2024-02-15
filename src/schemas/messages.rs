@@ -2,51 +2,40 @@ use serde_json::Value;
 use std::{
     collections::HashMap,
     io::{self, ErrorKind},
+    sync::Arc,
 };
 
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 
 pub trait BaseMessage: Send + Sync {
     fn get_type(&self) -> String;
     fn get_content(&self) -> String;
-    fn clone_box(&self) -> Box<dyn BaseMessage>;
 }
-impl Clone for Box<dyn BaseMessage> {
-    fn clone(&self) -> Box<dyn BaseMessage> {
-        self.clone_box()
+
+pub trait SerializableMessage {
+    fn serialize_message<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>;
+}
+
+impl SerializableMessage for Arc<dyn BaseMessage> {
+    fn serialize_message<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("BaseMessage", 2)?;
+        state.serialize_field("type", &self.get_type())?;
+        state.serialize_field("content", &self.get_content())?;
+        state.end()
     }
 }
 
-impl Serialize for Box<dyn BaseMessage> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let map = message_to_map(self);
-        map.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for Box<dyn BaseMessage> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let map: HashMap<String, String> = HashMap::deserialize(deserializer)?;
-
-        message_from_map(&map).map_err(serde::de::Error::custom)
-    }
-}
+//TODO: Implement deserialize
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HumanMessage {
     pub content: String,
 }
 impl HumanMessage {
-    pub fn new(content: &str) -> Self {
-        Self {
+    pub fn new(content: &str) -> Arc<Self> {
+        Arc::new(Self {
             content: String::from(content),
-        }
+        })
     }
 }
 impl BaseMessage for HumanMessage {
@@ -57,9 +46,6 @@ impl BaseMessage for HumanMessage {
     fn get_content(&self) -> String {
         self.content.clone()
     }
-    fn clone_box(&self) -> Box<dyn BaseMessage> {
-        Box::new(self.clone())
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -67,10 +53,10 @@ pub struct SystemMessage {
     pub content: String,
 }
 impl SystemMessage {
-    pub fn new(content: &str) -> Self {
-        Self {
+    pub fn new(content: &str) -> Arc<Self> {
+        Arc::new(Self {
             content: String::from(content),
-        }
+        })
     }
 }
 impl BaseMessage for SystemMessage {
@@ -81,10 +67,6 @@ impl BaseMessage for SystemMessage {
     fn get_content(&self) -> String {
         self.content.clone()
     }
-
-    fn clone_box(&self) -> Box<dyn BaseMessage> {
-        Box::new(self.clone())
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -92,10 +74,10 @@ pub struct AIMessage {
     pub content: String,
 }
 impl AIMessage {
-    pub fn new(content: &str) -> Self {
-        Self {
+    pub fn new(content: &str) -> Arc<Self> {
+        Arc::new(Self {
             content: String::from(content),
-        }
+        })
     }
 }
 impl BaseMessage for AIMessage {
@@ -106,10 +88,6 @@ impl BaseMessage for AIMessage {
     fn get_content(&self) -> String {
         self.content.clone()
     }
-
-    fn clone_box(&self) -> Box<dyn BaseMessage> {
-        Box::new(self.clone())
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -118,11 +96,11 @@ pub struct ChatMessage {
     content: String,
 }
 impl ChatMessage {
-    pub fn new(role: &str, content: &str) -> Self {
-        Self {
+    pub fn new(role: &str, content: &str) -> Arc<Self> {
+        Arc::new(Self {
             role: String::from(role),
             content: String::from(content),
-        }
+        })
     }
 }
 impl BaseMessage for ChatMessage {
@@ -133,15 +111,11 @@ impl BaseMessage for ChatMessage {
     fn get_content(&self) -> String {
         self.content.clone()
     }
-
-    fn clone_box(&self) -> Box<dyn BaseMessage> {
-        Box::new(self.clone())
-    }
 }
 
 pub fn message_from_map(
     message: &HashMap<String, String>,
-) -> Result<Box<dyn BaseMessage>, Box<dyn std::error::Error + Send>> {
+) -> Result<Arc<dyn BaseMessage>, Box<dyn std::error::Error + Send>> {
     let message_type = match message.get("type") {
         Some(t) => t,
         None => {
@@ -155,21 +129,21 @@ pub fn message_from_map(
     match message_type.as_str() {
         "user" => {
             let content = message.get("content").unwrap_or(&String::from("")).clone();
-            Ok(Box::new(HumanMessage {
+            Ok(Arc::new(HumanMessage {
                 content: content.to_string(),
             }))
         }
 
         "system" => {
             let content = message.get("content").unwrap_or(&String::from("")).clone();
-            Ok(Box::new(SystemMessage {
+            Ok(Arc::new(SystemMessage {
                 content: content.to_string(),
             }))
         }
 
         "assistant" => {
             let content = message.get("content").unwrap_or(&String::from("")).clone();
-            Ok(Box::new(AIMessage {
+            Ok(Arc::new(AIMessage {
                 content: content.to_string(),
             }))
         }
@@ -183,11 +157,11 @@ pub fn message_from_map(
 
 pub fn messages_from_map(
     messages: &[HashMap<String, String>],
-) -> Result<Vec<Box<dyn BaseMessage>>, Box<dyn std::error::Error + Send>> {
+) -> Result<Vec<Arc<dyn BaseMessage>>, Box<dyn std::error::Error + Send>> {
     messages.into_iter().map(message_from_map).collect()
 }
 
-pub fn message_to_map(message: &Box<dyn BaseMessage>) -> HashMap<String, String> {
+pub fn message_to_map(message: &Arc<dyn BaseMessage>) -> HashMap<String, String> {
     let mut map = HashMap::new();
 
     map.insert("type".to_string(), message.get_type());
@@ -196,7 +170,7 @@ pub fn message_to_map(message: &Box<dyn BaseMessage>) -> HashMap<String, String>
     map
 }
 
-pub fn messages_to_map(messages: &[Box<dyn BaseMessage>]) -> Vec<HashMap<String, String>> {
+pub fn messages_to_map(messages: &[Arc<dyn BaseMessage>]) -> Vec<HashMap<String, String>> {
     messages.into_iter().map(message_to_map).collect()
 }
 

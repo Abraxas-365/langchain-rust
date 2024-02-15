@@ -62,18 +62,39 @@ impl Prompt for PromptTemplate {
     }
 }
 
-// Creates a hashmap of arguments for a prompt
 #[macro_export]
 macro_rules! prompt_args {
     ( $($key:expr => $value:expr),* $(,)? ) => {
         {
             #[allow(unused_mut)]
-            let mut args: HashMap<&str, &str> = HashMap::new();
+            let mut args: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
             $(
                 args.insert($key, $value);
             )*
             args
         }
+    };
+}
+
+#[macro_export]
+macro_rules! template_fstring {
+    ($template:expr, $($var:expr),* $(,)?) => {
+        PromptTemplate::new(
+            $template.to_string(),
+            vec![$($var.to_string()),*],
+            TemplateFormat::FString,
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! template_jinja2 {
+    ($template:expr, $($var:expr),* $(,)?) => {
+        PromptTemplate::new(
+            $template.to_string(),
+            vec![$($var.to_string()),*],
+            TemplateFormat::Jinja2,
+        )
     };
 }
 
@@ -140,5 +161,43 @@ mod tests {
         assert_eq!(args.len(), 2);
         assert_eq!(args.get("name").unwrap(), &"world");
         assert_eq!(args.get("age").unwrap(), &"18");
+    }
+
+    #[test]
+    fn test_chat_template_macros() {
+        // Creating an FString chat template
+        let fstring_template = template_fstring!(
+            "FString Chat: {user} says {message} {test}",
+            "user",
+            "message",
+            "test"
+        );
+
+        // Creating a Jinja2 chat template
+        let jinja2_template =
+            template_jinja2!("Jinja2 Chat: {{user}} says {{message}}", "user", "message");
+
+        // Define input variables for the templates
+        let input_variables_fstring = prompt_args! {
+            "user" => "Alice",
+            "message" => "Hello, Bob!",
+            "test"=>"test2"
+        };
+
+        let input_variables_jinja2 = prompt_args! {
+            "user" => "Bob",
+            "message" => "Hi, Alice!",
+        };
+
+        // Format the FString chat template
+        let formatted_fstring = fstring_template.format(input_variables_fstring).unwrap();
+        assert_eq!(
+            formatted_fstring,
+            "FString Chat: Alice says Hello, Bob! test2"
+        );
+
+        // Format the Jinja2 chat template
+        let formatted_jinja2 = jinja2_template.format(input_variables_jinja2).unwrap();
+        assert_eq!(formatted_jinja2, "Jinja2 Chat: Bob says Hi, Alice!");
     }
 }
