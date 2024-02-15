@@ -58,27 +58,27 @@ impl CallOptions {
     }
 
     // Refactored "with" functions as methods of CallOptions
-    fn with_max_tokens(&mut self, max_tokens: u16) -> &mut Self {
+    pub fn with_max_tokens(&mut self, max_tokens: u16) -> &mut Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
-    fn with_candidate_count(&mut self, candidate_count: usize) -> &mut Self {
+    pub fn with_candidate_count(&mut self, candidate_count: usize) -> &mut Self {
         self.candidate_count = Some(candidate_count);
         self
     }
 
-    fn with_temperature(&mut self, temperature: f32) -> &mut Self {
+    pub fn with_temperature(&mut self, temperature: f32) -> &mut Self {
         self.temperature = Some(temperature);
         self
     }
 
-    fn with_stop_words(&mut self, stop_words: Vec<String>) -> &mut Self {
+    pub fn with_stop_words(&mut self, stop_words: Vec<String>) -> &mut Self {
         self.stop_words = Some(stop_words);
         self
     }
 
-    fn with_streaming_func<F>(&mut self, func: F) -> &mut Self
+    pub fn with_streaming_func<F>(&mut self, func: F) -> &mut Self
     where
         F: FnMut(Vec<u8>) -> Result<(), ()> + Send + 'static,
     {
@@ -87,57 +87,57 @@ impl CallOptions {
         self
     }
 
-    fn with_top_k(&mut self, top_k: usize) -> &mut Self {
+    pub fn with_top_k(&mut self, top_k: usize) -> &mut Self {
         self.top_k = Some(top_k);
         self
     }
 
-    fn with_top_p(&mut self, top_p: f32) -> &mut Self {
+    pub fn with_top_p(&mut self, top_p: f32) -> &mut Self {
         self.top_p = Some(top_p);
         self
     }
 
-    fn with_seed(&mut self, seed: usize) -> &mut Self {
+    pub fn with_seed(&mut self, seed: usize) -> &mut Self {
         self.seed = Some(seed);
         self
     }
 
-    fn with_min_length(&mut self, min_length: usize) -> &mut Self {
+    pub fn with_min_length(&mut self, min_length: usize) -> &mut Self {
         self.min_length = Some(min_length);
         self
     }
 
-    fn with_max_length(&mut self, max_length: usize) -> &mut Self {
+    pub fn with_max_length(&mut self, max_length: usize) -> &mut Self {
         self.max_length = Some(max_length);
         self
     }
 
-    fn with_n(&mut self, n: usize) -> &mut Self {
+    pub fn with_n(&mut self, n: usize) -> &mut Self {
         self.n = Some(n);
         self
     }
 
-    fn with_repetition_penalty(&mut self, repetition_penalty: f32) -> &mut Self {
+    pub fn with_repetition_penalty(&mut self, repetition_penalty: f32) -> &mut Self {
         self.repetition_penalty = Some(repetition_penalty);
         self
     }
 
-    fn with_frequency_penalty(&mut self, frequency_penalty: f32) -> &mut Self {
+    pub fn with_frequency_penalty(&mut self, frequency_penalty: f32) -> &mut Self {
         self.frequency_penalty = Some(frequency_penalty);
         self
     }
 
-    fn with_presence_penalty(&mut self, presence_penalty: f32) -> &mut Self {
+    pub fn with_presence_penalty(&mut self, presence_penalty: f32) -> &mut Self {
         self.presence_penalty = Some(presence_penalty);
         self
     }
 
-    fn with_functions(&mut self, functions: Vec<FunctionDefinition>) -> &mut Self {
+    pub fn with_functions(&mut self, functions: Vec<FunctionDefinition>) -> &mut Self {
         self.functions = Some(functions);
         self
     }
 
-    fn with_function_call_behavior(&mut self, behavior: FunctionCallBehavior) -> &mut Self {
+    pub fn with_function_call_behavior(&mut self, behavior: FunctionCallBehavior) -> &mut Self {
         self.function_call_behavior = Some(behavior);
         self
     }
