@@ -10,9 +10,9 @@ pub enum FunctionCallBehavior {
 
 #[derive(Clone, Debug)]
 pub struct FunctionDefinition {
-    name: String,
-    description: String,
-    parameters: Value,
+    pub name: String,
+    pub description: String,
+    pub parameters: Value,
 }
 
 #[derive(Clone)]
