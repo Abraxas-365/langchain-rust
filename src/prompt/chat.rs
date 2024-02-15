@@ -1,21 +1,18 @@
 use std::{collections::HashMap, error::Error, sync::Arc};
 
-use crate::schemas::messages::{AIMessage, BaseMessage, HumanMessage, SystemMessage};
+use crate::schemas::messages::Message;
 
 use super::{Prompt, PromptTemplate};
 
 /// Represents a generic template for formatting messages.
 pub trait BaseMessagePromptTemplate: Send + Sync {
     /// Formats a message using the provided input variables.
-    fn format(
-        &self,
-        input_variables: HashMap<&str, &str>,
-    ) -> Result<Arc<dyn BaseMessage>, Box<dyn Error>>;
+    fn format(&self, input_variables: HashMap<&str, &str>) -> Result<Message, Box<dyn Error>>;
 
     fn format_messages(
         &self,
         input_variables: HashMap<&str, &str>,
-    ) -> Result<Vec<Arc<dyn BaseMessage>>, Box<dyn Error>> {
+    ) -> Result<Vec<Message>, Box<dyn Error>> {
         Ok(vec![self.format(input_variables)?])
     }
 
@@ -35,12 +32,9 @@ impl HumanMessagePromptTemplate {
 }
 
 impl BaseMessagePromptTemplate for HumanMessagePromptTemplate {
-    fn format(
-        &self,
-        input_variables: HashMap<&str, &str>,
-    ) -> Result<Arc<dyn BaseMessage>, Box<dyn Error>> {
+    fn format(&self, input_variables: HashMap<&str, &str>) -> Result<Message, Box<dyn Error>> {
         let text = self.prompt.format(input_variables)?;
-        Ok(HumanMessage::new(&text))
+        Ok(Message::new_human_message(&text))
     }
 
     fn input_variables(&self) -> Vec<String> {
@@ -60,12 +54,9 @@ impl SystemMessagePromptTemplate {
 }
 
 impl BaseMessagePromptTemplate for SystemMessagePromptTemplate {
-    fn format(
-        &self,
-        input_variables: HashMap<&str, &str>,
-    ) -> Result<Arc<dyn BaseMessage>, Box<dyn Error>> {
+    fn format(&self, input_variables: HashMap<&str, &str>) -> Result<Message, Box<dyn Error>> {
         let text = self.prompt.format(input_variables)?;
-        Ok(SystemMessage::new(&text))
+        Ok(Message::new_system_message(&text))
     }
 
     fn input_variables(&self) -> Vec<String> {
@@ -85,12 +76,9 @@ impl AIMessagePromptTemplate {
 }
 
 impl BaseMessagePromptTemplate for AIMessagePromptTemplate {
-    fn format(
-        &self,
-        input_variables: HashMap<&str, &str>,
-    ) -> Result<Arc<dyn BaseMessage>, Box<dyn Error>> {
+    fn format(&self, input_variables: HashMap<&str, &str>) -> Result<Message, Box<dyn Error>> {
         let text = self.prompt.format(input_variables)?;
-        Ok(AIMessage::new(&text))
+        Ok(Message::new_ai_message(&text))
     }
 
     fn input_variables(&self) -> Vec<String> {
@@ -99,14 +87,14 @@ impl BaseMessagePromptTemplate for AIMessagePromptTemplate {
 }
 
 pub enum MessageOrTemplate {
-    Message(Arc<dyn BaseMessage>),
+    Message(Message),
     Template(Arc<dyn BaseMessagePromptTemplate>),
     MessagesPlaceholder(MessagesPlaceholder),
 }
 
 #[derive(Clone)]
 pub struct MessagesPlaceholder {
-    messages: Vec<Arc<dyn BaseMessage>>,
+    messages: Vec<Message>,
 }
 
 impl MessagesPlaceholder {
@@ -116,11 +104,11 @@ impl MessagesPlaceholder {
         }
     }
 
-    pub fn add_message(&mut self, message: Arc<dyn BaseMessage>) {
+    pub fn add_message(&mut self, message: Message) {
         self.messages.push(message);
     }
 
-    pub fn format(&self) -> Vec<Arc<dyn BaseMessage>> {
+    pub fn format(&self) -> Vec<Message> {
         self.messages.clone()
     }
 }
@@ -134,7 +122,7 @@ impl MessageFormatter {
         Self { items: Vec::new() }
     }
 
-    pub fn add_message(&mut self, message: Arc<dyn BaseMessage>) {
+    pub fn add_message(&mut self, message: Message) {
         self.items.push(MessageOrTemplate::Message(message));
     }
 
@@ -150,11 +138,11 @@ impl MessageFormatter {
     pub fn format(
         &self,
         input_variables: HashMap<&str, &str>,
-    ) -> Result<Vec<Arc<dyn BaseMessage>>, Box<dyn Error>> {
+    ) -> Result<Vec<Message>, Box<dyn Error>> {
         let mut result = Vec::new();
         for item in &self.items {
             match item {
-                MessageOrTemplate::Message(msg) => result.push(Arc::clone(msg)),
+                MessageOrTemplate::Message(msg) => result.push(msg.clone()),
                 MessageOrTemplate::Template(tmpl) => {
                     result.extend(tmpl.format_messages(input_variables.clone())?)
                 }
@@ -202,23 +190,26 @@ mod tests {
             PromptTemplate, TemplateFormat,
         },
         prompt_args,
-        schemas::messages::{HumanMessage, SystemMessage},
+        schemas::messages::Message,
         template_fstring,
     };
 
     #[test]
     fn test_message_formatter_macro() {
         // Create a human message and system message
-        let human_msg = HumanMessage::new("Hello from user");
+        let human_msg = Message::new_human_message("Hello from user");
 
         // Create an AI message prompt template
-        let ai_message_prompt =
-            AIMessagePromptTemplate::new(template_fstring!("AI response: {content}", "content"));
+        let ai_message_prompt = AIMessagePromptTemplate::new(template_fstring!(
+            "AI response: {content} {test}",
+            "content",
+            "test"
+        ));
 
         // Create a placeholder for multiple messages
         let messages_placeholder = messages_placeholder![
-            HumanMessage::new("Placeholder message 1"),
-            SystemMessage::new("Placeholder message 2"),
+            Message::new_human_message("Placeholder message 1"),
+            Message::new_system_message("Placeholder message 2"),
         ];
 
         // Use the `message_formatter` macro to construct the formatter
@@ -231,6 +222,8 @@ mod tests {
         // Define input variables for the AI message template
         let input_variables = prompt_args! {
             "content" => "This is a test",
+            "test" => "test2",
+
         };
 
         // Format messages
@@ -240,12 +233,12 @@ mod tests {
         assert_eq!(formatted_messages.len(), 4);
 
         // Verify the content of each message
-        assert_eq!(formatted_messages[0].get_content(), "Hello from user");
+        assert_eq!(formatted_messages[0].content, "Hello from user");
         assert_eq!(
-            formatted_messages[1].get_content(),
-            "AI response: This is a test"
+            formatted_messages[1].content,
+            "AI response: This is a test test2"
         );
-        assert_eq!(formatted_messages[2].get_content(), "Placeholder message 1");
-        assert_eq!(formatted_messages[3].get_content(), "Placeholder message 2");
+        assert_eq!(formatted_messages[2].content, "Placeholder message 1");
+        assert_eq!(formatted_messages[3].content, "Placeholder message 2");
     }
 }
