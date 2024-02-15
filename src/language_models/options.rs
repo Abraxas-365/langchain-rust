@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -12,27 +12,27 @@ pub enum FunctionCallBehavior {
 pub struct FunctionDefinition {
     name: String,
     description: String,
-    parameters: HashMap<String, String>,
+    parameters: Value,
 }
 
 #[derive(Clone)]
 pub struct CallOptions {
-    candidate_count: Option<usize>,
-    max_tokens: Option<u16>,
-    temperature: Option<f32>,
-    stop_words: Option<Vec<String>>,
-    streaming_func: Option<Arc<Mutex<dyn FnMut(Vec<u8>) -> Result<(), ()> + Send>>>,
-    top_k: Option<usize>,
-    top_p: Option<f32>,
-    seed: Option<usize>,
-    min_length: Option<usize>,
-    max_length: Option<usize>,
-    n: Option<usize>,
-    repetition_penalty: Option<f32>,
-    frequency_penalty: Option<f32>,
-    presence_penalty: Option<f32>,
-    functions: Option<Vec<FunctionDefinition>>,
-    function_call_behavior: Option<FunctionCallBehavior>,
+    pub candidate_count: Option<usize>,
+    pub max_tokens: Option<u16>,
+    pub temperature: Option<f32>,
+    pub stop_words: Option<Vec<String>>,
+    pub streaming_func: Option<Arc<Mutex<dyn FnMut(Vec<u8>) -> Result<(), ()> + Send>>>,
+    pub top_k: Option<usize>,
+    pub top_p: Option<f32>,
+    pub seed: Option<usize>,
+    pub min_length: Option<usize>,
+    pub max_length: Option<usize>,
+    pub n: Option<usize>,
+    pub repetition_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
+    pub presence_penalty: Option<f32>,
+    pub functions: Option<Vec<FunctionDefinition>>,
+    pub function_call_behavior: Option<FunctionCallBehavior>,
 }
 
 impl CallOptions {
