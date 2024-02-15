@@ -21,19 +21,19 @@ struct FunctionDefinition {
 #[derive(Clone)]
 struct CallOptions {
     candidate_count: Option<usize>,
-    max_tokens: Option<usize>,
-    temperature: Option<f64>,
+    max_tokens: Option<u16>,
+    temperature: Option<f32>,
     stop_words: Option<Vec<String>>,
     streaming_func: Option<Arc<Mutex<dyn FnMut(Vec<u8>) -> Result<(), ()> + Send>>>,
     top_k: Option<usize>,
-    top_p: Option<f64>,
+    top_p: Option<f32>,
     seed: Option<usize>,
     min_length: Option<usize>,
     max_length: Option<usize>,
     n: Option<usize>,
-    repetition_penalty: Option<f64>,
-    frequency_penalty: Option<f64>,
-    presence_penalty: Option<f64>,
+    repetition_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
+    presence_penalty: Option<f32>,
     functions: Option<Vec<FunctionDefinition>>,
     function_call_behavior: Option<FunctionCallBehavior>,
 }
@@ -72,7 +72,7 @@ impl CallOptions {
     }
 }
 
-fn with_max_tokens(max_tokens: usize) -> CallOption {
+fn with_max_tokens(max_tokens: u16) -> CallOption {
     Box::new(move |opts| opts.max_tokens = Some(max_tokens))
 }
 
@@ -80,7 +80,7 @@ fn with_candidate_count(candidate_count: usize) -> CallOption {
     Box::new(move |opts| opts.candidate_count = Some(candidate_count))
 }
 
-fn with_temperature(temperature: f64) -> CallOption {
+fn with_temperature(temperature: f32) -> CallOption {
     Box::new(move |opts| opts.temperature = Some(temperature))
 }
 
@@ -100,7 +100,7 @@ fn with_top_k(top_k: usize) -> CallOption {
     Box::new(move |opts| opts.top_k = Some(top_k))
 }
 
-fn with_top_p(top_p: f64) -> CallOption {
+fn with_top_p(top_p: f32) -> CallOption {
     Box::new(move |opts| opts.top_p = Some(top_p))
 }
 
@@ -120,15 +120,15 @@ fn with_n(n: usize) -> CallOption {
     Box::new(move |opts| opts.n = Some(n))
 }
 
-fn with_repetition_penalty(repetition_penalty: f64) -> CallOption {
+fn with_repetition_penalty(repetition_penalty: f32) -> CallOption {
     Box::new(move |opts| opts.repetition_penalty = Some(repetition_penalty))
 }
 
-fn with_frequency_penalty(frequency_penalty: f64) -> CallOption {
+fn with_frequency_penalty(frequency_penalty: f32) -> CallOption {
     Box::new(move |opts| opts.frequency_penalty = Some(frequency_penalty))
 }
 
-fn with_presence_penalty(presence_penalty: f64) -> CallOption {
+fn with_presence_penalty(presence_penalty: f32) -> CallOption {
     Box::new(move |opts| opts.presence_penalty = Some(presence_penalty))
 }
 
