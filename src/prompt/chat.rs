@@ -2,12 +2,12 @@ use std::{collections::HashMap, error::Error, sync::Arc};
 
 use crate::schemas::messages::Message;
 
-use super::{Prompt, PromptTemplate};
+use super::{Prompt, PromptArgs, PromptTemplate};
 
 /// Represents a generic template for formatting messages.
 pub trait BaseMessagePromptTemplate: Send + Sync {
     /// Formats a message using the provided input variables.
-    fn format(&self, input_variables: HashMap<&str, &str>) -> Result<Message, Box<dyn Error>>;
+    fn format(&self, input_variables: PromptArgs) -> Result<Message, Box<dyn Error>>;
 
     fn format_messages(
         &self,
@@ -32,7 +32,7 @@ impl HumanMessagePromptTemplate {
 }
 
 impl BaseMessagePromptTemplate for HumanMessagePromptTemplate {
-    fn format(&self, input_variables: HashMap<&str, &str>) -> Result<Message, Box<dyn Error>> {
+    fn format(&self, input_variables: PromptArgs) -> Result<Message, Box<dyn Error>> {
         let text = self.prompt.format(input_variables)?;
         Ok(Message::new_human_message(&text))
     }
@@ -54,7 +54,7 @@ impl SystemMessagePromptTemplate {
 }
 
 impl BaseMessagePromptTemplate for SystemMessagePromptTemplate {
-    fn format(&self, input_variables: HashMap<&str, &str>) -> Result<Message, Box<dyn Error>> {
+    fn format(&self, input_variables: PromptArgs) -> Result<Message, Box<dyn Error>> {
         let text = self.prompt.format(input_variables)?;
         Ok(Message::new_system_message(&text))
     }
@@ -76,7 +76,7 @@ impl AIMessagePromptTemplate {
 }
 
 impl BaseMessagePromptTemplate for AIMessagePromptTemplate {
-    fn format(&self, input_variables: HashMap<&str, &str>) -> Result<Message, Box<dyn Error>> {
+    fn format(&self, input_variables: PromptArgs) -> Result<Message, Box<dyn Error>> {
         let text = self.prompt.format(input_variables)?;
         Ok(Message::new_ai_message(&text))
     }
@@ -135,10 +135,7 @@ impl MessageFormatter {
             .push(MessageOrTemplate::MessagesPlaceholder(placeholder));
     }
 
-    pub fn format(
-        &self,
-        input_variables: HashMap<&str, &str>,
-    ) -> Result<Vec<Message>, Box<dyn Error>> {
+    pub fn format(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
         let mut result = Vec::new();
         for item in &self.items {
             match item {

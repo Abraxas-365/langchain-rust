@@ -18,7 +18,7 @@ pub type PromptArgs<'a> = HashMap<&'a str, &'a str>;
 pub trait Prompt: Send + Sync {
     fn template(&self) -> String;
     fn variables(&self) -> Vec<String>;
-    fn format(&self, input_variables: HashMap<&str, &str>) -> Result<String, Box<dyn Error>>;
+    fn format(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>>;
 }
 
 impl PromptTemplate {
@@ -40,7 +40,7 @@ impl Prompt for PromptTemplate {
         self.variables.clone()
     }
 
-    fn format(&self, input_variables: HashMap<&str, &str>) -> Result<String, Box<dyn Error>> {
+    fn format(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
         let mut prompt = self.template();
 
         // check if all variables are in the input variables
