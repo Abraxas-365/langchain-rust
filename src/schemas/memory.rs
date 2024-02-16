@@ -1,6 +1,6 @@
 use super::messages::Message;
 
-pub trait BaseChatMessageHistory: Send + Sync {
+pub trait BaseMemory: Send + Sync {
     fn messages(&self) -> Vec<Message>;
 
     fn add_user_message(&mut self, message: &str) {
