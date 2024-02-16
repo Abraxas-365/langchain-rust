@@ -164,10 +164,8 @@ impl LLMChat for OpenAI {
                         Ok(response) => {
                             for chat_choice in response.choices.iter() {
                                 if let Some(ref content) = chat_choice.delta.content {
-                                    let mut func = func.lock().await; // Assuming this is a Tokio Mutex
-                                    if let Err(e) = func(content.clone()).await {
-                                        eprintln!("Error calling streaming function: {:?}", e);
-                                    }
+                                    let mut func = func.lock().await;
+                                    let _ = func(content.clone()).await;
                                     complete_response.push_str(content);
                                 }
                             }
