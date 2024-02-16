@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-pub mod chat_model;
 pub mod llm;
 pub mod options;
 

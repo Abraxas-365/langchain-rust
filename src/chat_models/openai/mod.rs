@@ -6,7 +6,7 @@ use async_openai::{
         ChatCompletionFunctions, ChatCompletionFunctionsArgs,
         ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-        CreateChatCompletionRequestArgs,
+        CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
     },
     Client,
 };
@@ -16,7 +16,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     language_models::{
-        chat_model::LLMChat,
+        llm::LLM,
         options::{CallOptions, FunctionCallBehavior, FunctionDefinition},
         GenerateResult, TokenUsage,
     },
@@ -101,60 +101,10 @@ impl OpenAI {
 }
 
 #[async_trait]
-impl LLMChat for OpenAI {
+impl LLM for OpenAI {
     async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, Box<dyn Error>> {
-        let mut messages: Vec<ChatCompletionRequestMessage> = Vec::new();
-        for m in prompt {
-            match m.message_type {
-                MessageType::AIMessage => messages.push(
-                    ChatCompletionRequestAssistantMessageArgs::default()
-                        .content(m.content.clone())
-                        .build()?
-                        .into(),
-                ),
-                MessageType::HumanMessage => messages.push(
-                    ChatCompletionRequestUserMessageArgs::default()
-                        .content(m.content.clone())
-                        .build()?
-                        .into(),
-                ),
-                MessageType::SystemMessage => messages.push(
-                    ChatCompletionRequestSystemMessageArgs::default()
-                        .content(m.content.clone())
-                        .build()?
-                        .into(),
-                ),
-            }
-        }
-        let mut request_builder = CreateChatCompletionRequestArgs::default();
-        request_builder.max_tokens(self.max_tokens);
-        request_builder.model(self.model.to_string());
-
-        if let Some(behavior) = &self.functions {
-            let mut functions: Vec<ChatCompletionFunctions> = Vec::new();
-            for f in behavior.iter() {
-                let tool = ChatCompletionFunctionsArgs::default()
-                    .name(f.name.clone())
-                    .description(f.description.clone())
-                    .parameters(f.parameters.clone())
-                    .build()?;
-                functions.push(tool);
-            }
-            request_builder.functions(functions);
-        }
-
-        if let Some(behavior) = self.function_call_behavior {
-            match behavior {
-                FunctionCallBehavior::Auto => request_builder.function_call("auto"),
-                FunctionCallBehavior::None => request_builder.function_call("none"),
-            };
-        }
-        request_builder.messages(messages);
-        let request = request_builder
-            .build()
-            .map_err(|e| Box::new(e) as Box<dyn Error>)?;
-
         let client = Client::with_config(self.config.clone());
+        let request = self.generate_request(prompt)?;
         match &self.streaming_func {
             Some(func) => {
                 let mut stream = client.chat().create_stream(request).await?;
@@ -201,12 +151,119 @@ impl LLMChat for OpenAI {
             }
         }
     }
+
+    async fn ivoke(&self, prompt: &str) -> Result<String, Box<dyn Error>> {
+        self.generate(&[Message::new_human_message(prompt)])
+            .await
+            .map(|res| res.generation)
+    }
 }
 
+impl OpenAI {
+    fn to_openai_messages(
+        &self,
+        messages: &[Message],
+    ) -> Result<Vec<ChatCompletionRequestMessage>, Box<dyn Error>> {
+        let mut openai_messages: Vec<ChatCompletionRequestMessage> = Vec::new();
+        for m in messages {
+            match m.message_type {
+                MessageType::AIMessage => openai_messages.push(
+                    ChatCompletionRequestAssistantMessageArgs::default()
+                        .content(m.content.clone())
+                        .build()?
+                        .into(),
+                ),
+                MessageType::HumanMessage => openai_messages.push(
+                    ChatCompletionRequestUserMessageArgs::default()
+                        .content(m.content.clone())
+                        .build()?
+                        .into(),
+                ),
+                MessageType::SystemMessage => openai_messages.push(
+                    ChatCompletionRequestSystemMessageArgs::default()
+                        .content(m.content.clone())
+                        .build()?
+                        .into(),
+                ),
+            }
+        }
+        Ok(openai_messages)
+    }
+
+    fn generate_request(
+        &self,
+        messages: &[Message],
+    ) -> Result<CreateChatCompletionRequest, Box<dyn Error>> {
+        let mut messages: Vec<ChatCompletionRequestMessage> = self.to_openai_messages(messages)?;
+        let mut request_builder = CreateChatCompletionRequestArgs::default();
+        request_builder.max_tokens(self.max_tokens);
+        request_builder.model(self.model.to_string());
+
+        if let Some(behavior) = &self.functions {
+            let mut functions: Vec<ChatCompletionFunctions> = Vec::new();
+            for f in behavior.iter() {
+                let tool = ChatCompletionFunctionsArgs::default()
+                    .name(f.name.clone())
+                    .description(f.description.clone())
+                    .parameters(f.parameters.clone())
+                    .build()?;
+                functions.push(tool);
+            }
+            request_builder.functions(functions);
+        }
+
+        if let Some(behavior) = self.function_call_behavior {
+            match behavior {
+                FunctionCallBehavior::Auto => request_builder.function_call("auto"),
+                FunctionCallBehavior::None => request_builder.function_call("none"),
+            };
+        }
+        request_builder.messages(messages);
+        Ok(request_builder.build()?)
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
     use tokio::test;
+
+    #[test]
+    async fn test_ivoke() {
+        let message_complete = Arc::new(Mutex::new(String::new()));
+
+        // Define the streaming function
+        // This function will append the content received from the stream to `message_complete`
+        let streaming_func = {
+            let message_complete = message_complete.clone();
+            move |content: String| {
+                let message_complete = message_complete.clone();
+                async move {
+                    let mut message_complete_lock = message_complete.lock().await;
+                    println!("Content: {:?}", content);
+                    message_complete_lock.push_str(&content);
+                    Ok(())
+                }
+            }
+        };
+        let options = CallOptions::new().with_streaming_func(streaming_func);
+        // Setup the OpenAI client with the necessary options
+        let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35); // You can change the model as needed
+
+        // Define a set of messages to send to the generate function
+
+        // Call the generate function
+        match open_ai.ivoke("hola").await {
+            Ok(result) => {
+                // Print the response from the generate function
+                println!("Generate Result: {:?}", result);
+                println!("Message Complete: {:?}", message_complete.lock().await);
+            }
+            Err(e) => {
+                // Handle any errors
+                eprintln!("Error calling generate: {:?}", e);
+            }
+        }
+    }
 
     #[test]
     async fn test_generate_function() {
