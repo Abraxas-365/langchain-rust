@@ -10,8 +10,8 @@ pub struct HumanMessagePromptTemplate {
 }
 
 impl HumanMessagePromptTemplate {
-    pub fn new(prompt: Arc<PromptTemplate>) -> Self {
-        Self { prompt }
+    pub fn new(prompt: Arc<PromptTemplate>) -> Arc<Self> {
+        Arc::new(Self { prompt })
     }
 }
 impl MessageFormatter for HumanMessagePromptTemplate {
@@ -34,8 +34,8 @@ pub struct SystemMessagePromptTemplate {
 }
 
 impl SystemMessagePromptTemplate {
-    pub fn new(prompt: Arc<PromptTemplate>) -> Self {
-        Self { prompt }
+    pub fn new(prompt: Arc<PromptTemplate>) -> Arc<Self> {
+        Arc::new(Self { prompt })
     }
 }
 impl MessageFormatter for SystemMessagePromptTemplate {
