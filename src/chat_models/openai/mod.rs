@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, pin::Pin, sync::Arc};
 
 use async_openai::{
     config::OpenAIConfig,
@@ -11,6 +11,8 @@ use async_openai::{
     Client,
 };
 use async_trait::async_trait;
+use futures::{Future, StreamExt};
+use tokio::sync::Mutex;
 
 use crate::{
     language_models::{
@@ -47,6 +49,11 @@ pub struct OpenAI {
     presence_penalty: f32,
     function_call_behavior: Option<FunctionCallBehavior>,
     functions: Option<Vec<FunctionDefinition>>,
+    streaming_func: Option<
+        Arc<
+            Mutex<dyn FnMut(String) -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send>> + Send>,
+        >,
+    >,
 }
 
 impl Default for OpenAI {
@@ -61,6 +68,7 @@ impl Default for OpenAI {
             presence_penalty: 0.0,
             function_call_behavior: None,
             functions: None,
+            streaming_func: None,
         }
     }
 }
@@ -77,6 +85,7 @@ impl OpenAI {
             presence_penalty: opt.presence_penalty.unwrap_or(0.0),
             function_call_behavior: opt.function_call_behavior,
             functions: opt.functions,
+            streaming_func: opt.streaming_func,
         }
     }
 
@@ -144,26 +153,55 @@ impl LLMChat for OpenAI {
         let request = request_builder
             .build()
             .map_err(|e| Box::new(e) as Box<dyn Error>)?;
+
         let client = Client::with_config(self.config.clone());
+        match &self.streaming_func {
+            Some(func) => {
+                let mut stream = client.chat().create_stream(request).await?;
+                let mut complete_response = String::new();
+                while let Some(result) = stream.next().await {
+                    match result {
+                        Ok(response) => {
+                            for chat_choice in response.choices.iter() {
+                                if let Some(ref content) = chat_choice.delta.content {
+                                    let mut func = func.lock().await; // Assuming this is a Tokio Mutex
+                                    if let Err(e) = func(content.clone()).await {
+                                        eprintln!("Error calling streaming function: {:?}", e);
+                                    }
+                                    complete_response.push_str(content);
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("Error from streaming response: {:?}", err);
+                        }
+                    }
+                }
+                let mut generate_result = GenerateResult::default();
+                generate_result.generation = complete_response;
+                Ok(generate_result)
+            }
+            None => {
+                let response = client.chat().create(request).await?;
+                let mut generate_result = GenerateResult::default();
 
-        let response = client.chat().create(request).await?;
-        let mut generate_result = GenerateResult::default();
+                if let Some(usage) = response.usage {
+                    generate_result.tokens = Some(TokenUsage {
+                        prompt_tokens: usage.prompt_tokens,
+                        completion_tokens: usage.completion_tokens,
+                        total_tokens: usage.total_tokens,
+                    });
+                }
 
-        if let Some(usage) = response.usage {
-            generate_result.tokens = Some(TokenUsage {
-                prompt_tokens: usage.prompt_tokens,
-                completion_tokens: usage.completion_tokens,
-                total_tokens: usage.total_tokens,
-            });
+                if let Some(choice) = response.choices.first() {
+                    generate_result.generation = choice.message.content.clone().unwrap_or_default();
+                } else {
+                    generate_result.generation = "".to_string();
+                }
+
+                Ok(generate_result)
+            }
         }
-
-        if let Some(choice) = response.choices.first() {
-            generate_result.generation = choice.message.content.clone().unwrap_or_default();
-        } else {
-            generate_result.generation = "".to_string();
-        }
-
-        Ok(generate_result)
     }
 }
 
@@ -174,8 +212,26 @@ mod tests {
 
     #[test]
     async fn test_generate_function() {
+        let message_complete = Arc::new(Mutex::new(String::new()));
+
+        // Define the streaming function
+        // This function will append the content received from the stream to `message_complete`
+        let streaming_func = {
+            let message_complete = message_complete.clone();
+            move |content: String| {
+                let message_complete = message_complete.clone();
+                async move {
+                    let mut message_complete_lock = message_complete.lock().await;
+                    println!("Content: {:?}", content);
+                    message_complete_lock.push_str(&content);
+                    Ok(())
+                }
+            }
+        };
+        // Define the streaming function as an async block without capturing external references directly
+        let options = CallOptions::new().with_streaming_func(streaming_func);
         // Setup the OpenAI client with the necessary options
-        let open_ai = OpenAI::default().with_model(OpenAIModel::Gpt35); // You can change the model as needed
+        let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35); // You can change the model as needed
 
         // Define a set of messages to send to the generate function
         let messages = vec![Message::new_human_message("Hello, how are you?")];
@@ -185,6 +241,7 @@ mod tests {
             Ok(result) => {
                 // Print the response from the generate function
                 println!("Generate Result: {:?}", result);
+                println!("Message Complete: {:?}", message_complete.lock().await);
             }
             Err(e) => {
                 // Handle any errors

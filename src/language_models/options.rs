@@ -1,5 +1,6 @@
+use futures::Future;
 use serde_json::Value;
-use std::sync::Arc;
+use std::{pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
 #[derive(Clone, Copy, Debug)]
@@ -31,7 +32,11 @@ pub struct CallOptions {
     pub max_tokens: Option<u16>,
     pub temperature: Option<f32>,
     pub stop_words: Option<Vec<String>>,
-    pub streaming_func: Option<Arc<Mutex<dyn FnMut(Vec<u8>) -> Result<(), ()> + Send>>>,
+    pub streaming_func: Option<
+        Arc<
+            Mutex<dyn FnMut(String) -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send>> + Send>,
+        >,
+    >,
     pub top_k: Option<usize>,
     pub top_p: Option<f32>,
     pub seed: Option<usize>,
@@ -88,11 +93,18 @@ impl CallOptions {
         self
     }
 
-    pub fn with_streaming_func<F>(mut self, func: F) -> Self
+    //TODO:Check if this should be a &str instead of a String
+    pub fn with_streaming_func<F, Fut>(mut self, mut func: F) -> Self
     where
-        F: FnMut(Vec<u8>) -> Result<(), ()> + Send + 'static,
+        F: FnMut(String) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<(), ()>> + Send + 'static,
     {
-        let func = Arc::new(Mutex::new(func));
+        let func = Arc::new(Mutex::new(
+            move |s: String| -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send>> {
+                Box::pin(func(s))
+            },
+        ));
+
         self.streaming_func = Some(func);
         self
     }
