@@ -182,7 +182,7 @@ impl FormatPrompter for MessageFormatterStruct {
 #[macro_export]
 macro_rules! messages_placeholder {
     ($($msg:expr),* $(,)?) => {{
-        let mut placeholder = crate::prompt::chat::MessagesPlaceholder::new();
+        let mut placeholder = crate::prompt::MessagesPlaceholder::new();
         $(
             placeholder.add_message($msg);
         )*
@@ -193,7 +193,7 @@ macro_rules! messages_placeholder {
 #[macro_export]
 macro_rules! message_formatter {
     ($($item:expr),* $(,)?) => {{
-        let mut formatter = crate::prompt::chat::MessageFormatterStruct::new();
+        let mut formatter = crate::prompt::MessageFormatterStruct::new();
         $(
             match $item {
                 MessageOrTemplate::Message(msg) => formatter.add_message(msg),

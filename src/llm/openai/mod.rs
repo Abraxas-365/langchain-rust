@@ -157,6 +157,17 @@ impl LLM for OpenAI {
             .await
             .map(|res| res.generation)
     }
+
+    fn with_options(&mut self, options: CallOptions) {
+        self.max_tokens = options.max_tokens.unwrap_or(256);
+        self.temperature = options.temperature.unwrap_or(0.7);
+        self.top_p = options.top_p.unwrap_or(1.0);
+        self.frequency_penalty = options.frequency_penalty.unwrap_or(0.0);
+        self.presence_penalty = options.presence_penalty.unwrap_or(0.0);
+        self.function_call_behavior = options.function_call_behavior;
+        self.functions = options.functions;
+        self.streaming_func = options.streaming_func;
+    }
 }
 
 impl OpenAI {
