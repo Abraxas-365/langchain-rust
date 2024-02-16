@@ -4,7 +4,7 @@
 
 ## 🤔 What is this?
 
-This is the Go language implementation of [LangChain](https://github.com/langchain-ai/langchain).
+This is the Rust language implementation of [LangChain](https://github.com/langchain-ai/langchain).
 
 ## Examples
 
