@@ -152,7 +152,7 @@ impl LLM for OpenAI {
         }
     }
 
-    async fn ivoke(&self, prompt: &str) -> Result<String, Box<dyn Error>> {
+    async fn invoke(&self, prompt: &str) -> Result<String, Box<dyn Error>> {
         self.generate(&[Message::new_human_message(prompt)])
             .await
             .map(|res| res.generation)
@@ -252,7 +252,7 @@ mod tests {
         // Define a set of messages to send to the generate function
 
         // Call the generate function
-        match open_ai.ivoke("hola").await {
+        match open_ai.invoke("hola").await {
             Ok(result) => {
                 // Print the response from the generate function
                 println!("Generate Result: {:?}", result);
