@@ -1,12 +1,11 @@
 #![allow(dead_code)]
 use std::{env, error::Error};
 
+use crate::embedding::embedder_trait::Embedder;
 use async_trait::async_trait;
 use reqwest::{Client, Url};
 use serde::Deserialize;
 use serde_json::json;
-//allow dead code
-use crate::embedding::embedder_trait::Embedder;
 
 #[derive(Debug, Deserialize)]
 struct EmbeddingResponse {
