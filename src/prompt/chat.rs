@@ -1,24 +1,8 @@
 use std::{collections::HashMap, error::Error, sync::Arc};
 
-use crate::schemas::messages::Message;
+use crate::schemas::{messages::Message, prompt::PromptValue};
 
-use super::{Prompt, PromptArgs, PromptTemplate};
-
-/// Represents a generic template for formatting messages.
-pub trait BaseMessagePromptTemplate: Send + Sync {
-    /// Formats a message using the provided input variables.
-    fn format(&self, input_variables: PromptArgs) -> Result<Message, Box<dyn Error>>;
-
-    fn format_messages(
-        &self,
-        input_variables: HashMap<&str, &str>,
-    ) -> Result<Vec<Message>, Box<dyn Error>> {
-        Ok(vec![self.format(input_variables)?])
-    }
-
-    /// Returns a list of required input variable names for the template.
-    fn input_variables(&self) -> Vec<String>;
-}
+use super::{FormatPrompter, MessageFormatter, PromptArgs, PromptFromatter, PromptTemplate};
 
 /// A template for creating human-readable messages.
 pub struct HumanMessagePromptTemplate {
@@ -30,13 +14,15 @@ impl HumanMessagePromptTemplate {
         Self { prompt }
     }
 }
-
-impl BaseMessagePromptTemplate for HumanMessagePromptTemplate {
-    fn format(&self, input_variables: PromptArgs) -> Result<Message, Box<dyn Error>> {
-        let text = self.prompt.format(input_variables)?;
-        Ok(Message::new_human_message(&text))
+impl MessageFormatter for HumanMessagePromptTemplate {
+    fn format_messages(
+        &self,
+        input_variables: HashMap<&str, &str>,
+    ) -> Result<Vec<Message>, Box<dyn Error>> {
+        Ok(vec![Message::new_human_message(
+            &self.prompt.format(input_variables)?,
+        )])
     }
-
     fn input_variables(&self) -> Vec<String> {
         self.prompt.variables().clone()
     }
@@ -52,13 +38,15 @@ impl SystemMessagePromptTemplate {
         Self { prompt }
     }
 }
-
-impl BaseMessagePromptTemplate for SystemMessagePromptTemplate {
-    fn format(&self, input_variables: PromptArgs) -> Result<Message, Box<dyn Error>> {
-        let text = self.prompt.format(input_variables)?;
-        Ok(Message::new_system_message(&text))
+impl MessageFormatter for SystemMessagePromptTemplate {
+    fn format_messages(
+        &self,
+        input_variables: HashMap<&str, &str>,
+    ) -> Result<Vec<Message>, Box<dyn Error>> {
+        Ok(vec![Message::new_system_message(
+            &self.prompt.format(input_variables)?,
+        )])
     }
-
     fn input_variables(&self) -> Vec<String> {
         self.prompt.variables().clone()
     }
@@ -69,26 +57,26 @@ pub struct AIMessagePromptTemplate {
     prompt: Arc<PromptTemplate>,
 }
 
+impl MessageFormatter for AIMessagePromptTemplate {
+    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
+        Ok(vec![Message::new_ai_message(
+            &self.prompt.format(input_variables)?,
+        )])
+    }
+    fn input_variables(&self) -> Vec<String> {
+        self.prompt.variables().clone()
+    }
+}
+
 impl AIMessagePromptTemplate {
     pub fn new(prompt: Arc<PromptTemplate>) -> Arc<Self> {
         Arc::new(Self { prompt })
     }
 }
 
-impl BaseMessagePromptTemplate for AIMessagePromptTemplate {
-    fn format(&self, input_variables: PromptArgs) -> Result<Message, Box<dyn Error>> {
-        let text = self.prompt.format(input_variables)?;
-        Ok(Message::new_ai_message(&text))
-    }
-
-    fn input_variables(&self) -> Vec<String> {
-        self.prompt.variables().clone()
-    }
-}
-
 pub enum MessageOrTemplate {
     Message(Message),
-    Template(Arc<dyn BaseMessagePromptTemplate>),
+    Template(Arc<dyn MessageFormatter>),
     MessagesPlaceholder(MessagesPlaceholder),
 }
 
@@ -107,17 +95,25 @@ impl MessagesPlaceholder {
     pub fn add_message(&mut self, message: Message) {
         self.messages.push(message);
     }
+}
 
-    pub fn format(&self) -> Vec<Message> {
-        self.messages.clone()
+impl MessageFormatter for MessagesPlaceholder {
+    fn format_messages(
+        &self,
+        _input_variables: PromptArgs,
+    ) -> Result<Vec<Message>, Box<dyn Error>> {
+        Ok(self.messages.clone())
+    }
+    fn input_variables(&self) -> Vec<String> {
+        Vec::new()
     }
 }
 
-pub struct MessageFormatter {
+pub struct MessageFormatterStruct {
     items: Vec<MessageOrTemplate>,
 }
 
-impl MessageFormatter {
+impl MessageFormatterStruct {
     pub fn new() -> Self {
         Self { items: Vec::new() }
     }
@@ -126,7 +122,7 @@ impl MessageFormatter {
         self.items.push(MessageOrTemplate::Message(message));
     }
 
-    pub fn add_template(&mut self, template: Arc<dyn BaseMessagePromptTemplate>) {
+    pub fn add_template(&mut self, template: Arc<dyn MessageFormatter>) {
         self.items.push(MessageOrTemplate::Template(template));
     }
 
@@ -135,7 +131,7 @@ impl MessageFormatter {
             .push(MessageOrTemplate::MessagesPlaceholder(placeholder));
     }
 
-    pub fn format(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
+    fn format(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
         let mut result = Vec::new();
         for item in &self.items {
             match item {
@@ -144,11 +140,42 @@ impl MessageFormatter {
                     result.extend(tmpl.format_messages(input_variables.clone())?)
                 }
                 MessageOrTemplate::MessagesPlaceholder(placeholder) => {
-                    result.extend(placeholder.format())
+                    result.extend(placeholder.format_messages(input_variables.clone())?)
                 }
             }
         }
         Ok(result)
+    }
+}
+
+impl MessageFormatter for MessageFormatterStruct {
+    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
+        self.format(input_variables)
+    }
+    fn input_variables(&self) -> Vec<String> {
+        let mut variables = Vec::new();
+        for item in &self.items {
+            match item {
+                MessageOrTemplate::Message(_) => {}
+                MessageOrTemplate::Template(tmpl) => {
+                    variables.extend(tmpl.input_variables());
+                }
+                MessageOrTemplate::MessagesPlaceholder(placeholder) => {
+                    variables.extend(placeholder.input_variables());
+                }
+            }
+        }
+        variables
+    }
+}
+
+impl FormatPrompter for MessageFormatterStruct {
+    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>> {
+        let messages = self.format(input_variables)?;
+        Ok(PromptValue::from_messages(messages))
+    }
+    fn get_input_variables(&self) -> Vec<String> {
+        self.input_variables()
     }
 }
 
@@ -166,7 +193,7 @@ macro_rules! messages_placeholder {
 #[macro_export]
 macro_rules! message_formatter {
     ($($item:expr),* $(,)?) => {{
-        let mut formatter = crate::prompt::chat::MessageFormatter::new();
+        let mut formatter = crate::prompt::chat::MessageFormatterStruct::new();
         $(
             match $item {
                 MessageOrTemplate::Message(msg) => formatter.add_message(msg),
@@ -184,7 +211,7 @@ mod tests {
         message_formatter, messages_placeholder,
         prompt::{
             chat::{AIMessagePromptTemplate, MessageOrTemplate},
-            PromptTemplate, TemplateFormat,
+            MessageFormatter, PromptTemplate, TemplateFormat,
         },
         prompt_args,
         schemas::messages::Message,
@@ -224,7 +251,7 @@ mod tests {
         };
 
         // Format messages
-        let formatted_messages = formatter.format(input_variables).unwrap();
+        let formatted_messages = formatter.format_messages(input_variables).unwrap();
 
         // Verify the number of messages
         assert_eq!(formatted_messages.len(), 4);

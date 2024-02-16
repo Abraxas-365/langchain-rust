@@ -1,6 +1,7 @@
-use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
+
+use super::{PromptArgs, PromptFromatter};
 
 pub enum TemplateFormat {
     FString,
@@ -13,14 +14,6 @@ pub struct PromptTemplate {
     format: TemplateFormat,
 }
 
-pub type PromptArgs<'a> = HashMap<&'a str, &'a str>;
-
-pub trait Prompt: Send + Sync {
-    fn template(&self) -> String;
-    fn variables(&self) -> Vec<String>;
-    fn format(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>>;
-}
-
 impl PromptTemplate {
     pub fn new(template: String, variables: Vec<String>, format: TemplateFormat) -> Arc<Self> {
         Arc::new(Self {
@@ -31,7 +24,7 @@ impl PromptTemplate {
     }
 }
 
-impl Prompt for PromptTemplate {
+impl PromptFromatter for PromptTemplate {
     fn template(&self) -> String {
         self.template.clone()
     }

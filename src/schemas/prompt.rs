@@ -1,8 +1,28 @@
-use std::error::Error;
-
 use super::messages::Message;
 
-pub trait PromptValue: Send + Sync {
-    fn to_string(&self) -> Result<String, Box<dyn Error>>;
-    fn to_chat_messages(&self) -> Result<Vec<Message>, Box<dyn Error>>;
+pub struct PromptValue {
+    messages: Vec<Message>,
+}
+impl PromptValue {
+    pub fn from_string(text: &str) -> Self {
+        let message = Message::new_human_message(text);
+        Self {
+            messages: vec![message],
+        }
+    }
+    pub fn from_messages(messages: Vec<Message>) -> Self {
+        Self { messages }
+    }
+
+    pub fn to_string(&self) -> String {
+        self.messages
+            .iter()
+            .map(|m| format!("{:?}: {}", m.message_type, m.content))
+            .collect::<Vec<String>>()
+            .join("\n")
+    }
+
+    pub fn to_chat_messages(&self) -> Vec<Message> {
+        self.messages.clone()
+    }
 }
