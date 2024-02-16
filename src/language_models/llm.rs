@@ -8,6 +8,14 @@ use super::GenerateResult;
 
 #[async_trait]
 pub trait LLM: Sync + Send {
-    async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, Box<dyn Error>>;
+    async fn generate(&self, messgaes: &[Message]) -> Result<GenerateResult, Box<dyn Error>>;
     async fn ivoke(&self, prompt: &str) -> Result<String, Box<dyn Error>>;
+    //This is usefull when using non chat models
+    fn messages_to_string(&self, messages: &[Message]) -> String {
+        messages
+            .iter()
+            .map(|m| format!("{:?}: {}", m.message_type, m.content))
+            .collect::<Vec<String>>()
+            .join("\n")
+    }
 }
