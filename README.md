@@ -22,7 +22,7 @@ let resp=open_ai.generate(&messages).await.unwrap();
 println!("Generate Result: {:?}", resp);
 ```
 
-- Implementation with options and strems
+- Implementation with options and streams
 
 ```rust
 let message_complete = Arc::new(Mutex::new(String::new()));
@@ -135,6 +135,20 @@ use langchain::embedding::openai::OpenAiEmbedder;
 
 let openai_embedder = OpenAiEmbedder::new("your_openai_api_key".to_string());
 ````
+
+Or use the default implementation:
+
+```rust
+let openai_embedder = OpenAiEmbedder::default();
+```
+
+### Embeddings
+
+```rust
+use langchain::embedding::openai::OpenAiEmbedder;
+
+let openai_embedder = OpenAiEmbedder::new("your_openai_api_key".to_string());
+```
 
 Or use the default implementation:
 
