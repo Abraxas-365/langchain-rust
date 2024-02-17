@@ -82,9 +82,8 @@ match chain.invoke(input_variables).await {
 
 - With stram and option implementation
 
-````rust
+```rust
 let human_msg = Message::new_human_message("Hello from user");
-
 // Create an AI message prompt template
 let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
     "Mi nombre es: {nombre} ",
@@ -125,21 +124,6 @@ match chain.invoke(input_variables).await {
     }
     Err(e) => panic!("Error invoking LLMChain: {:?}", e),
 }
-
-``
-
-### Embeddings
-
-```rust
-use langchain::embedding::openai::OpenAiEmbedder;
-
-let openai_embedder = OpenAiEmbedder::new("your_openai_api_key".to_string());
-````
-
-Or use the default implementation:
-
-```rust
-let openai_embedder = OpenAiEmbedder::default();
 ```
 
 ### Embeddings
