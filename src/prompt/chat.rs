@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, sync::Arc};
+use std::{error::Error, sync::Arc};
 
 use crate::schemas::{messages::Message, prompt::PromptValue};
 
@@ -205,7 +205,7 @@ mod tests {
         message_formatter, messages_placeholder,
         prompt::{
             chat::{AIMessagePromptTemplate, MessageOrTemplate},
-            MessageFormatter, PromptTemplate, TemplateFormat,
+            MessageFormatter,
         },
         prompt_args,
         schemas::messages::Message,

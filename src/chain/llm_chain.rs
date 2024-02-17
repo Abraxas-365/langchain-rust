@@ -98,11 +98,9 @@ where
 mod tests {
     use crate::{
         llm::openai::{OpenAI, OpenAIModel},
-        message_formatter, messages_placeholder,
-        prompt::{AIMessagePromptTemplate, HumanMessagePromptTemplate, MessageOrTemplate},
-        prompt_args,
-        schemas::messages::Message,
-        template_fstring,
+        message_formatter,
+        prompt::{HumanMessagePromptTemplate, MessageOrTemplate},
+        prompt_args, template_fstring,
     };
 
     use super::*;
@@ -110,8 +108,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_invoke_chain() {
-        let human_msg = Message::new_human_message("Hello from user");
-
         // Create an AI message prompt template
         let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
             "Mi nombre es: {nombre} ",

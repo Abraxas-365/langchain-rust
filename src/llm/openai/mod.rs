@@ -205,7 +205,7 @@ impl OpenAI {
         &self,
         messages: &[Message],
     ) -> Result<CreateChatCompletionRequest, Box<dyn Error>> {
-        let mut messages: Vec<ChatCompletionRequestMessage> = self.to_openai_messages(messages)?;
+        let messages: Vec<ChatCompletionRequestMessage> = self.to_openai_messages(messages)?;
         let mut request_builder = CreateChatCompletionRequestArgs::default();
         request_builder.max_tokens(self.max_tokens);
         request_builder.model(self.model.to_string());
