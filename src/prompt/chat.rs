@@ -15,10 +15,7 @@ impl HumanMessagePromptTemplate {
     }
 }
 impl MessageFormatter for HumanMessagePromptTemplate {
-    fn format_messages(
-        &self,
-        input_variables: HashMap<&str, &str>,
-    ) -> Result<Vec<Message>, Box<dyn Error>> {
+    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
         Ok(vec![Message::new_human_message(
             &self.prompt.format(input_variables)?,
         )])
@@ -39,10 +36,7 @@ impl SystemMessagePromptTemplate {
     }
 }
 impl MessageFormatter for SystemMessagePromptTemplate {
-    fn format_messages(
-        &self,
-        input_variables: HashMap<&str, &str>,
-    ) -> Result<Vec<Message>, Box<dyn Error>> {
+    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
         Ok(vec![Message::new_system_message(
             &self.prompt.format(input_variables)?,
         )])

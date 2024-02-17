@@ -8,7 +8,8 @@ pub use prompt::*;
 
 use crate::schemas::{messages::Message, prompt::PromptValue};
 
-pub type PromptArgs<'a> = HashMap<&'a str, &'a str>;
+// pub type PromptArgs<'a> = HashMap<&'a str, &'a str>;
+pub type PromptArgs = HashMap<String, String>;
 pub trait PromptFromatter: Send + Sync {
     fn template(&self) -> String;
     fn variables(&self) -> Vec<String>;

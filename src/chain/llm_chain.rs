@@ -83,16 +83,14 @@ where
     P: FormatPrompter + Send + Sync,
     L: LLM + Send + Sync,
 {
-    async fn call<'a>(
-        &'a self,
-        input_variables: PromptArgs<'a>,
-    ) -> Result<GenerateResult, Box<dyn Error + 'a>> {
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
         let prompt = self.prompt.format_prompt(input_variables)?;
         self.llm.generate(&prompt.to_chat_messages()).await
     }
 
-    async fn invoke(&self, prompt: &str) -> Result<String, Box<dyn Error>> {
-        self.llm.invoke(prompt).await
+    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
+        let prompt = self.prompt.format_prompt(input_variables)?;
+        self.llm.invoke(&prompt.to_string()).await
     }
 }
 
@@ -101,7 +99,8 @@ mod tests {
     use crate::{
         llm::openai::{OpenAI, OpenAIModel},
         message_formatter, messages_placeholder,
-        prompt::{AIMessagePromptTemplate, MessageOrTemplate},
+        prompt::{AIMessagePromptTemplate, HumanMessagePromptTemplate, MessageOrTemplate},
+        prompt_args,
         schemas::messages::Message,
         template_fstring,
     };
@@ -114,14 +113,10 @@ mod tests {
         let human_msg = Message::new_human_message("Hello from user");
 
         // Create an AI message prompt template
-        let ai_message_prompt =
-            AIMessagePromptTemplate::new(template_fstring!("AI response: {content} ", "content",));
-
-        // Create a placeholder for multiple messages
-        let messages_placeholder = messages_placeholder![
-            Message::new_human_message("Placeholder message 1"),
-            Message::new_system_message("Placeholder message 2"),
-        ];
+        let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
+            "Mi nombre es: {nombre} ",
+            "nombre",
+        ));
 
         let message_complete = Arc::new(Mutex::new(String::new()));
 
@@ -140,17 +135,17 @@ mod tests {
             }
         };
         // Use the `message_formatter` macro to construct the formatter
-        let formatter = message_formatter![
-            MessageOrTemplate::Message(human_msg),
-            MessageOrTemplate::Template(ai_message_prompt),
-            messages_placeholder,
-        ];
+        let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt),];
 
         let options = ChainCallOptions::default().with_streaming_func(streaming_func);
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
         let chain = LLMChain::new(formatter, llm).with_options(options);
 
-        match chain.invoke("hola").await {
+        let input_variables = prompt_args! {
+            "nombre" => "luis",
+
+        };
+        match chain.invoke(input_variables).await {
             Ok(result) => {
                 println!("Result: {:?}", result);
                 println!("Complete message: {:?}", message_complete.lock().await);

@@ -48,7 +48,7 @@ impl PromptFromatter for PromptTemplate {
                 TemplateFormat::FString => format!("{{{}}}", key),
                 TemplateFormat::Jinja2 => format!("{{{{{}}}}}", key),
             };
-            prompt = prompt.replace(&key, value);
+            prompt = prompt.replace(&key, &value);
         }
 
         Ok(prompt)
@@ -60,9 +60,9 @@ macro_rules! prompt_args {
     ( $($key:expr => $value:expr),* $(,)? ) => {
         {
             #[allow(unused_mut)]
-            let mut args: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+            let mut args = std::collections::HashMap::<String, String>::new();
             $(
-                args.insert($key, $value);
+                args.insert($key.to_string(), $value.to_string());
             )*
             args
         }
