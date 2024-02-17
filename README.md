@@ -8,13 +8,133 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 ## Examples
 
+### LLM
+
+The LLM (Language Model) interface in LangChain Rust provides a standardized way to interact with various language models, facilitating tasks such as text generation and information retrieval. Below is an overview of how to utilize the LLM traits and implement them for specific models like OpenAI's GPT
+
+- Default implementation with open ai
+
+```rust
+let options = CallOptions::default();
+let open_ai = OpenAI::default();
+let messages = vec![Message::new_human_message("Hello, how are you?")];
+let resp=open_ai.generate(&messages).await.unwrap();
+println!("Generate Result: {:?}", resp);
+```
+
+- Implementation with options and strems
+
+```rust
+let message_complete = Arc::new(Mutex::new(String::new()));
+
+let streaming_func = {
+    let message_complete = message_complete.clone();
+    move |content: String| {
+        let message_complete = message_complete.clone();
+        async move {
+            let mut message_complete_lock = message_complete.lock().await;
+            println!("Content: {:?}", content);
+            message_complete_lock.push_str(&content);
+            Ok(())
+        }
+    }
+};
+let options = CallOptions::new().with_streaming_func(streaming_func);
+let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35); // You can change the model as needed
+let messages = vec![Message::new_human_message("Hello, how are you?")];
+match open_ai.generate(&messages).await {
+    Ok(result) => {
+        println!("Generate Result: {:?}", result);
+        println!("Message Complete: {:?}", message_complete.lock().await);
+    }
+    Err(e) => {
+        eprintln!("Error calling generate: {:?}", e);
+    }
+}
+```
+
+### Chain
+
+The Chain trait in LangChain Rust represents a powerful abstraction that allows developers to build sequences of operations, often involving language model interactions. This feature is crucial for creating sophisticated workflows that require a series of logical steps, such as generating text, processing information, and making decisions based on model outputs.
+
+- Default implementation
+
+```rust
+
+let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
+    "Mi nombre es: {nombre} ",
+    "nombre",
+));
+
+let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt),];
+let llm = OpenAI::default();
+let chain = LLMChain::new(formatter, llm);
+let input_variables = prompt_args! {
+    "nombre" => "luis",
+};
+match chain.invoke(input_variables).await {
+    Ok(result) => {
+        println!("Result: {:?}", result);
+    }
+    Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+}
+```
+
+- With stram and option implementation
+
+````rust
+let human_msg = Message::new_human_message("Hello from user");
+
+// Create an AI message prompt template
+let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
+    "Mi nombre es: {nombre} ",
+    "nombre",
+));
+
+let message_complete = Arc::new(Mutex::new(String::new()));
+
+// Define the streaming function
+// This function will append the content received from the stream to `message_complete`
+let streaming_func = {
+    let message_complete = message_complete.clone();
+    move |content: String| {
+        let message_complete = message_complete.clone();
+        async move {
+            let mut message_complete_lock = message_complete.lock().await;
+            println!("Content: {:?}", content);
+            message_complete_lock.push_str(&content);
+            Ok(())
+        }
+    }
+};
+// Use the `message_formatter` macro to construct the formatter
+let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt),];
+
+let options = ChainCallOptions::default().with_streaming_func(streaming_func);
+let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
+let chain = LLMChain::new(formatter, llm).with_options(options);
+
+let input_variables = prompt_args! {
+    "nombre" => "luis",
+
+};
+match chain.invoke(input_variables).await {
+    Ok(result) => {
+        println!("Result: {:?}", result);
+        println!("Complete message: {:?}", message_complete.lock().await);
+    }
+    Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+}
+
+``
+
 ### Embeddings
 
 ```rust
 use langchain::embedding::openai::OpenAiEmbedder;
 
 let openai_embedder = OpenAiEmbedder::new("your_openai_api_key".to_string());
-```
+````
 
 Or use the default implementation:
 
