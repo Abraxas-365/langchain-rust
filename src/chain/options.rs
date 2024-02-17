@@ -1,15 +1,12 @@
 use futures::Future;
-use std::{pin::Pin, sync::Arc};
-use tokio::sync::Mutex;
+use std::pin::Pin;
 
 pub struct ChainCallOptions {
     pub max_tokens: Option<u16>,
     pub temperature: Option<f32>,
     pub stop_words: Option<Vec<String>>,
     pub streaming_func: Option<
-        Arc<
-            Mutex<dyn FnMut(String) -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send>> + Send>,
-        >,
+        Box<dyn FnMut(String) -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send>> + Send>,
     >,
     pub top_k: Option<usize>,
     pub top_p: Option<f32>,
@@ -57,18 +54,12 @@ impl ChainCallOptions {
     }
 
     //TODO:Check if this should be a &str instead of a String
-    pub fn with_streaming_function<F, Fut>(mut self, mut func: F) -> Self
+    pub fn with_streaming_func<F, Fut>(mut self, mut func: F) -> Self
     where
         F: FnMut(String) -> Fut + Send + 'static,
         Fut: Future<Output = Result<(), ()>> + Send + 'static,
     {
-        let func = Arc::new(Mutex::new(
-            move |s: String| -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send>> {
-                Box::pin(func(s))
-            },
-        ));
-
-        self.streaming_func = Some(func);
+        self.streaming_func = Some(Box::new(move |s: String| Box::pin(func(s))));
         self
     }
 

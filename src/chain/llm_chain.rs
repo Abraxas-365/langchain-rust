@@ -68,6 +68,10 @@ where
             llm_option = llm_option.with_repetition_penalty(repetition_penalty);
         }
 
+        if let Some(streaming_func) = options.streaming_func {
+            llm_option = llm_option.with_streaming_func(streaming_func)
+        }
+
         self.llm.with_options(llm_option);
         self
     }
@@ -142,9 +146,9 @@ mod tests {
             messages_placeholder,
         ];
 
-        let options = CallOptions::default().with_streaming_func(streaming_func);
-        let llm = OpenAI::new(options).with_model(OpenAIModel::Gpt35);
-        let chain = LLMChain::new(formatter, llm);
+        let options = ChainCallOptions::default().with_streaming_func(streaming_func);
+        let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
+        let chain = LLMChain::new(formatter, llm).with_options(options);
 
         match chain.invoke("hola").await {
             Ok(result) => {
