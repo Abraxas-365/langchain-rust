@@ -66,7 +66,7 @@ let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
     "nombre",
 ));
 
-let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt),];
+let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt.into()),];
 let llm = OpenAI::default();
 let chain = LLMChain::new(formatter, llm);
 let input_variables = prompt_args! {
@@ -107,7 +107,7 @@ let streaming_func = {
     }
 };
 // Use the `message_formatter` macro to construct the formatter
-let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt),];
+let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt.into()),];
 
 let options = ChainCallOptions::default().with_streaming_func(streaming_func);
 let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
@@ -216,16 +216,20 @@ use langchain::prompt::chat::{Message, messages_placeholder, message_formatter, 
 use langchain::prompt::{template_fstring, prompt_args};
 use std::collections::HashMap;
 
+
+
+let ai_message_prompt = AIMessagePromptTemplate::new(template_fstring!(
+"AI response: The current weather is {weather_condition}.",
+"weather_condition"
+));
 // Define a formatter using the `message_formatter` macro to construct a conversation flow
 let formatter = message_formatter![
     // Add a human message directly
     MessageOrTemplate::Message(Message::new_human_message("User query: What's the weather like?")),
 
     // Add an AI message using a template
-    MessageOrTemplate::Template(template_fstring!(
-        "AI response: The current weather is {weather_condition}.",
-        "weather_condition"
-    )),
+
+    MessageOrTemplate::Template(ai_message_prompt.into()),
 
     // Add a placeholder for additional messages using `messages_placeholder` macro
     messages_placeholder![
