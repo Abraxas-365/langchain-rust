@@ -24,7 +24,7 @@ pub trait MessageFormatter: Send + Sync {
     fn input_variables(&self) -> Vec<String>;
 }
 
-pub trait FormatPrompter {
+pub trait FormatPrompter: Send + Sync {
     fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>>;
     fn get_input_variables(&self) -> Vec<String>;
 }
