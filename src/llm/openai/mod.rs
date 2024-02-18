@@ -56,6 +56,12 @@ pub struct OpenAI {
     >,
 }
 
+impl Into<Box<dyn LLM>> for OpenAI {
+    fn into(self) -> Box<dyn LLM> {
+        Box::new(self)
+    }
+}
+
 impl Default for OpenAI {
     fn default() -> Self {
         Self {
