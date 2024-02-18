@@ -15,12 +15,12 @@ pub struct PromptTemplate {
 }
 
 impl PromptTemplate {
-    pub fn new(template: String, variables: Vec<String>, format: TemplateFormat) -> Arc<Self> {
-        Arc::new(Self {
+    pub fn new(template: String, variables: Vec<String>, format: TemplateFormat) -> Self {
+        Self {
             template,
             variables,
             format,
-        })
+        }
     }
 }
 

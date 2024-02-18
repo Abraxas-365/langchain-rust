@@ -6,11 +6,11 @@ use super::{FormatPrompter, MessageFormatter, PromptArgs, PromptFromatter, Promp
 
 /// A template for creating human-readable messages.
 pub struct HumanMessagePromptTemplate {
-    prompt: Arc<PromptTemplate>,
+    prompt: PromptTemplate,
 }
 
 impl HumanMessagePromptTemplate {
-    pub fn new(prompt: Arc<PromptTemplate>) -> Arc<Self> {
+    pub fn new(prompt: PromptTemplate) -> Arc<Self> {
         Arc::new(Self { prompt })
     }
 }
@@ -27,11 +27,11 @@ impl MessageFormatter for HumanMessagePromptTemplate {
 
 /// A template for creating system messages.
 pub struct SystemMessagePromptTemplate {
-    prompt: Arc<PromptTemplate>,
+    prompt: PromptTemplate,
 }
 
 impl SystemMessagePromptTemplate {
-    pub fn new(prompt: Arc<PromptTemplate>) -> Arc<Self> {
+    pub fn new(prompt: PromptTemplate) -> Arc<Self> {
         Arc::new(Self { prompt })
     }
 }
@@ -48,7 +48,7 @@ impl MessageFormatter for SystemMessagePromptTemplate {
 
 /// A template for creating AI (assistant) messages.
 pub struct AIMessagePromptTemplate {
-    prompt: Arc<PromptTemplate>,
+    prompt: PromptTemplate,
 }
 
 impl MessageFormatter for AIMessagePromptTemplate {
@@ -63,7 +63,7 @@ impl MessageFormatter for AIMessagePromptTemplate {
 }
 
 impl AIMessagePromptTemplate {
-    pub fn new(prompt: Arc<PromptTemplate>) -> Arc<Self> {
+    pub fn new(prompt: PromptTemplate) -> Arc<Self> {
         Arc::new(Self { prompt })
     }
 }
