@@ -131,7 +131,8 @@ mod tests {
             }
         };
         // Use the `message_formatter` macro to construct the formatter
-        let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt),];
+        let formatter =
+            message_formatter![MessageOrTemplate::Template(human_message_prompt.into()),];
 
         let options = ChainCallOptions::default().with_streaming_func(streaming_func);
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);

@@ -1,4 +1,4 @@
-use std::{error::Error, sync::Arc};
+use std::error::Error;
 
 use crate::schemas::{messages::Message, prompt::PromptValue};
 
@@ -9,9 +9,15 @@ pub struct HumanMessagePromptTemplate {
     prompt: PromptTemplate,
 }
 
+impl Into<Box<dyn MessageFormatter>> for HumanMessagePromptTemplate {
+    fn into(self) -> Box<dyn MessageFormatter> {
+        Box::new(self)
+    }
+}
+
 impl HumanMessagePromptTemplate {
-    pub fn new(prompt: PromptTemplate) -> Arc<Self> {
-        Arc::new(Self { prompt })
+    pub fn new(prompt: PromptTemplate) -> Self {
+        Self { prompt }
     }
 }
 impl MessageFormatter for HumanMessagePromptTemplate {
@@ -30,9 +36,15 @@ pub struct SystemMessagePromptTemplate {
     prompt: PromptTemplate,
 }
 
+impl Into<Box<dyn MessageFormatter>> for SystemMessagePromptTemplate {
+    fn into(self) -> Box<dyn MessageFormatter> {
+        Box::new(self)
+    }
+}
+
 impl SystemMessagePromptTemplate {
-    pub fn new(prompt: PromptTemplate) -> Arc<Self> {
-        Arc::new(Self { prompt })
+    pub fn new(prompt: PromptTemplate) -> Self {
+        Self { prompt }
     }
 }
 impl MessageFormatter for SystemMessagePromptTemplate {
@@ -51,6 +63,12 @@ pub struct AIMessagePromptTemplate {
     prompt: PromptTemplate,
 }
 
+impl Into<Box<dyn MessageFormatter>> for AIMessagePromptTemplate {
+    fn into(self) -> Box<dyn MessageFormatter> {
+        Box::new(self)
+    }
+}
+
 impl MessageFormatter for AIMessagePromptTemplate {
     fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
         Ok(vec![Message::new_ai_message(
@@ -63,14 +81,14 @@ impl MessageFormatter for AIMessagePromptTemplate {
 }
 
 impl AIMessagePromptTemplate {
-    pub fn new(prompt: PromptTemplate) -> Arc<Self> {
-        Arc::new(Self { prompt })
+    pub fn new(prompt: PromptTemplate) -> Self {
+        Self { prompt }
     }
 }
 
 pub enum MessageOrTemplate {
     Message(Message),
-    Template(Arc<dyn MessageFormatter>),
+    Template(Box<dyn MessageFormatter>),
     MessagesPlaceholder(MessagesPlaceholder),
 }
 
@@ -116,7 +134,7 @@ impl MessageFormatterStruct {
         self.items.push(MessageOrTemplate::Message(message));
     }
 
-    pub fn add_template(&mut self, template: Arc<dyn MessageFormatter>) {
+    pub fn add_template(&mut self, template: Box<dyn MessageFormatter>) {
         self.items.push(MessageOrTemplate::Template(template));
     }
 
@@ -233,7 +251,7 @@ mod tests {
         // Use the `message_formatter` macro to construct the formatter
         let formatter = message_formatter![
             MessageOrTemplate::Message(human_msg),
-            MessageOrTemplate::Template(ai_message_prompt),
+            MessageOrTemplate::Template(ai_message_prompt.into()),
             messages_placeholder,
         ];
 
