@@ -62,7 +62,7 @@ impl Chain for ConversationalChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
         let mut memory = self.memory.lock().await;
         let mut input_variables = input_variables;
-        input_variables.insert("history".to_string(), memory.to_string());
+        input_variables.insert("history".to_string(), memory.to_string().into());
         let result = self.llm.call(input_variables.clone()).await?;
         memory.add_message(Message::new_ai_message(&input_variables["input"]));
         memory.add_message(Message::new_ai_message(&result.generation));
@@ -72,7 +72,7 @@ impl Chain for ConversationalChain {
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
         let mut memory = self.memory.lock().await;
         let mut input_variables = input_variables;
-        input_variables.insert("history".to_string(), memory.to_string());
+        input_variables.insert("history".to_string(), memory.to_string().into());
         let result = self.llm.invoke(input_variables.clone()).await?;
         memory.add_message(Message::new_ai_message(&input_variables["input"]));
         memory.add_message(Message::new_ai_message(&result));

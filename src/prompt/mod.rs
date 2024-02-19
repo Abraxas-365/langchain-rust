@@ -5,11 +5,12 @@ use std::{collections::HashMap, error::Error};
 
 pub use chat::*;
 pub use prompt::*;
+use serde_json::Value;
 
 use crate::schemas::{messages::Message, prompt::PromptValue};
 
 // pub type PromptArgs<'a> = HashMap<&'a str, &'a str>;
-pub type PromptArgs = HashMap<String, String>;
+pub type PromptArgs = HashMap<String, Value>;
 pub trait PromptFromatter: Send + Sync {
     fn template(&self) -> String;
     fn variables(&self) -> Vec<String>;

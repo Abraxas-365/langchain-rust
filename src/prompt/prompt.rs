@@ -49,7 +49,11 @@ impl PromptFromatter for PromptTemplate {
                 TemplateFormat::FString => format!("{{{}}}", key),
                 TemplateFormat::Jinja2 => format!("{{{{{}}}}}", key),
             };
-            prompt = prompt.replace(&key, &value);
+            let value_str = match &value {
+                serde_json::Value::String(s) => s.clone(),
+                _ => value.to_string(),
+            };
+            prompt = prompt.replace(&key, &value_str);
         }
 
         Ok(prompt)
@@ -61,9 +65,10 @@ macro_rules! prompt_args {
     ( $($key:expr => $value:expr),* $(,)? ) => {
         {
             #[allow(unused_mut)]
-            let mut args = std::collections::HashMap::<String, String>::new();
+            let mut args = std::collections::HashMap::<String, serde_json::Value>::new();
             $(
-                args.insert($key.to_string(), $value.to_string());
+                // Convert the value to serde_json::Value before inserting
+                args.insert($key.to_string(), serde_json::json!($value));
             )*
             args
         }
@@ -113,6 +118,7 @@ mod tests {
             "name" => "world",
         };
         let result = template.format(input_variables);
+        println!("{:?}", result);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello world!");
     }

@@ -26,26 +26,26 @@ pub struct Message {
 }
 
 impl Message {
-    // Function to create a new Human message
-    pub fn new_human_message(content: &str) -> Self {
+    // Function to create a new Human message with a generic type that implements Display
+    pub fn new_human_message<T: std::fmt::Display>(content: T) -> Self {
         Message {
-            content: String::from(content),
+            content: content.to_string(),
             message_type: MessageType::HumanMessage,
         }
     }
 
-    // Function to create a new System message
-    pub fn new_system_message(content: &str) -> Self {
+    // Function to create a new System message with a generic type that implements Display
+    pub fn new_system_message<T: std::fmt::Display>(content: T) -> Self {
         Message {
-            content: String::from(content),
+            content: content.to_string(),
             message_type: MessageType::SystemMessage,
         }
     }
 
-    // Function to create a new AI message
-    pub fn new_ai_message(content: &str) -> Self {
+    // Function to create a new AI message with a generic type that implements Display
+    pub fn new_ai_message<T: std::fmt::Display>(content: T) -> Self {
         Message {
-            content: String::from(content),
+            content: content.to_string(),
             message_type: MessageType::AIMessage,
         }
     }
