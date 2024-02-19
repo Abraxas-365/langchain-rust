@@ -2,11 +2,13 @@ use std::error::Error;
 
 use super::{PromptArgs, PromptFromatter};
 
+#[derive(Clone)]
 pub enum TemplateFormat {
     FString,
     Jinja2,
 }
 
+#[derive(Clone)]
 pub struct PromptTemplate {
     template: String,
     variables: Vec<String>,

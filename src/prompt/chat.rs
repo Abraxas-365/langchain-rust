@@ -5,6 +5,8 @@ use crate::schemas::{messages::Message, prompt::PromptValue};
 use super::{FormatPrompter, MessageFormatter, PromptArgs, PromptFromatter, PromptTemplate};
 
 /// A template for creating human-readable messages.
+
+#[derive(Clone)]
 pub struct HumanMessagePromptTemplate {
     prompt: PromptTemplate,
 }
@@ -42,6 +44,7 @@ impl FormatPrompter for HumanMessagePromptTemplate {
 }
 
 /// A template for creating system messages.
+#[derive(Clone)]
 pub struct SystemMessagePromptTemplate {
     prompt: PromptTemplate,
 }
@@ -80,6 +83,7 @@ impl MessageFormatter for SystemMessagePromptTemplate {
 }
 
 /// A template for creating AI (assistant) messages.
+#[derive(Clone)]
 pub struct AIMessagePromptTemplate {
     prompt: PromptTemplate,
 }
