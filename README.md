@@ -281,3 +281,7 @@ for message in conversation_script {
     println!("{:?}", message.content);
 }
 ```
+
+## License
+
+`langchain-rust` is released under the MIT License. See the [LICENSE](https://github.com/gyroflaw/langchain_rs/blob/main/LICENSE) file for more information.
