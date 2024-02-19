@@ -89,10 +89,10 @@ macro_rules! template_fstring {
 #[macro_export]
 macro_rules! template_jinja2 {
     ($template:expr, $($var:expr),* $(,)?) => {
-        PromptTemplate::new(
+        crate::prompt::PromptTemplate::new(
             $template.to_string(),
             vec![$($var.to_string()),*],
-            TemplateFormat::Jinja2,
+            crate::prompt::TemplateFormat::Jinja2,
         )
     };
 }
