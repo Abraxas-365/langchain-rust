@@ -57,8 +57,6 @@ match open_ai.generate(&messages).await {
 
 The Chain trait in LangChain Rust represents a powerful abstraction that allows developers to build sequences of operations, often involving language model interactions. This feature is crucial for creating sophisticated workflows that require a series of logical steps, such as generating text, processing information, and making decisions based on model outputs.
 
-- Default implementation
-
 #### Conversational chain
 
 Conversational chain keeps a memory of the chain, the prompt args should be input
@@ -89,6 +87,8 @@ let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
 ```
 
 #### LLM Chain
+
+- Default implementation
 
 ```rust
 let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
