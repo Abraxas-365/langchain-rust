@@ -124,36 +124,7 @@ impl AIMessagePromptTemplate {
 pub enum MessageOrTemplate {
     Message(Message),
     Template(Box<dyn MessageFormatter>),
-    MessagesPlaceholder(MessagesPlaceholder),
-}
-
-#[derive(Clone)]
-pub struct MessagesPlaceholder {
-    messages: Vec<Message>,
-}
-
-impl MessagesPlaceholder {
-    pub fn new() -> Self {
-        Self {
-            messages: Vec::new(),
-        }
-    }
-
-    pub fn add_message(&mut self, message: Message) {
-        self.messages.push(message);
-    }
-}
-
-impl MessageFormatter for MessagesPlaceholder {
-    fn format_messages(
-        &self,
-        _input_variables: PromptArgs,
-    ) -> Result<Vec<Message>, Box<dyn Error>> {
-        Ok(self.messages.clone())
-    }
-    fn input_variables(&self) -> Vec<String> {
-        Vec::new()
-    }
+    MessagesPlaceholder(String),
 }
 
 pub struct MessageFormatterStruct {
@@ -173,13 +144,14 @@ impl MessageFormatterStruct {
         self.items.push(MessageOrTemplate::Template(template));
     }
 
-    pub fn add_messages_placeholder(&mut self, placeholder: MessagesPlaceholder) {
-        self.items
-            .push(MessageOrTemplate::MessagesPlaceholder(placeholder));
+    pub fn add_messages_placeholder(&mut self, placeholder: &str) {
+        self.items.push(MessageOrTemplate::MessagesPlaceholder(
+            placeholder.to_string(),
+        ));
     }
 
     fn format(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
-        let mut result = Vec::new();
+        let mut result: Vec<Message> = Vec::new();
         for item in &self.items {
             match item {
                 MessageOrTemplate::Message(msg) => result.push(msg.clone()),
@@ -187,7 +159,8 @@ impl MessageFormatterStruct {
                     result.extend(tmpl.format_messages(input_variables.clone())?)
                 }
                 MessageOrTemplate::MessagesPlaceholder(placeholder) => {
-                    result.extend(placeholder.format_messages(input_variables.clone())?)
+                    let messages = input_variables[placeholder].clone();
+                    result.extend(Message::messages_from_value(&messages)?);
                 }
             }
         }
@@ -208,7 +181,7 @@ impl MessageFormatter for MessageFormatterStruct {
                     variables.extend(tmpl.input_variables());
                 }
                 MessageOrTemplate::MessagesPlaceholder(placeholder) => {
-                    variables.extend(placeholder.input_variables());
+                    variables.extend(vec![placeholder.clone()]);
                 }
             }
         }
@@ -227,35 +200,24 @@ impl FormatPrompter for MessageFormatterStruct {
 }
 
 #[macro_export]
-macro_rules! messages_placeholder {
-    ($($msg:expr),* $(,)?) => {{
-        let mut placeholder = crate::prompt::MessagesPlaceholder::new();
-        $(
-            placeholder.add_message($msg);
-        )*
-        MessageOrTemplate::MessagesPlaceholder(placeholder)
-    }};
-}
-
-#[macro_export]
 macro_rules! message_formatter {
-    ($($item:expr),* $(,)?) => {{
-        let mut formatter = crate::prompt::MessageFormatterStruct::new();
-        $(
-            match $item {
-                MessageOrTemplate::Message(msg) => formatter.add_message(msg),
-                MessageOrTemplate::Template(tmpl) => formatter.add_template(tmpl),
-                MessageOrTemplate::MessagesPlaceholder(placeholder) => formatter.add_messages_placeholder(placeholder.clone()),
-            }
-        )*
-        formatter
-    }};
+($($item:expr),* $(,)?) => {{
+    let mut formatter = crate::prompt::MessageFormatterStruct::new();
+    $(
+        match $item {
+            MessageOrTemplate::Message(msg) => formatter.add_message(msg),
+            MessageOrTemplate::Template(tmpl) => formatter.add_template(tmpl),
+            MessageOrTemplate::MessagesPlaceholder(placeholder) => formatter.add_messages_placeholder(&placeholder.clone()),
+        }
+    )*
+    formatter
+}};
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        message_formatter, messages_placeholder,
+        message_formatter,
         prompt::{
             chat::{AIMessagePromptTemplate, MessageOrTemplate},
             MessageFormatter,
@@ -277,23 +239,22 @@ mod tests {
             "test"
         ));
 
-        // Create a placeholder for multiple messages
-        let messages_placeholder = messages_placeholder![
-            Message::new_human_message("Placeholder message 1"),
-            Message::new_system_message("Placeholder message 2"),
-        ];
-
         // Use the `message_formatter` macro to construct the formatter
         let formatter = message_formatter![
             MessageOrTemplate::Message(human_msg),
             MessageOrTemplate::Template(ai_message_prompt.into()),
-            messages_placeholder,
+            MessageOrTemplate::MessagesPlaceholder("history".to_string())
         ];
 
         // Define input variables for the AI message template
         let input_variables = prompt_args! {
             "content" => "This is a test",
             "test" => "test2",
+            "history" => vec![
+                Message::new_human_message("Placeholder message 1"),
+                Message::new_ai_message("Placeholder message 2"),
+            ],
+
 
         };
 

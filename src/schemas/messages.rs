@@ -1,5 +1,8 @@
+use std::error::Error;
+
 use serde::Deserialize;
 use serde::Serialize;
+use serde_json::Value;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MessageType {
@@ -48,5 +51,9 @@ impl Message {
             content: content.to_string(),
             message_type: MessageType::AIMessage,
         }
+    }
+
+    pub fn messages_from_value(value: &Value) -> Result<Vec<Message>, Box<dyn Error>> {
+        serde_json::from_value(value.clone()).map_err(|e| e.into())
     }
 }

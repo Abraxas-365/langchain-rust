@@ -242,44 +242,49 @@ println!("{}", formatted_greeting);
 Combining message structures with dynamic templates, you can create complex conversational flows. The MessageFormatter allows the sequencing of various message types and templates, providing a cohesive conversation script:
 
 ```rust
-use langchain::prompt::chat::{Message, messages_placeholder, message_formatter, MessageOrTemplate};
-use langchain::prompt::{template_fstring, prompt_args};
-use std::collections::HashMap;
 
+let human_msg = Message::new_human_message("Hello from user");
 
-
+// Create an AI message prompt template
 let ai_message_prompt = AIMessagePromptTemplate::new(template_fstring!(
-"AI response: The current weather is {weather_condition}.",
-"weather_condition"
+    "AI response: {content} {test}",
+    "content",
+    "test"
 ));
-// Define a formatter using the `message_formatter` macro to construct a conversation flow
+
+// Use the `message_formatter` macro to construct the formatter
 let formatter = message_formatter![
-    // Add a human message directly
-    MessageOrTemplate::Message(Message::new_human_message("User query: What's the weather like?")),
-
-    // Add an AI message using a template
-
+    MessageOrTemplate::Message(human_msg),
     MessageOrTemplate::Template(ai_message_prompt.into()),
-
-    // Add a placeholder for additional messages using `messages_placeholder` macro
-    messages_placeholder![
-        Message::new_system_message("Processing your request..."),
-        Message::new_system_message("End of conversation."),
-    ],
+    MessageOrTemplate::MessagesPlaceholder("history".to_string())
 ];
 
 // Define input variables for the AI message template
 let input_variables = prompt_args! {
-    "weather_condition" => "sunny with a chance of rain",
+    "content" => "This is a test",
+    "test" => "test2",
+    "history" => vec![
+        Message::new_human_message("Placeholder message 1"),
+        Message::new_ai_message("Placeholder message 2"),
+    ],
+
+
 };
 
-// Format the conversation using the formatter and input variables
-let conversation_script = formatter.format(input_variables).unwrap();
+// Format messages
+let formatted_messages = formatter.format_messages(input_variables).unwrap();
 
-// Print out each message in the formatted conversation
-for message in conversation_script {
-    println!("{:?}", message.content);
-}
+// Verify the number of messages
+assert_eq!(formatted_messages.len(), 4);
+
+// Verify the content of each message
+assert_eq!(formatted_messages[0].content, "Hello from user");
+assert_eq!(
+    formatted_messages[1].content,
+    "AI response: This is a test test2"
+);
+assert_eq!(formatted_messages[2].content, "Placeholder message 1");
+assert_eq!(formatted_messages[3].content, "Placeholder message 2");
 ```
 
 ## License
