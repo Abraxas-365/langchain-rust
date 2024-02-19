@@ -59,6 +59,35 @@ The Chain trait in LangChain Rust represents a powerful abstraction that allows 
 
 - Default implementation
 
+#### Conversational chain
+
+Conversational chain keeps a memory of the chain, the prompt args should be input
+
+```rust
+let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
+        let chain = ConversationalChain::new(llm);
+
+        let input_variables = prompt_args! {
+            "input" => "Soy de peru",
+        };
+        match chain.invoke(input_variables).await {
+            Ok(result) => {
+                println!("Result: {:?}", result);
+            }
+            Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+        }
+
+        let input_variables = prompt_args! {
+            "input" => "Cuales son platos tipicos de mi pais",
+        };
+        match chain.invoke(input_variables).await {
+            Ok(result) => {
+                println!("Result: {:?}", result);
+            }
+            Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+        }
+```
+
 ```rust
 
 let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
