@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use tokio::sync::Mutex;
+
 use super::messages::Message;
 
 pub trait BaseMemory: Send + Sync {
@@ -41,6 +43,12 @@ impl SimpleMemory {
 impl Into<Arc<dyn BaseMemory>> for SimpleMemory {
     fn into(self) -> Arc<dyn BaseMemory> {
         Arc::new(self)
+    }
+}
+
+impl Into<Arc<Mutex<dyn BaseMemory>>> for SimpleMemory {
+    fn into(self) -> Arc<Mutex<dyn BaseMemory>> {
+        Arc::new(Mutex::new(self))
     }
 }
 
