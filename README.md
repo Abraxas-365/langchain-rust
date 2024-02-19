@@ -88,8 +88,9 @@ let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
         }
 ```
 
-```rust
+#### LLM Chain
 
+```rust
 let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
     "Mi nombre es: {nombre} ",
     "nombre",
