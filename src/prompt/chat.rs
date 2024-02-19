@@ -31,6 +31,16 @@ impl MessageFormatter for HumanMessagePromptTemplate {
     }
 }
 
+impl FormatPrompter for HumanMessagePromptTemplate {
+    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>> {
+        let messages = self.format_messages(input_variables)?;
+        Ok(PromptValue::from_messages(messages))
+    }
+    fn get_input_variables(&self) -> Vec<String> {
+        self.input_variables()
+    }
+}
+
 /// A template for creating system messages.
 pub struct SystemMessagePromptTemplate {
     prompt: PromptTemplate,
@@ -47,6 +57,17 @@ impl SystemMessagePromptTemplate {
         Self { prompt }
     }
 }
+
+impl FormatPrompter for SystemMessagePromptTemplate {
+    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>> {
+        let messages = self.format_messages(input_variables)?;
+        Ok(PromptValue::from_messages(messages))
+    }
+    fn get_input_variables(&self) -> Vec<String> {
+        self.input_variables()
+    }
+}
+
 impl MessageFormatter for SystemMessagePromptTemplate {
     fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
         Ok(vec![Message::new_system_message(
@@ -66,6 +87,16 @@ pub struct AIMessagePromptTemplate {
 impl Into<Box<dyn MessageFormatter>> for AIMessagePromptTemplate {
     fn into(self) -> Box<dyn MessageFormatter> {
         Box::new(self)
+    }
+}
+
+impl FormatPrompter for AIMessagePromptTemplate {
+    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>> {
+        let messages = self.format_messages(input_variables)?;
+        Ok(PromptValue::from_messages(messages))
+    }
+    fn get_input_variables(&self) -> Vec<String> {
+        self.input_variables()
     }
 }
 
