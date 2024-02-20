@@ -57,8 +57,14 @@ where
     }
 
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
+        println!("Input variables: {:?}", input_variables);
         let prompt = self.prompt.format_prompt(input_variables)?;
-        self.llm.invoke(&prompt.to_string()).await
+        println!("Prompt: {:?}", prompt.to_string());
+        Ok(self
+            .llm
+            .generate(&prompt.to_chat_messages())
+            .await?
+            .generation)
     }
 }
 
