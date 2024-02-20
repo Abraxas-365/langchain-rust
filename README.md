@@ -55,7 +55,7 @@ match open_ai.generate(&messages).await {
 
 ### Agents
 
-And agent and agent executor is a chain which can interact with `Tool` which are elemts of outside the llm it self, like searchin in google
+And agent and agent executor is a chain which can interact with `Tool` which are elemts of outside the llm it self, like search in google
 
 ##### Conversational Agent
 
