@@ -17,7 +17,7 @@ impl PromptValue {
     pub fn to_string(&self) -> String {
         self.messages
             .iter()
-            .map(|m| format!("{:?}: {}", m.message_type, m.content))
+            .map(|m| format!("{}: {}", m.message_type.to_string(), m.content))
             .collect::<Vec<String>>()
             .join("\n")
     }

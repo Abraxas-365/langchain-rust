@@ -20,6 +20,16 @@ impl Default for MessageType {
     }
 }
 
+impl MessageType {
+    pub fn to_string(&self) -> String {
+        match self {
+            MessageType::SystemMessage => "system".to_owned(),
+            MessageType::AIMessage => "ai".to_owned(),
+            MessageType::HumanMessage => "human".to_owned(),
+        }
+    }
+}
+
 /// A Message for priming AI behavior, usually passed in as the first of a sequence
 /// of input messages.
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
