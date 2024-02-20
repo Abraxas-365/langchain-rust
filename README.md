@@ -79,13 +79,11 @@ async fn agent_run() {
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt4);
     let memory = SimpleMemory::new();
     let tool_calc = Calc {};
-    let agent = ConversationalAgent::from_llm_and_tools(
-        llm,
-        vec![Arc::new(tool_calc)],
-        ChatOutputParser::new().into(),
-    )
-    .unwrap();
-
+    let agent = ConversationalAgentBuilder::new()
+        .tools(vec![Arc::new(tool_calc)])
+        .output_parser(ChatOutputParser::new().into())
+        .build(llm)
+        .unwrap();
     let input_variables = prompt_args! {
         "input" => "hola,Me llamo luis, y tengo 10 anos, y estudio Computer scinence",
     };
@@ -105,8 +103,8 @@ async fn agent_run() {
         }
         Err(e) => panic!("Error invoking LLMChain: {:?}", e),
     }
-}
 
+}
 ```
 
 ### Chain

@@ -23,6 +23,7 @@ use crate::{
 
 use super::agent::{Agent, AgentOutputParser};
 
+pub mod builder;
 pub mod output_parser;
 pub mod prompt;
 
@@ -72,20 +73,6 @@ impl ConversationalAgent {
         ];
         return Ok(formatter);
     }
-
-    pub fn from_llm_and_tools<L: LLM + 'static>(
-        llm: L,
-        tools: Vec<Arc<dyn Tool>>,
-        output_parser: Box<dyn AgentOutputParser>,
-    ) -> Result<Self, Box<dyn Error>> {
-        let prompt = ConversationalAgent::create_prompt(&tools, prompt::SUFFIX, prompt::PREFIX)?;
-        let chain = Box::new(LLMChain::new(prompt, llm));
-        Ok(Self {
-            chain,
-            tools,
-            output_parser,
-        })
-    }
 }
 
 #[async_trait]
@@ -117,7 +104,10 @@ mod tests {
 
     use crate::{
         agent::{
-            chat::{output_parser::ChatOutputParser, ConversationalAgent},
+            chat::{
+                builder::ConversationalAgentBuilder, output_parser::ChatOutputParser,
+                ConversationalAgent,
+            },
             executor::AgentExecutor,
         },
         chain::chain_trait::Chain,
@@ -147,13 +137,11 @@ mod tests {
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt4);
         let memory = SimpleMemory::new();
         let tool_calc = Calc {};
-        let agent = ConversationalAgent::from_llm_and_tools(
-            llm,
-            vec![Arc::new(tool_calc)],
-            ChatOutputParser::new().into(),
-        )
-        .unwrap();
-
+        let agent = ConversationalAgentBuilder::new()
+            .tools(vec![Arc::new(tool_calc)])
+            .output_parser(ChatOutputParser::new().into())
+            .build(llm)
+            .unwrap();
         let input_variables = prompt_args! {
             "input" => "hola,Me llamo luis, y tengo 10 anos, y estudio Computer scinence",
         };
