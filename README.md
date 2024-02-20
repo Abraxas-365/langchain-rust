@@ -53,6 +53,62 @@ match open_ai.generate(&messages).await {
 }
 ```
 
+### Agents
+
+And agent and agent executor is a chain which can interact with `Tool` which are elemts of outside the llm it self, like searchin in google
+
+##### Conversational Agent
+
+```rust
+struct Calc {}
+
+#[async_trait]
+impl Tool for Calc {
+    fn name(&self) -> String {
+        "Calculator".to_string()
+    }
+    fn description(&self) -> String {
+        "Usefull to make calculations".to_string()
+    }
+    async fn call(&self, _input: &str) -> Result<String, Box<dyn Error>> {
+        Ok("25".to_string())
+    }
+}
+
+async fn agent_run() {
+    let llm = OpenAI::default().with_model(OpenAIModel::Gpt4);
+    let memory = SimpleMemory::new();
+    let tool_calc = Calc {};
+    let agent = ConversationalAgent::from_llm_and_tools(
+        llm,
+        vec![Arc::new(tool_calc)],
+        ChatOutputParser::new().into(),
+    )
+    .unwrap();
+
+    let input_variables = prompt_args! {
+        "input" => "hola,Me llamo luis, y tengo 10 anos, y estudio Computer scinence",
+    };
+    let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
+    match executor.invoke(input_variables).await {
+        Ok(result) => {
+            println!("Result: {:?}", result);
+        }
+        Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+    }
+    let input_variables = prompt_args! {
+        "input" => "cuanta es la edad de luis +10 y que estudia",
+    };
+    match executor.invoke(input_variables).await {
+        Ok(result) => {
+            println!("Result: {:?}", result);
+        }
+        Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+    }
+}
+
+```
+
 ### Chain
 
 The Chain trait in LangChain Rust represents a powerful abstraction that allows developers to build sequences of operations, often involving language model interactions. This feature is crucial for creating sophisticated workflows that require a series of logical steps, such as generating text, processing information, and making decisions based on model outputs.
@@ -63,27 +119,27 @@ Conversational chain keeps a memory of the chain, the prompt args should be inpu
 
 ```rust
 let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
-        let chain = ConversationalChain::new(llm);
+let chain = ConversationalChain::new(llm);
 
-        let input_variables = prompt_args! {
-            "input" => "Soy de peru",
-        };
-        match chain.invoke(input_variables).await {
-            Ok(result) => {
-                println!("Result: {:?}", result);
-            }
-            Err(e) => panic!("Error invoking LLMChain: {:?}", e),
-        }
+let input_variables = prompt_args! {
+    "input" => "Soy de peru",
+};
+match chain.invoke(input_variables).await {
+    Ok(result) => {
+        println!("Result: {:?}", result);
+    }
+    Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+}
 
-        let input_variables = prompt_args! {
-            "input" => "Cuales son platos tipicos de mi pais",
-        };
-        match chain.invoke(input_variables).await {
-            Ok(result) => {
-                println!("Result: {:?}", result);
-            }
-            Err(e) => panic!("Error invoking LLMChain: {:?}", e),
-        }
+let input_variables = prompt_args! {
+    "input" => "Cuales son platos tipicos de mi pais",
+};
+match chain.invoke(input_variables).await {
+    Ok(result) => {
+        println!("Result: {:?}", result);
+    }
+    Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+}
 ```
 
 #### LLM Chain
