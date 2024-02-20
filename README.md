@@ -202,7 +202,12 @@ let formatter = message_formatter![MessageOrTemplate::Template(human_message_pro
 
 let options = ChainCallOptions::default().with_streaming_func(streaming_func);
 let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
-let chain = LLMChain::new(formatter, llm).with_options(options);
+let chain =  LLMChainBuilder::new()
+    .prompt(formatter)
+    .llm(llm)
+    .options(options)
+    .build()
+    .expect("Failed to build LLMChain");
 
 let input_variables = prompt_args! {
     "nombre" => "luis",
