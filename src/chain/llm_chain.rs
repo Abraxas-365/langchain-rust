@@ -148,6 +148,7 @@ mod tests {
         let chain = LLMChainBuilder::new()
             .prompt(formatter)
             .llm(llm)
+            .options(options)
             .build()
             .expect("Failed to build LLMChain");
 
