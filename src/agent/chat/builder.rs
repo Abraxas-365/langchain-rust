@@ -1,7 +1,7 @@
 use std::{error::Error, sync::Arc};
 
 use crate::{
-    agent::agent::AgentOutputParser, chain::llm_chain::LLMChain, language_models::llm::LLM,
+    agent::agent::AgentOutputParser, chain::llm_chain::LLMChainBuilder, language_models::llm::LLM,
     tools::tool::Tool,
 };
 
@@ -54,7 +54,7 @@ impl ConversationalAgentBuilder {
         let suffix = self.suffix.unwrap_or_else(|| SUFFIX.to_string());
 
         let prompt = ConversationalAgent::create_prompt(&tools, &suffix, &prefix)?;
-        let chain = Box::new(LLMChain::new(prompt, llm));
+        let chain = Box::new(LLMChainBuilder::new().prompt(prompt).llm(llm).build()?);
 
         Ok(ConversationalAgent {
             chain,

@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use tokio::sync::Mutex;
 
 use crate::{
-    chain::llm_chain::LLMChain,
     language_models::{llm::LLM, GenerateResult},
     prompt::{HumanMessagePromptTemplate, PromptArgs},
     schemas::{
@@ -16,8 +15,9 @@ use crate::{
 
 use self::prompt::DEFAULT_TEMPLATE;
 
-use super::{chain_trait::Chain, options::ChainCallOptions};
+use super::{chain_trait::Chain, llm_chain::LLMChainBuilder, options::ChainCallOptions};
 
+pub mod builder;
 mod prompt;
 pub struct ConversationalChain {
     llm: Box<dyn Chain>,
@@ -25,30 +25,37 @@ pub struct ConversationalChain {
 }
 
 impl ConversationalChain {
-    pub fn new<L: LLM + 'static>(llm: L) -> Self {
+    pub fn new<L: LLM + 'static>(llm: L) -> Result<Self, Box<dyn Error>> {
         let prompt = HumanMessagePromptTemplate::new(template_fstring!(
             DEFAULT_TEMPLATE,
             "history",
             "input"
         ));
-        let llm_chain = LLMChain::new(prompt, llm);
-        Self {
+        let llm_chain = LLMChainBuilder::new().prompt(prompt).llm(llm).build()?;
+        Ok(Self {
             llm: Box::new(llm_chain),
             memory: Arc::new(Mutex::new(SimpleMemory::new())),
-        }
+        })
     }
 
-    pub fn new_with_options<L: LLM + 'static>(llm: L, options: ChainCallOptions) -> Self {
+    pub fn new_with_options<L: LLM + 'static>(
+        llm: L,
+        options: ChainCallOptions,
+    ) -> Result<Self, Box<dyn Error>> {
         let prompt = HumanMessagePromptTemplate::new(template_fstring!(
             DEFAULT_TEMPLATE,
             "history",
             "input"
         ));
-        let llm_chain = LLMChain::new(prompt, llm).with_options(options);
-        Self {
+        let llm_chain = LLMChainBuilder::new()
+            .prompt(prompt)
+            .llm(llm)
+            .options(options)
+            .build()?;
+        Ok(Self {
             llm: Box::new(llm_chain),
             memory: Arc::new(Mutex::new(SimpleMemory::new())),
-        }
+        })
     }
 
     pub fn with_memory(mut self, memory: Arc<Mutex<dyn BaseMemory>>) -> Self {
@@ -83,6 +90,7 @@ impl Chain for ConversationalChain {
 #[cfg(test)]
 mod tests {
     use crate::{
+        chain::conversational::builder::ConversationalChainBuilder,
         llm::openai::{OpenAI, OpenAIModel},
         prompt_args,
     };
@@ -92,7 +100,10 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_conversational() {
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
-        let chain = ConversationalChain::new(llm);
+        let chain = ConversationalChainBuilder::new()
+            .llm(llm)
+            .build()
+            .expect("Error building ConversationalChain");
 
         let input_variables = prompt_args! {
             "input" => "Soy de peru",

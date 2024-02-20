@@ -3,12 +3,73 @@ use std::{error::Error, sync::Arc};
 use async_trait::async_trait;
 
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, GenerateResult},
+    language_models::{llm::LLM, GenerateResult},
     prompt::{FormatPrompter, PromptArgs},
     schemas::memory::BaseMemory,
 };
 
 use super::{chain_trait::Chain, options::ChainCallOptions};
+
+pub struct LLMChainBuilder<P, L>
+where
+    P: FormatPrompter,
+    L: LLM,
+{
+    prompt: Option<P>,
+    llm: Option<L>,
+    memory: Option<Arc<dyn BaseMemory>>,
+    options: Option<ChainCallOptions>,
+}
+
+impl<P, L> LLMChainBuilder<P, L>
+where
+    P: FormatPrompter,
+    L: LLM,
+{
+    pub fn new() -> Self {
+        Self {
+            prompt: None,
+            llm: None,
+            memory: None,
+            options: None,
+        }
+    }
+    pub fn options(mut self, options: ChainCallOptions) -> Self {
+        self.options = Some(options);
+        self
+    }
+    pub fn prompt(mut self, prompt: P) -> Self {
+        self.prompt = Some(prompt);
+        self
+    }
+
+    pub fn llm(mut self, llm: L) -> Self {
+        self.llm = Some(llm);
+        self
+    }
+
+    pub fn memory(mut self, memory: Arc<dyn BaseMemory>) -> Self {
+        self.memory = Some(memory);
+        self
+    }
+
+    pub fn build(self) -> Result<LLMChain<P, L>, Box<dyn Error>> {
+        let prompt = self.prompt.ok_or("Prompt must be set")?;
+        let mut llm = self.llm.ok_or("LLM must be set")?;
+        if let Some(options) = self.options {
+            let llm_options = ChainCallOptions::to_llm_options(options);
+            llm.with_options(llm_options);
+        }
+
+        let chain = LLMChain {
+            prompt,
+            llm,
+            memory: self.memory,
+        };
+
+        Ok(chain)
+    }
+}
 
 pub struct LLMChain<P, L>
 where
@@ -18,31 +79,6 @@ where
     prompt: P,
     llm: L,
     memory: Option<Arc<dyn BaseMemory>>,
-}
-
-impl<P, L> LLMChain<P, L>
-where
-    P: FormatPrompter,
-    L: LLM,
-{
-    pub fn new(prompt: P, llm: L) -> Self {
-        Self {
-            prompt,
-            llm,
-            memory: None,
-        }
-    }
-
-    pub fn with_memory(mut self, memory: Arc<dyn BaseMemory>) -> Self {
-        self.memory = Some(memory);
-        self
-    }
-
-    pub fn with_options(mut self, options: ChainCallOptions) -> Self {
-        let llm_option = self.get_options(options);
-        self.llm.with_options(llm_option);
-        self
-    }
 }
 
 #[async_trait]
@@ -69,6 +105,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
+        chain::options::ChainCallOptions,
         llm::openai::{OpenAI, OpenAIModel},
         message_formatter,
         prompt::{HumanMessagePromptTemplate, MessageOrTemplate},
@@ -108,7 +145,11 @@ mod tests {
 
         let options = ChainCallOptions::default().with_streaming_func(streaming_func);
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
-        let chain = LLMChain::new(formatter, llm).with_options(options);
+        let chain = LLMChainBuilder::new()
+            .prompt(formatter)
+            .llm(llm)
+            .build()
+            .expect("Failed to build LLMChain");
 
         let input_variables = prompt_args! {
             "nombre" => "luis",

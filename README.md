@@ -117,7 +117,10 @@ Conversational chain keeps a memory of the chain, the prompt args should be inpu
 
 ```rust
 let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
-let chain = ConversationalChain::new(llm);
+let chain = ConversationalChainBuilder::new()
+    .llm(llm)
+    .build()
+    .expect("Error building ConversationalChain");
 
 let input_variables = prompt_args! {
     "input" => "Soy de peru",
@@ -152,7 +155,11 @@ let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
 
 let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt.into()),];
 let llm = OpenAI::default();
-let chain = LLMChain::new(formatter, llm);
+let chain = LLMChainBuilder::new()
+    .prompt(formatter)
+    .llm(llm)
+    .build()
+    .expect("Failed to build LLMChain");
 let input_variables = prompt_args! {
     "nombre" => "luis",
 };
