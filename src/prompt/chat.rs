@@ -220,7 +220,7 @@ mod tests {
         message_formatter,
         prompt::{
             chat::{AIMessagePromptTemplate, MessageOrTemplate},
-            MessageFormatter,
+            FormatPrompter, MessageFormatter,
         },
         prompt_args,
         schemas::messages::Message,
@@ -259,7 +259,10 @@ mod tests {
         };
 
         // Format messages
-        let formatted_messages = formatter.format_messages(input_variables).unwrap();
+        let formatted_messages = formatter
+            .format_prompt(input_variables)
+            .unwrap()
+            .to_chat_messages();
 
         // Verify the number of messages
         assert_eq!(formatted_messages.len(), 4);

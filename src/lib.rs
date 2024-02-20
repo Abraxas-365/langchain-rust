@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+pub mod agent;
 pub mod chain;
 pub mod embedding;
 pub mod language_models;
