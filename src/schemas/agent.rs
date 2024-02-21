@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-use crate::language_models::GenerateResult;
-
 pub enum ToolInput {
     //Will implement this in the future
     StrInput(String),

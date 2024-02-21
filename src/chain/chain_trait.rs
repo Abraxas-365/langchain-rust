@@ -2,12 +2,7 @@ use std::error::Error;
 
 use async_trait::async_trait;
 
-use crate::{
-    language_models::{options::CallOptions, GenerateResult},
-    prompt::PromptArgs,
-};
-
-use super::options::ChainCallOptions;
+use crate::{language_models::GenerateResult, prompt::PromptArgs};
 
 #[async_trait]
 pub trait Chain: Sync + Send {

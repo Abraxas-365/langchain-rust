@@ -5,8 +5,7 @@ use serde_json::json;
 
 use crate::{
     agent::chat::prompt::FORMAT_INSTRUCTIONS,
-    chain::{chain_trait::Chain, llm_chain::LLMChain},
-    language_models::llm::LLM,
+    chain::chain_trait::Chain,
     message_formatter,
     prompt::{
         HumanMessagePromptTemplate, MessageFormatterStruct, MessageOrTemplate, PromptArgs,
@@ -104,10 +103,7 @@ mod tests {
 
     use crate::{
         agent::{
-            chat::{
-                builder::ConversationalAgentBuilder, output_parser::ChatOutputParser,
-                ConversationalAgent,
-            },
+            chat::{builder::ConversationalAgentBuilder, output_parser::ChatOutputParser},
             executor::AgentExecutor,
         },
         chain::chain_trait::Chain,

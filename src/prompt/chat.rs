@@ -220,7 +220,7 @@ mod tests {
         message_formatter,
         prompt::{
             chat::{AIMessagePromptTemplate, MessageOrTemplate},
-            FormatPrompter, MessageFormatter,
+            FormatPrompter,
         },
         prompt_args,
         schemas::messages::Message,
