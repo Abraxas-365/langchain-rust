@@ -352,7 +352,3 @@ assert_eq!(
 assert_eq!(formatted_messages[2].content, "Placeholder message 1");
 assert_eq!(formatted_messages[3].content, "Placeholder message 2");
 ```
-
-## License
-
-`langchain-rust` is released under the MIT License. See the [LICENSE]() file for more information.
