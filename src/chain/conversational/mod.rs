@@ -15,7 +15,7 @@ use crate::{
 
 use self::prompt::DEFAULT_TEMPLATE;
 
-use super::{chain_trait::Chain, llm_chain::LLMChainBuilder, options::ChainCallOptions};
+use super::{chain_trait::Chain, llm_chain::LLMChainBuilder};
 
 pub mod builder;
 mod prompt;
@@ -32,26 +32,6 @@ impl ConversationalChain {
             "input"
         ));
         let llm_chain = LLMChainBuilder::new().prompt(prompt).llm(llm).build()?;
-        Ok(Self {
-            llm: Box::new(llm_chain),
-            memory: Arc::new(Mutex::new(SimpleMemory::new())),
-        })
-    }
-
-    pub fn new_with_options<L: LLM + 'static>(
-        llm: L,
-        options: ChainCallOptions,
-    ) -> Result<Self, Box<dyn Error>> {
-        let prompt = HumanMessagePromptTemplate::new(template_fstring!(
-            DEFAULT_TEMPLATE,
-            "history",
-            "input"
-        ));
-        let llm_chain = LLMChainBuilder::new()
-            .prompt(prompt)
-            .llm(llm)
-            .options(options)
-            .build()?;
         Ok(Self {
             llm: Box::new(llm_chain),
             memory: Arc::new(Mutex::new(SimpleMemory::new())),
