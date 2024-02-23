@@ -1,6 +1,7 @@
 use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
+use tokio::sync::Mutex;
 
 use crate::{
     language_models::{llm::LLM, GenerateResult},
@@ -17,7 +18,7 @@ where
 {
     prompt: Option<P>,
     llm: Option<L>,
-    memory: Option<Arc<dyn BaseMemory>>,
+    memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     options: Option<ChainCallOptions>,
 }
 
@@ -48,7 +49,7 @@ where
         self
     }
 
-    pub fn memory(mut self, memory: Arc<dyn BaseMemory>) -> Self {
+    pub fn memory(mut self, memory: Arc<Mutex<dyn BaseMemory>>) -> Self {
         self.memory = Some(memory);
         self
     }
@@ -78,7 +79,7 @@ where
 {
     prompt: P,
     llm: L,
-    memory: Option<Arc<dyn BaseMemory>>,
+    memory: Option<Arc<Mutex<dyn BaseMemory>>>,
 }
 
 #[async_trait]
