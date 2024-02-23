@@ -10,9 +10,9 @@ use crate::{
     prompt::PromptArgs,
     schemas::{
         agent::{AgentAction, AgentEvent},
-        memory::{BaseMemory, SimpleMemory},
+        memory::BaseMemory,
     },
-    tools::tool::Tool,
+    tools::tool::Tool, memory::SimpleMemory,
 };
 
 use super::agent::Agent;

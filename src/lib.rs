@@ -4,6 +4,7 @@ pub mod chain;
 pub mod embedding;
 pub mod language_models;
 pub mod llm;
+pub mod memory;
 pub mod prompt;
 pub mod schemas;
 pub mod tools;

@@ -108,8 +108,8 @@ mod tests {
         },
         chain::chain_trait::Chain,
         llm::openai::{OpenAI, OpenAIModel},
+        memory::SimpleMemory,
         prompt_args,
-        schemas::memory::SimpleMemory,
         tools::tool::Tool,
     };
 

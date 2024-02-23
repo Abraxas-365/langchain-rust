@@ -5,8 +5,9 @@ use tokio::sync::Mutex;
 use crate::{
     chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions},
     language_models::llm::LLM,
+    memory::SimpleMemory,
     prompt::HumanMessagePromptTemplate,
-    schemas::memory::{BaseMemory, SimpleMemory},
+    schemas::memory::BaseMemory,
     template_fstring,
 };
 
