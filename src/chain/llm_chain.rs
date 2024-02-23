@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use crate::{
     language_models::{llm::LLM, GenerateResult},
     prompt::{FormatPrompter, PromptArgs},
-    schemas::memory::BaseMemory,
+    schemas::{memory::BaseMemory, messages::Message},
 };
 
 use super::{chain_trait::Chain, options::ChainCallOptions};
@@ -89,17 +89,29 @@ where
     L: LLM + Send + Sync,
 {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
-        let prompt = self.prompt.format_prompt(input_variables)?;
-        self.llm.generate(&prompt.to_chat_messages()).await
+        let prompt = self.prompt.format_prompt(input_variables.clone())?;
+        let output = self.llm.generate(&prompt.to_chat_messages()).await?;
+        if let Some(memory) = &self.memory {
+            let mut memory = memory.lock().await;
+            memory.add_message(Message::new_human_message(&input_variables["input"]));
+            memory.add_message(Message::new_ai_message(&output.generation));
+        };
+        Ok(output)
     }
 
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
-        let prompt = self.prompt.format_prompt(input_variables)?;
-        Ok(self
+        let prompt = self.prompt.format_prompt(input_variables.clone())?;
+        let output = self
             .llm
             .generate(&prompt.to_chat_messages())
             .await?
-            .generation)
+            .generation;
+        if let Some(memory) = &self.memory {
+            let mut memory = memory.lock().await;
+            memory.add_message(Message::new_human_message(&input_variables["input"]));
+            memory.add_message(Message::new_ai_message(&output));
+        };
+        Ok(output)
     }
 }
 

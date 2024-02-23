@@ -22,6 +22,7 @@ pub struct ConversationalChain {
     memory: Arc<Mutex<dyn BaseMemory>>,
 }
 
+//Conversational Chain is a simple chain to interact with ai as a string of messages
 impl ConversationalChain {
     pub fn new<L: LLM + 'static>(llm: L) -> Result<Self, Box<dyn Error>> {
         let prompt = HumanMessagePromptTemplate::new(template_fstring!(
@@ -29,7 +30,8 @@ impl ConversationalChain {
             "history",
             "input"
         ));
-        let llm_chain = LLMChainBuilder::new().prompt(prompt).llm(llm).build()?;
+        let llm_chain = LLMChainBuilder::new().prompt(prompt).llm(llm).build()?; //Using the llm
+                                                                                 //chian whitout memroy, because the conversational chain will take care of the history
         Ok(Self {
             llm: Box::new(llm_chain),
             memory: Arc::new(Mutex::new(SimpleMemory::new())),
