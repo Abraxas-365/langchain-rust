@@ -6,6 +6,12 @@
 
 This is the Rust language implementation of [LangChain](https://github.com/langchain-ai/langchain).
 
+## Install
+
+```bash
+cargo add langchain-rust
+```
+
 ## Examples
 
 ### LLM
