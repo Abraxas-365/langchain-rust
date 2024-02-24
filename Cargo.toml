@@ -2,7 +2,10 @@
 name = "langchain"
 version = "0.1.0"
 edition = "2021"
-
+publish = true
+repository = "https://github.com/Abraxas-365/langchain-rust"
+license = "MIT"
+description = "LangChain for Rust, the easiest way to write LLM-based programs in Rust"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
