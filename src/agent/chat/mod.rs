@@ -85,7 +85,6 @@ impl Agent for ConversationalAgent {
         let mut inputs = inputs.clone();
         inputs.insert("agent_scratchpad".to_string(), json!(scratchpad));
         let output = self.chain.call(inputs.clone()).await?.generation;
-        println!("Output: {:?}", output);
         let parsed_output = self.output_parser.parse(&output)?;
         Ok(parsed_output)
     }

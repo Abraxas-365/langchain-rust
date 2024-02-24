@@ -7,12 +7,13 @@ use tokio::sync::Mutex;
 use crate::{
     chain::chain_trait::Chain,
     language_models::GenerateResult,
+    memory::SimpleMemory,
     prompt::PromptArgs,
     schemas::{
         agent::{AgentAction, AgentEvent},
         memory::BaseMemory,
     },
-    tools::tool::Tool, memory::SimpleMemory,
+    tools::tool::Tool,
 };
 
 use super::agent::Agent;
@@ -82,6 +83,7 @@ where
             match agent_event {
                 AgentEvent::Action(action) => {
                     log::debug!("Action: {:?}", action.tool_input);
+                    println!("Action: {:?}", action.tool);
                     let tool = name_to_tools.get(&action.tool).ok_or("Tool not found")?; //TODO:Check
                                                                                          //what to do with the error
                     let observarion = tool.call(&action.tool_input).await?; //TODO:Check
