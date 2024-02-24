@@ -20,6 +20,8 @@ use crate::{
     tools::tool::Tool,
 };
 
+use self::prompt::TEMPLATE_TOOL_RESPONSE;
+
 use super::agent::{Agent, AgentOutputParser};
 
 pub mod builder;
@@ -71,6 +73,20 @@ impl ConversationalAgent {
             MessageOrTemplate::MessagesPlaceholder("agent_scratchpad".to_string()),
         ];
         return Ok(formatter);
+    }
+
+    fn construct_scratchpad(
+        &self,
+        intermediate_steps: &[(AgentAction, String)],
+    ) -> Result<Vec<Message>, Box<dyn Error>> {
+        let mut thoughts: Vec<Message> = Vec::new();
+        for (action, observation) in intermediate_steps.into_iter() {
+            thoughts.push(Message::new_ai_message(&action.log));
+            let tool_response = template_jinja2!(TEMPLATE_TOOL_RESPONSE, "observation")
+                .format(prompt_args!("observation"=>observation))?;
+            thoughts.push(Message::new_human_message(&tool_response));
+        }
+        Ok(thoughts)
     }
 }
 
