@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, error::Error};
+use std::collections::VecDeque;
 
 use regex::Regex;
 use serde::Deserialize;
@@ -68,7 +68,7 @@ fn parse_partial_json(s: &str, strict: bool) -> Option<Value> {
     match serde_json::from_str::<Value>(s) {
         Ok(val) => return Some(val),
         Err(_) if !strict => (),
-        Err(e) => return None,
+        Err(_) => return None,
     }
 
     let mut new_s = String::new();
