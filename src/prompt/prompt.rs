@@ -78,10 +78,10 @@ macro_rules! prompt_args {
 #[macro_export]
 macro_rules! template_fstring {
     ($template:expr, $($var:expr),* $(,)?) => {
-        crate::prompt::PromptTemplate::new(
+        $crate::prompt::PromptTemplate::new(
             $template.to_string(),
             vec![$($var.to_string()),*],
-            crate::prompt::TemplateFormat::FString,
+            $crate::prompt::TemplateFormat::FString,
         )
     };
 }
@@ -89,10 +89,10 @@ macro_rules! template_fstring {
 #[macro_export]
 macro_rules! template_jinja2 {
     ($template:expr, $($var:expr),* $(,)?) => {
-        crate::prompt::PromptTemplate::new(
+        $crate::prompt::PromptTemplate::new(
             $template.to_string(),
             vec![$($var.to_string()),*],
-            crate::prompt::TemplateFormat::Jinja2,
+            $crate::prompt::TemplateFormat::Jinja2,
         )
     };
 }

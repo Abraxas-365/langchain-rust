@@ -202,7 +202,7 @@ impl FormatPrompter for MessageFormatterStruct {
 #[macro_export]
 macro_rules! message_formatter {
 ($($item:expr),* $(,)?) => {{
-    let mut formatter = crate::prompt::MessageFormatterStruct::new();
+    let mut formatter = $crate::prompt::MessageFormatterStruct::new();
     $(
         match $item {
             MessageOrTemplate::Message(msg) => formatter.add_message(msg),
