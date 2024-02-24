@@ -1,1 +1,3 @@
-pub mod tool;
+mod tool;
+
+pub use tool::*;

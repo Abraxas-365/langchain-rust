@@ -13,7 +13,7 @@ use crate::{
         agent::{AgentAction, AgentEvent},
         memory::BaseMemory,
     },
-    tools::tool::Tool,
+    tools::Tool,
 };
 
 use super::agent::Agent;

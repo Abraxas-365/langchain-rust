@@ -2,7 +2,7 @@ use std::{error::Error, sync::Arc};
 
 use crate::{
     agent::agent::AgentOutputParser, chain::llm_chain::LLMChainBuilder, language_models::llm::LLM,
-    tools::tool::Tool,
+    tools::Tool,
 };
 
 use super::{

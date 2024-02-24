@@ -20,7 +20,7 @@ use crate::{
         messages::Message,
     },
     template_jinja2,
-    tools::tool::Tool,
+    tools::Tool,
 };
 
 use super::prompt::TEMPLATE_TOOL_RESPONSE;
@@ -122,7 +122,7 @@ mod tests {
         llm::openai::{OpenAI, OpenAIModel},
         memory::SimpleMemory,
         prompt_args,
-        tools::tool::Tool,
+        tools::Tool,
     };
 
     struct Calc {}

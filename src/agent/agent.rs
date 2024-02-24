@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use crate::{
     prompt::PromptArgs,
     schemas::agent::{AgentAction, AgentEvent},
-    tools::tool::Tool,
+    tools::Tool,
 };
 
 #[async_trait]
