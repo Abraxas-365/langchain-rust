@@ -355,4 +355,4 @@ assert_eq!(formatted_messages[3].content, "Placeholder message 2");
 
 ## License
 
-`langchain-rust` is released under the MIT License. See the [LICENSE]() file for more information.
+`langchain-rust` is released under the MIT License. See the [LICENSE](https://github.com/Abraxas-365/langchain-rust/blob/main/LICENSE) file for more information.
