@@ -7,4 +7,5 @@ pub mod llm;
 pub mod memory;
 pub mod prompt;
 pub mod schemas;
+pub mod text_splitter;
 pub mod tools;
