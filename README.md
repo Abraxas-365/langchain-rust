@@ -6,7 +6,7 @@
 
 This is the Rust language implementation of [LangChain](https://github.com/langchain-ai/langchain).
 
-# LangChain Rust Documentation Index
+# Index
 
 - [Introduction](#introduction)
 - [Installation](#installation)
