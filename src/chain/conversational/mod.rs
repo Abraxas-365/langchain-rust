@@ -13,12 +13,15 @@ use crate::{
 
 use self::prompt::DEFAULT_TEMPLATE;
 
-use super::{chain_trait::Chain, llm_chain::LLMChainBuilder};
+use super::{
+    chain_trait::Chain,
+    llm_chain::{LLMChain, LLMChainBuilder},
+};
 
 pub mod builder;
 mod prompt;
 pub struct ConversationalChain {
-    llm: Box<dyn Chain>,
+    llm: LLMChain,
     memory: Arc<Mutex<dyn BaseMemory>>,
 }
 
@@ -33,7 +36,7 @@ impl ConversationalChain {
         let llm_chain = LLMChainBuilder::new().prompt(prompt).llm(llm).build()?; //Using the llm
                                                                                  //chian whitout memroy, because the conversational chain will take care of the history
         Ok(Self {
-            llm: Box::new(llm_chain),
+            llm: llm_chain,
             memory: Arc::new(Mutex::new(SimpleMemory::new())),
         })
     }

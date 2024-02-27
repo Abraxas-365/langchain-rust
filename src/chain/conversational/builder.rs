@@ -71,7 +71,7 @@ where
             .unwrap_or_else(|| Arc::new(Mutex::new(SimpleMemory::new())));
 
         Ok(ConversationalChain {
-            llm: Box::new(llm_chain),
+            llm: llm_chain,
             memory,
         })
     }

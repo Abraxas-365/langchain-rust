@@ -83,7 +83,7 @@ where
         };
 
         Ok(SQLDatabaseChain {
-            llmchain: Box::new(llm_chain),
+            llmchain: llm_chain,
             top_k,
             database,
         })

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::{
-    chain::chain_trait::Chain,
+    chain::{chain_trait::Chain, llm_chain::LLMChain},
     language_models::{GenerateResult, TokenUsage},
     prompt::PromptArgs,
     prompt_args,
@@ -17,7 +17,7 @@ use super::{
 };
 
 pub struct SQLDatabaseChain {
-    pub(crate) llmchain: Box<dyn Chain>,
+    pub(crate) llmchain: LLMChain,
     pub(crate) top_k: usize,
     pub(crate) database: SQLDatabase,
 }
