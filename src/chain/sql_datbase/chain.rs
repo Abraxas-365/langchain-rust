@@ -74,6 +74,7 @@ impl Chain for SQLDatabaseChain {
         if strs.len() > 1 {
             output = strs[1];
         }
+        output = output.trim();
         Ok(GenerateResult {
             generation: output.to_string(),
             tokens: None,
