@@ -22,7 +22,7 @@ For open ai LLM you should have in you env variables(bashrc,zshrc,etc) the `OPEN
 export OPENAI_API_KEY={{api key}}
 ```
 
-Or you could use the with_api_key
+Or you could use the `with_api_key`
 
 ```rust
 let open_ai = OpenAI::new(options)
