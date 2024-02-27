@@ -1,6 +1,6 @@
 [package]
 name = "langchain-rust"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 publish = true
 repository = "https://github.com/Abraxas-365/langchain-rust"
