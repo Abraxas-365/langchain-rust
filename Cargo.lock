@@ -1246,7 +1246,7 @@ dependencies = [
 
 [[package]]
 name = "langchain-rust"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "async-openai",
  "async-trait",
