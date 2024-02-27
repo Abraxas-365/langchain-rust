@@ -14,6 +14,21 @@ cargo add langchain-rust
 
 ## Examples
 
+#### OpenAI
+
+For open ai LLM you should have in you env variables(bashrc,zshrc,etc) the `OPENAI_API_KEY`
+
+```bash
+export OPENAI_API_KEY={{api key}}
+```
+
+Or you could use the with_api_key
+
+```rust
+let open_ai = OpenAI::new(options)
+            .with_api_key("you api key");
+```
+
 ### LLM
 
 The LLM (Language Model) interface in LangChain Rust provides a standardized way to interact with various language models, facilitating tasks such as text generation and information retrieval. Below is an overview of how to utilize the LLM traits and implement them for specific models like OpenAI's GPT
