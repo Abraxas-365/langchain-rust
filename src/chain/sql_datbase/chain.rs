@@ -26,7 +26,7 @@ pub struct SQLDatabaseChain {
 impl Chain for SQLDatabaseChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
         let mut token_usage: Option<TokenUsage> = None;
-        //i want query from serde::value to string
+
         let query = input_variables
             .get(SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY)
             .ok_or("No query provided")?
