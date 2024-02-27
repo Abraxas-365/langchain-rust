@@ -11,22 +11,14 @@ use crate::{
 
 use super::{chain_trait::Chain, options::ChainCallOptions};
 
-pub struct LLMChainBuilder<P, L>
-where
-    P: FormatPrompter,
-    L: LLM,
-{
-    prompt: Option<P>,
-    llm: Option<L>,
+pub struct LLMChainBuilder {
+    prompt: Option<Box<dyn FormatPrompter>>,
+    llm: Option<Box<dyn LLM>>,
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     options: Option<ChainCallOptions>,
 }
 
-impl<P, L> LLMChainBuilder<P, L>
-where
-    P: FormatPrompter,
-    L: LLM,
-{
+impl LLMChainBuilder {
     pub fn new() -> Self {
         Self {
             prompt: None,
@@ -39,13 +31,20 @@ where
         self.options = Some(options);
         self
     }
-    pub fn prompt(mut self, prompt: P) -> Self {
-        self.prompt = Some(prompt);
+
+    pub fn prompt<P>(mut self, prompt: P) -> Self
+    where
+        P: FormatPrompter + 'static,
+    {
+        self.prompt = Some(Box::new(prompt));
         self
     }
 
-    pub fn llm(mut self, llm: L) -> Self {
-        self.llm = Some(llm);
+    pub fn llm<L>(mut self, llm: L) -> Self
+    where
+        L: LLM + 'static,
+    {
+        self.llm = Some(Box::new(llm));
         self
     }
 
@@ -54,7 +53,7 @@ where
         self
     }
 
-    pub fn build(self) -> Result<LLMChain<P, L>, Box<dyn Error>> {
+    pub fn build(self) -> Result<LLMChain, Box<dyn Error>> {
         let prompt = self.prompt.ok_or("Prompt must be set")?;
         let mut llm = self.llm.ok_or("LLM must be set")?;
         if let Some(options) = self.options {
@@ -72,22 +71,14 @@ where
     }
 }
 
-pub struct LLMChain<P, L>
-where
-    P: FormatPrompter,
-    L: LLM,
-{
-    prompt: P,
-    llm: L,
+pub struct LLMChain {
+    prompt: Box<dyn FormatPrompter>,
+    llm: Box<dyn LLM>,
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
 }
 
 #[async_trait]
-impl<P, L> Chain for LLMChain<P, L>
-where
-    P: FormatPrompter + Send + Sync,
-    L: LLM + Send + Sync,
-{
+impl Chain for LLMChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
         let output = self.llm.generate(&prompt.to_chat_messages()).await?;
