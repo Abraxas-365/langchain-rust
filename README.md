@@ -166,7 +166,7 @@ async fn test_sql_chain() {
         PostgreSQLEngine::new("postgresql://postgres:postgres@localhost:5432/postgres")
             .await
             .unwrap();
-    let db = SQLDatabaseBuilder::new(engine.into())
+    let db = SQLDatabaseBuilder::new(engine)
         .custom_sample_rows_number(0)
         .build()
         .await

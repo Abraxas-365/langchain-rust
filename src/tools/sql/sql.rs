@@ -50,9 +50,12 @@ pub struct SQLDatabaseBuilder {
 }
 
 impl SQLDatabaseBuilder {
-    pub fn new(engine: Box<dyn Engine>) -> Self {
+    pub fn new<E>(engine: E) -> Self
+    where
+        E: Engine + 'static,
+    {
         SQLDatabaseBuilder {
-            engine,
+            engine: Box::new(engine),
             sample_rows_number: 3, // Default value
             ignore_tables: HashSet::new(),
         }
