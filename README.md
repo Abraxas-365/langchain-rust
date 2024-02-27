@@ -228,6 +228,41 @@ match chain.invoke(input_variables).await {
 }
 ```
 
+#### SQL Chain Example
+
+```rust
+async fn test_sql_chain() {
+    let options = ChainCallOptions::default();
+    let mut llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
+    let engine =
+        PostgreSQLEngine::new("postgresql://postgres:postgres@localhost:5432/postgres")
+            .await
+            .unwrap();
+    let db = SQLDatabaseBuilder::new(engine.into())
+        .custom_sample_rows_number(0)
+        .build()
+        .await
+        .unwrap();
+    let chain = SQLDatabaseChainBuilder::new()
+        .llm(llm)
+        .top_k(4)
+        .database(db)
+        .options(options)
+        .build()
+        .expect("Failed to build LLMChain");
+
+    let input_variables = prompt_args! {
+        "query" => "what info have the client 1",
+    };
+    match chain.invoke(input_variables).await {
+        Ok(result) => {
+            println!("Result: {:?}", result);
+        }
+        Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+    }
+}
+```
+
 ### Tools
 
 The tools are the way the llm can interact with the outside world.

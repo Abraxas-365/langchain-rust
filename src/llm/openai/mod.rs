@@ -42,6 +42,7 @@ impl ToString for OpenAIModel {
 pub struct OpenAI {
     config: OpenAIConfig,
     model: OpenAIModel,
+    stop_words: Option<Vec<String>>,
     max_tokens: u16,
     temperature: f32,
     top_p: f32,
@@ -67,6 +68,7 @@ impl Default for OpenAI {
         Self {
             config: OpenAIConfig::default(),
             model: OpenAIModel::Gpt35,
+            stop_words: None,
             max_tokens: 256,
             temperature: 0.0,
             top_p: 1.0,
@@ -84,6 +86,7 @@ impl OpenAI {
         Self {
             config: OpenAIConfig::default(),
             model: OpenAIModel::Gpt35,
+            stop_words: opt.stop_words,
             max_tokens: opt.max_tokens.unwrap_or(256),
             temperature: opt.temperature.unwrap_or(0.0),
             top_p: opt.top_p.unwrap_or(1.0),
@@ -166,6 +169,7 @@ impl LLM for OpenAI {
 
     fn with_options(&mut self, options: CallOptions) {
         self.max_tokens = options.max_tokens.unwrap_or(256);
+        self.stop_words = options.stop_words;
         self.temperature = options.temperature.unwrap_or(0.7);
         self.top_p = options.top_p.unwrap_or(1.0);
         self.frequency_penalty = options.frequency_penalty.unwrap_or(0.0);
@@ -215,6 +219,9 @@ impl OpenAI {
         let mut request_builder = CreateChatCompletionRequestArgs::default();
         request_builder.max_tokens(self.max_tokens);
         request_builder.model(self.model.to_string());
+        if let Some(stop_words) = &self.stop_words {
+            request_builder.stop(stop_words);
+        }
 
         if let Some(behavior) = &self.functions {
             let mut functions: Vec<ChatCompletionFunctions> = Vec::new();
