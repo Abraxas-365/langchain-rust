@@ -4,7 +4,10 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::{
-    chain::chain_trait::Chain, language_models::GenerateResult, prompt::PromptArgs, prompt_args,
+    chain::chain_trait::Chain,
+    language_models::{GenerateResult, TokenUsage},
+    prompt::PromptArgs,
+    prompt_args,
     tools::SQLDatabase,
 };
 
@@ -22,6 +25,7 @@ pub struct SQLDatabaseChain {
 #[async_trait]
 impl Chain for SQLDatabaseChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
+        let mut token_usage: Option<TokenUsage> = None;
         //i want query from serde::value to string
         let query = input_variables
             .get(SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY)
@@ -49,6 +53,9 @@ impl Chain for SQLDatabaseChain {
         };
 
         let output = self.llmchain.call(llm_inputs.clone()).await?;
+        if let Some(tokens) = output.tokens {
+            token_usage = Some(tokens);
+        }
 
         let sql_query = output.generation.trim();
         log::debug!("output: {:?}", sql_query);
@@ -63,6 +70,13 @@ impl Chain for SQLDatabaseChain {
         );
 
         let output = self.llmchain.call(llm_inputs).await?;
+        if let Some(tokens) = output.tokens {
+            if let Some(general_result) = token_usage.as_mut() {
+                general_result.completion_tokens += tokens.completion_tokens;
+                general_result.total_tokens += tokens.total_tokens;
+            }
+        }
+
         let strs: Vec<&str> = output
             .generation
             .split("\n\n")
@@ -77,7 +91,7 @@ impl Chain for SQLDatabaseChain {
         output = output.trim();
         Ok(GenerateResult {
             generation: output.to_string(),
-            tokens: None,
+            tokens: token_usage,
         })
     }
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
