@@ -2,7 +2,6 @@ use std::{collections::HashSet, error::Error};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use tokio::runtime;
 
 #[derive(Serialize, Deserialize)]
 pub enum Dialect {
