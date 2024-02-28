@@ -127,6 +127,30 @@ pub enum MessageOrTemplate {
     MessagesPlaceholder(String),
 }
 
+// Macro for formatting a `Message` variant for the formatter
+#[macro_export]
+macro_rules! fmt_message {
+    ($msg:expr) => {
+        MessageOrTemplate::Message($msg)
+    };
+}
+
+// Macro for formatting a `Template` variant for the formatter
+#[macro_export]
+macro_rules! fmt_template {
+    ($template:expr) => {
+        MessageOrTemplate::Template(Box::new($template))
+    };
+}
+
+// Macro for formatting a `MessagesPlaceholder` variant for the formatter
+#[macro_export]
+macro_rules! fmt_placeholder {
+    ($placeholder:expr) => {
+        MessageOrTemplate::MessagesPlaceholder($placeholder.into())
+    };
+}
+
 pub struct MessageFormatterStruct {
     items: Vec<MessageOrTemplate>,
 }
@@ -241,9 +265,9 @@ mod tests {
 
         // Use the `message_formatter` macro to construct the formatter
         let formatter = message_formatter![
-            MessageOrTemplate::Message(human_msg),
-            MessageOrTemplate::Template(ai_message_prompt.into()),
-            MessageOrTemplate::MessagesPlaceholder("history".to_string())
+            fmt_message!(human_msg),
+            fmt_template!(ai_message_prompt),
+            fmt_placeholder!("history")
         ];
 
         // Define input variables for the AI message template

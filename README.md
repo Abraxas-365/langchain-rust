@@ -480,9 +480,9 @@ let ai_message_prompt = AIMessagePromptTemplate::new(template_fstring!(
 
 // Use the `message_formatter` macro to construct the formatter
 let formatter = message_formatter![
-    MessageOrTemplate::Message(human_msg),
-    MessageOrTemplate::Template(ai_message_prompt.into()),
-    MessageOrTemplate::MessagesPlaceholder("history".to_string())
+    fmt_message!(human_msg),
+    fmt_template!(ai_message_prompt),
+    fmt_placeholder!("history")
 ];
 
 // Define input variables for the AI message template
