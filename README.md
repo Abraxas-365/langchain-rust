@@ -2,6 +2,8 @@
 
 ⚡ Building applications with LLMs through composability, with Rust! ⚡
 
+[![Docs: Tutorial](https://img.shields.io/badge/docs-tutorial-success?style=for-the-badge&logo=appveyor)](https://langchain-rust.sellie.tech/get-started/quickstart)
+
 ## 🤔 What is this?
 
 This is the Rust language implementation of [LangChain](https://github.com/langchain-ai/langchain).
