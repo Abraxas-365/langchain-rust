@@ -75,16 +75,16 @@ We can now combine these into a simple LLM chain:
 
 We can now invoke it and ask the same question. It still won't know the answer, but it should respond in a more proper tone for a technical writer!
 
-<pre class="language-rust"><code class="lang-rust"><strong>match chain.invoke(prompt_args! {
-</strong>    "input" => "Quien es el escritor de 20000 millas de viaje submarino",
+```rust
+match chain.invoke(prompt_args! {
+ "input" => "Quien es el escritor de 20000 millas de viaje submarino",
     }).await {
             Ok(result) => {
                 println!("Result: {:?}", result);
             }
             Err(e) => panic!("Error invoking LLMChain: {:?}", e),
         }
-
-</code></pre>
+```
 
 If you want to prompt to have a list of messages you could use the `fmt_placeholder` macro
 
