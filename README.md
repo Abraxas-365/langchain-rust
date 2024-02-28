@@ -8,181 +8,141 @@
 
 This is the Rust language implementation of [LangChain](https://github.com/langchain-ai/langchain).
 
-# 👉Index
+# Quickstart
 
-- [Introduction](#introduction)
-- [Installation](#installation)
-- [Examples](#examples)
-  - [Chain Abstraction](#chain-abstraction)
-    - [Conversational Chain](#conversational-chain)
-    - [LLM Chain](#llm-chain)
-    - [SQL Chain](#sql-chain)
-- [LLM Interface](#llm-interface)
-  - [Using OpenAI](#using-openai)
-- [Agents](#agents)
-  - [Conversational Agent](#conversational-agent)
-- [Tools](#tools)
-- [Embeddings](#embeddings)
-  - [Embedding Documents](#embedding-documents)
-  - [Embedding a Single Query](#embedding-a-single-query)
-- [Messages](#messages)
-  - [Message Formatting](#message-formatting)
-  - [Dynamic Prompt Templates](#dynamic-prompt-templates)
-  - [Message Formatting with Templates](#message-formatting-with-templates)
-- [License](#license)
+## Setup
 
-## Introduction
-
-LangChain Rust is the Rust language implementation of LangChain, designed to build applications with language models (LLMs) through composability.
-
-## Installation
+### Installation
 
 ```bash
 cargo add langchain-rust
 ```
 
-## Examples
+### Building with LangChain[​](https://python.langchain.com/docs/get_started/quickstart#building-with-langchain) <a href="#building-with-langchain" id="building-with-langchain"></a>
 
-### Chain <a name="chain-abstraction"></a>
+LangChain enables building application that connect external sources of data and computation to LLMs. In this quickstart, we will walk through a few different ways of doing that. We will start with a simple LLM chain, which just relies on information in the prompt template to respond. Finally, we will build an agent - which utilizes an LLM to determine whether or not it needs to use a tool like a calculator.
 
-The Chain trait in LangChain Rust represents a powerful abstraction that allows developers to build sequences of operations, often involving language model interactions. This feature is crucial for creating sophisticated workflows that require a series of logical steps, such as generating text, processing information, and making decisions based on model outputs.
+### LLM Chain[​](https://python.langchain.com/docs/get_started/quickstart#llm-chain) <a href="#llm-chain" id="llm-chain"></a>
 
-#### Conversational Chain <a name="conversational-chain"></a>
+We'll show how to use models available via API, like OpenAI.
 
-Conversational chain keeps a memory of the chain, the prompt args should be input
+Accessing the API requires an API key, which you can get by creating an account and heading [here](https://platform.openai.com/account/api-keys). Once we have a key we'll want to set it as an environment variable by running:
 
-```rust
-let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
-let chain = ConversationalChainBuilder::new()
-    .llm(llm)
-    .build()
-    .expect("Error building ConversationalChain");
-
-let input_variables = prompt_args! {
-    "input" => "Soy de peru",
-};
-match chain.invoke(input_variables).await {
-    Ok(result) => {
-        println!("Result: {:?}", result);
-    }
-    Err(e) => panic!("Error invoking LLMChain: {:?}", e),
-}
-
-let input_variables = prompt_args! {
-    "input" => "Cuales son platos tipicos de mi pais",
-};
-match chain.invoke(input_variables).await {
-    Ok(result) => {
-        println!("Result: {:?}", result);
-    }
-    Err(e) => panic!("Error invoking LLMChain: {:?}", e),
-}
+```bash
+export OPENAI_API_KEY="..."
 ```
 
-#### LLM Chain <a name="llm-chain"></a>
-
-- Default implementation
+We can then initialize the model:
 
 ```rust
-let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
-    "Mi nombre es: {nombre} ",
-    "nombre",
-));
-
-let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt.into()),];
-let llm = OpenAI::default();
-let chain = LLMChainBuilder::new()
-    .prompt(formatter)
-    .llm(llm)
-    .build()
-    .expect("Failed to build LLMChain");
-let input_variables = prompt_args! {
-    "nombre" => "luis",
-};
-match chain.invoke(input_variables).await {
-    Ok(result) => {
-        println!("Result: {:?}", result);
-    }
-    Err(e) => panic!("Error invoking LLMChain: {:?}", e),
-}
+let open_ai = OpenAI::default();
 ```
 
-- With stram and option implementation
+If you'd prefer not to set an environment variable you can pass the key in directly via the `openai_api_key` named parameter when initiating the OpenAI LLM class:
 
 ```rust
-let human_msg = Message::new_human_message("Hello from user");
-// Create an AI message prompt template
-let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
-    "Mi nombre es: {nombre} ",
-    "nombre",
-));
+let open_ai = OpenAI::default().with_api_key("...");
+```
 
-let message_complete = Arc::new(Mutex::new(String::new()));
+Once you've installed and initialized the LLM of your choice, we can try using it! Let's ask it what LangSmith is - this is something that wasn't present in the training data so it shouldn't have a very good response.
 
-// Define the streaming function
-// This function will append the content received from the stream to `message_complete`
-let streaming_func = {
-    let message_complete = message_complete.clone();
-    move |content: String| {
-        let message_complete = message_complete.clone();
-        async move {
-            let mut message_complete_lock = message_complete.lock().await;
-            println!("Content: {:?}", content);
-            message_complete_lock.push_str(&content);
-            Ok(())
+```rust
+let resp=open_ai.invoke("how can langsmith help with testing?").await.unwrap();
+```
+
+We can also guide it's response with a prompt template. Prompt templates are used to convert raw user input to a better input to the LLM.
+
+```rust
+let prompt = message_formatter![
+        fmt_message!(Message::new_system_message(
+            "You are world class technical documentation writer."
+        )),
+        fmt_template!(HumanMessagePromptTemplate::new(template_fstring!(
+            "{input}", "input"
+        )))
+ ];
+```
+
+We can now combine these into a simple LLM chain:
+
+```rust
+ let chain = LLMChainBuilder::new()
+            .prompt(formatter)
+            .llm(llm)
+            .build();
+
+```
+
+We can now invoke it and ask the same question. It still won't know the answer, but it should respond in a more proper tone for a technical writer!
+
+<pre class="language-rust"><code class="lang-rust"><strong>match chain.invoke(prompt_args! {
+</strong>    "input" => "Quien es el escritor de 20000 millas de viaje submarino",
+    }).await {
+            Ok(result) => {
+                println!("Result: {:?}", result);
+            }
+            Err(e) => panic!("Error invoking LLMChain: {:?}", e),
         }
-    }
-};
-// Use the `message_formatter` macro to construct the formatter
-let formatter = message_formatter![MessageOrTemplate::Template(human_message_prompt.into()),];
 
-let options = ChainCallOptions::default().with_streaming_func(streaming_func);
-let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
-let chain =  LLMChainBuilder::new()
-    .prompt(formatter)
-    .llm(llm)
-    .options(options)
-    .build()
-    .expect("Failed to build LLMChain");
+</code></pre>
 
-let input_variables = prompt_args! {
-    "nombre" => "luis",
-
-};
-match chain.invoke(input_variables).await {
-    Ok(result) => {
-        println!("Result: {:?}", result);
-        println!("Complete message: {:?}", message_complete.lock().await);
-    }
-    Err(e) => panic!("Error invoking LLMChain: {:?}", e),
-}
-```
-
-#### SQL Chain Example <a name="sql-chain"></a>
+If you want to prompt to have a list of messages you could use the `fmt_placeholder` macro
 
 ```rust
-async fn test_sql_chain() {
-    let options = ChainCallOptions::default();
-    let mut llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
-    let engine =
-        PostgreSQLEngine::new("postgresql://postgres:postgres@localhost:5432/postgres")
-            .await
-            .unwrap();
-    let db = SQLDatabaseBuilder::new(engine)
-        .custom_sample_rows_number(0)
-        .build()
-        .await
-        .unwrap();
-    let chain = SQLDatabaseChainBuilder::new()
+let prompt = message_formatter![
+        fmt_message!(Message::new_system_message(
+            "You are world class technical documentation writer."
+        )),
+        fmt_template!(HumanMessagePromptTemplate::new(template_fstring!(
+            "{input}", "input"
+        ))),
+        fmt_placeholder!("history"),
+ ];
+```
+
+And when calling to the chain send the message
+
+```rust
+match chain.invoke(prompt_args! {
+    "input" => "Quien es el escritor de 20000 millas de viaje submarino",
+    "history" => vec![
+            Message::new_human_message("Mi nombre es: luis"),
+            Message::new_ai_message("Mucho gusto luis"),
+            ],
+
+    }).await {
+            Ok(result) => {
+                println!("Result: {:?}", result);
+            }
+            Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+        }
+```
+
+### Conversational Chain
+
+Now we well create a conversational chain with memory, by default , the conversation chain comes with a simple memory, will be inject that as an example, if you dont want then conversation chain to have memory you could inject the `DummyMemroy`
+
+```rust
+    let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
+    let memory=SimpleMemory::new();
+    let chain = ConversationalChainBuilder::new()
         .llm(llm)
-        .top_k(4)
-        .database(db)
-        .options(options)
+        .memory(memory.into())
         .build()
-        .expect("Failed to build LLMChain");
+        .expect("Error building ConversationalChain");
 
     let input_variables = prompt_args! {
-        "query" => "what info have the client 1",
+        "input" => "Soy de peru",
+    };
+    match chain.invoke(input_variables).await {
+        Ok(result) => {
+            println!("Result: {:?}", result);
+        }
+        Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+    }
+
+    let input_variables = prompt_args! {
+        "input" => "Cuales son platos tipicos de mi pais",
     };
     match chain.invoke(input_variables).await {
         Ok(result) => {
@@ -193,74 +153,13 @@ async fn test_sql_chain() {
 }
 ```
 
-### LLM <a name="llm-interface"></a>
+###
 
-_The llm trait is just the way the chian interact with the ai, you should only use it directly if you know what you are doing.
-Instead use it on a Chain_
+### Agent
 
-The LLM (Language Model) interface in LangChain Rust provides a standardized way to interact with various language models, facilitating tasks such as text generation and information retrieval. Below is an overview of how to utilize the LLM traits and implement them for specific models like OpenAI's GPT
+We've so far create examples of chains - where each step is known ahead of time. The final thing we will create is an agent - where the LLM decides what steps to take.
 
-- Default implementation with open ai
-
-```rust
-let options = CallOptions::default();
-let open_ai = OpenAI::default();
-let messages = vec![Message::new_human_message("Hello, how are you?")];
-let resp=open_ai.generate(&messages).await.unwrap();
-println!("Generate Result: {:?}", resp);
-```
-
-- Implementation with options and streams
-
-```rust
-let message_complete = Arc::new(Mutex::new(String::new()));
-
-let streaming_func = {
-    let message_complete = message_complete.clone();
-    move |content: String| {
-        let message_complete = message_complete.clone();
-        async move {
-            let mut message_complete_lock = message_complete.lock().await;
-            println!("Content: {:?}", content);
-            message_complete_lock.push_str(&content);
-            Ok(())
-        }
-    }
-};
-let options = CallOptions::new().with_streaming_func(streaming_func);
-let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35); // You can change the model as needed
-let messages = vec![Message::new_human_message("Hello, how are you?")];
-match open_ai.generate(&messages).await {
-    Ok(result) => {
-        println!("Generate Result: {:?}", result);
-        println!("Message Complete: {:?}", message_complete.lock().await);
-    }
-    Err(e) => {
-        eprintln!("Error calling generate: {:?}", e);
-    }
-}
-```
-
-#### Using OpenAI <a name="using-openai"></a>
-
-For open ai LLM you should have in you env variables(bashrc,zshrc,etc) the `OPENAI_API_KEY`
-
-```bash
-export OPENAI_API_KEY={{api key}}
-```
-
-Or you could use the `with_api_key`
-
-```rust
-let open_ai = OpenAI::new(options)
-            .with_api_key("you api key");
-```
-
-### Agents
-
-And agent and agent executor is a chain which can interact with `Tool` which are elemts of outside the llm it self, like search in google
-
-##### Conversational Agent <a name="conversational-agent"></a>
+First whe sould create a tool, i will create a mock tool
 
 ```rust
 struct Calc {}
@@ -277,9 +176,13 @@ impl Tool for Calc {
         Ok("25".to_string())
     }
 }
+```
 
-async fn agent_run() {
-    let llm = OpenAI::default().with_model(OpenAIModel::Gpt4);
+\
+Then whe create the agent with memory
+
+```rust
+  let llm = OpenAI::default().with_model(OpenAIModel::Gpt4);
     let memory = SimpleMemory::new();
     let tool_calc = Calc {};
     let agent = ConversationalAgentBuilder::new()
@@ -306,215 +209,4 @@ async fn agent_run() {
         }
         Err(e) => panic!("Error invoking LLMChain: {:?}", e),
     }
-
-}
 ```
-
-### Tools
-
-The tools are the way the llm can interact with the outside world.
-
-This is how you can create a tool
-
-```rust
-use async_trait::async_trait;
-use regex::Regex;
-use scraper::{ElementRef, Html, Selector};
-use std::error::Error;
-
-use crate::tools::Tool;
-
-pub struct WebScrapper {}
-
-impl WebScrapper {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-#[async_trait]
-impl Tool for WebScrapper {
-    fn name(&self) -> String {
-        String::from("Web Scraper")
-    }
-    fn description(&self) -> String {
-        String::from(
-            "Web Scraper will scan a url and return the content of the web page.
-		Input should be a working url.",
-        )
-    }
-    async fn call(&self, input: &str) -> Result<String, Box<dyn Error>> {
-        match scrape_url(input).await {
-            Ok(content) => Ok(content),
-            Err(e) => Ok(format!("Error scraping {}: {}\n", input, e)),
-        }
-    }
-}
-
-async fn scrape_url(url: &str) -> Result<String, Box<dyn Error>> {
-    let res = reqwest::get(url).await?.text().await?;
-
-    let document = Html::parse_document(&res);
-    let body_selector = Selector::parse("body").unwrap();
-
-    let mut text = Vec::new();
-    for element in document.select(&body_selector) {
-        collect_text_not_in_script(&element, &mut text);
-    }
-
-    let joined_text = text.join(" ");
-    let cleaned_text = joined_text.replace("\n", " ").replace("\t", " ");
-    let re = Regex::new(r"\s+").unwrap();
-    let final_text = re.replace_all(&cleaned_text, " ");
-    Ok(final_text.to_string())
-}
-
-fn collect_text_not_in_script(element: &ElementRef, text: &mut Vec<String>) {
-    for node in element.children() {
-        if node.value().is_element() {
-            let tag_name = node.value().as_element().unwrap().name();
-            if tag_name == "script" {
-                continue;
-            }
-            collect_text_not_in_script(&ElementRef::wrap(node).unwrap(), text);
-        } else if node.value().is_text() {
-            text.push(node.value().as_text().unwrap().text.to_string());
-        }
-    }
-}
-```
-
-### Embeddings
-
-```rust
-use langchain::embedding::openai::OpenAiEmbedder;
-
-let openai_embedder = OpenAiEmbedder::new("your_openai_api_key".to_string());
-```
-
-Or use the default implementation:
-
-```rust
-let openai_embedder = OpenAiEmbedder::default();
-```
-
-#### Embedding Documents <a name="embedding-documents"></a>
-
-Embed multiple documents asynchronously:
-
-```rust
-#[tokio::main]
-async fn main() {
-    let documents = vec!["Hello, world!".to_string(), "How are you?".to_string()];
-    let embeddings = openai_embedder.embed_documents(&documents).await.unwrap();
-
-    println!("{:?}", embeddings);
-}
-```
-
-### Embedding a Single Query <a name="embedding-a-single-query"></a>
-
-Embed a single piece of text:
-
-```rust
-#[tokio::main]
-async fn main() {
-    let query = "What is the meaning of life?";
-    let embedding = openai_embedder.embed_query(query).await.unwrap();
-
-    println!("{:?}", embedding);
-}
-```
-
-### Messsages
-
-#### Message Formatting <a name="message-formatting"></a>
-
-LangChain Rust provides a structured way to define different types of messages, such as system messages, AI-generated messages, and human messages. Below is an example of how to create and use these message types:
-
-```rust
-use serde::{Serialize, Deserialize};
-use langchain::prompt::chat::{Message, MessageType};
-
-// Creating different types of messages
-let system_msg = Message::new_system_message("System initialization complete.");
-let human_msg = Message::new_human_message("Hello, how can I assist you?");
-let ai_msg = Message::new_ai_message("Analyzing input...");
-
-println!("{:?}, {:?}, {:?}", system_msg, human_msg, ai_msg);
-```
-
-#### Dynamic Prompt Templates <a name="dynamic-prompt-templates"></a>
-
-LangChain Rust allows the creation of dynamic prompt templates using either FString or Jinja2 formatting. These templates can include variables that are replaced at runtime, as shown in the example below:
-
-```rust
-use langchain::prompt::{PromptTemplate, TemplateFormat, prompt_args, template_fstring};
-
-// Creating a Jinja2 template for a greeting message
-let greeting_template = template_fstring!(
-    "Hello, {name}! Welcome to our service.",
-    "name"
-);
-
-// Formatting the template with a given name
-let formatted_greeting = greeting_template.format(prompt_args! {
-    "name" => "Alice",
-}).unwrap();
-
-println!("{}", formatted_greeting);
-```
-
-#### Message Formatting with Templates <a name="dynamic-prompt-templates"></a>
-
-Combining message structures with dynamic templates, you can create complex conversational flows. The MessageFormatter allows the sequencing of various message types and templates, providing a cohesive conversation script:
-
-```rust
-
-let human_msg = Message::new_human_message("Hello from user");
-
-// Create an AI message prompt template
-let ai_message_prompt = AIMessagePromptTemplate::new(template_fstring!(
-    "AI response: {content} {test}",
-    "content",
-    "test"
-));
-
-// Use the `message_formatter` macro to construct the formatter
-let formatter = message_formatter![
-    fmt_message!(human_msg),
-    fmt_template!(ai_message_prompt),
-    fmt_placeholder!("history")
-];
-
-// Define input variables for the AI message template
-let input_variables = prompt_args! {
-    "content" => "This is a test",
-    "test" => "test2",
-    "history" => vec![
-        Message::new_human_message("Placeholder message 1"),
-        Message::new_ai_message("Placeholder message 2"),
-    ],
-
-
-};
-
-// Format messages
-let formatted_messages = formatter.format_messages(input_variables).unwrap();
-
-// Verify the number of messages
-assert_eq!(formatted_messages.len(), 4);
-
-// Verify the content of each message
-assert_eq!(formatted_messages[0].content, "Hello from user");
-assert_eq!(
-    formatted_messages[1].content,
-    "AI response: This is a test test2"
-);
-assert_eq!(formatted_messages[2].content, "Placeholder message 1");
-assert_eq!(formatted_messages[3].content, "Placeholder message 2");
-```
-
-## License
-
-`langchain-rust` is released under the MIT License. See the [LICENSE](https://github.com/Abraxas-365/langchain-rust/blob/main/LICENSE) file for more information.
