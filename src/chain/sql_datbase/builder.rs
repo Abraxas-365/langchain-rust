@@ -64,6 +64,7 @@ where
 
         let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
             format!("{}{}", DEFAULT_SQLTEMPLATE, DEFAULT_SQLSUFFIX),
+            "dialect",
             "table_info",
             "top_k",
             "input"
