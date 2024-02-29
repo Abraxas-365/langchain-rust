@@ -9,3 +9,4 @@ pub mod prompt;
 pub mod schemas;
 pub mod text_splitter;
 pub mod tools;
+pub mod vectorstore;

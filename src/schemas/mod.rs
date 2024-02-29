@@ -5,3 +5,7 @@ pub mod llm;
 pub mod memory;
 pub mod messages;
 pub mod prompt;
+mod retrivers;
+
+pub use document::*;
+pub use retrivers::*;
