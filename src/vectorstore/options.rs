@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde_json::Value;
 
 use crate::embedding::embedder_trait::Embedder;
@@ -6,7 +8,7 @@ pub struct VecStoreOptions {
     pub name_space: Option<String>,
     pub score_threshold: Option<f32>,
     pub filters: Option<Value>,
-    pub embedder: Option<Box<dyn Embedder>>,
+    pub embedder: Option<Arc<dyn Embedder>>,
 }
 
 impl Default for VecStoreOptions {
@@ -41,7 +43,7 @@ impl VecStoreOptions {
     }
 
     pub fn with_embedder<E: Embedder + 'static>(mut self, embedder: E) -> Self {
-        self.embedder = Some(Box::new(embedder));
+        self.embedder = Some(Arc::new(embedder));
         self
     }
 }
