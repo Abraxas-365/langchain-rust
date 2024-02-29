@@ -74,6 +74,32 @@ impl Store {
             None => Ok(0.0),
         }
     }
+
+    async fn drop_tables(&self) -> Result<(), Box<dyn Error>> {
+        sqlx::query(&format!(
+            r#"DROP TABLE IF EXISTS {}"#,
+            self.embedder_table_name
+        ))
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(&format!(
+            r#"DROP TABLE IF EXISTS {}"#,
+            self.collection_table_name
+        ))
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn remove_collection(&self) -> Result<(), Box<dyn Error>> {
+        sqlx::query(r#"DELETE FROM collection WHERE uuid = $1"#)
+            .bind(&self.collection_uuid)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }
 #[async_trait]
 impl VectorStore for Store {
