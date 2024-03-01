@@ -149,7 +149,7 @@ impl VectorStore for Store {
             .bind(&vector_value)
             .bind(json!(&doc.metadata))
             .bind(&self.collection_uuid)
-            .execute(&mut tx)
+            .execute(&mut *tx)
             .await?;
         }
 

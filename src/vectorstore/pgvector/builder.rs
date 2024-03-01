@@ -109,24 +109,17 @@ impl StoreBuilder {
             return Err("Embedder is required".into());
         }
         let pool = self.get_pool().await?;
-        println!("Pool obtiened");
         let mut tx = pool.begin().await?;
-        println!("transaciton obtiened");
         self.create_vector_extension_if_not_exists(&mut tx).await?;
-        println!("step 1");
         self.create_collection_table_if_not_exists(&mut tx).await?;
-        println!("step 2");
         self.create_embedding_table_if_not_exists(&mut tx).await?;
-        println!("step 3");
 
         if self.pre_delete_collection {
             self.remove_collection(&mut tx).await?;
         }
-        println!("step 4");
 
         let collection_uuid = self.create_or_get_collection(&mut tx).await?;
 
-        println!("step 5");
         tx.commit().await?;
 
         Ok(Store {
@@ -298,15 +291,12 @@ impl StoreBuilder {
             self.embedder_table_name, vector_dimensions, self.collection_table_name
         );
 
-        println!("sql: {}", sql);
-
         sqlx::query(&sql).execute(&mut **tx).await?;
 
         let sql = format!(
             r#"CREATE INDEX IF NOT EXISTS {}_collection_id ON {} (collection_id)"#,
             self.embedder_table_name, self.embedder_table_name
         );
-        println!("sql: {}", sql);
         sqlx::query(&sql).execute(&mut **tx).await?;
 
         // See this for more details on HNWS indexes: https://github.com/pgvector/pgvector#hnsw
