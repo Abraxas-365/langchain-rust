@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
+#[derive(Debug, Clone)]
 pub struct Document {
     pub page_content: String,
     pub metadata: HashMap<String, Value>,

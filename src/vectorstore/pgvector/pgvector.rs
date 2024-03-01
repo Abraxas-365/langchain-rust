@@ -23,6 +23,7 @@ pub struct Store {
     pub(crate) pre_delete_collection: bool,
     pub(crate) vector_dimensions: i32,
     pub(crate) hns_index: Option<HNSWIndex>,
+    pub(crate) vstore_options: VecStoreOptions,
 }
 
 pub struct HNSWIndex {
@@ -138,10 +139,11 @@ impl VectorStore for Store {
             let vector_value =
                 Vector::from(vector.into_iter().map(|x| *x as f32).collect::<Vec<f32>>());
 
-            sqlx::query(
-                r#"INSERT INTO your_table_name 
+            sqlx::query(&format!(
+                r#"INSERT INTO {} 
 (uuid, document, embedding, cmetadata, collection_id) VALUES ($1, $2, $3, $4, $5)"#,
-            )
+                self.embedder_table_name
+            ))
             .bind(&id)
             .bind(&doc.page_content)
             .bind(&vector_value)

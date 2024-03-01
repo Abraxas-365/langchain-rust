@@ -3,7 +3,7 @@ use std::{collections::HashMap, env, error::Error, sync::Arc};
 use serde_json::{json, Value};
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres, Row, Transaction};
 
-use crate::embedding::embedder_trait::Embedder;
+use crate::{embedding::embedder_trait::Embedder, vectorstore::VecStoreOptions};
 
 use super::{
     HNSWIndex, Store, PG_LOCKID_EXTENSION, PG_LOCK_ID_COLLECTION_TABLE, PG_LOCK_ID_EMBEDDING_TABLE,
@@ -25,6 +25,7 @@ pub struct StoreBuilder {
     collection_uuid: String,
     collection_table_name: String,
     collection_metadata: HashMap<String, Value>,
+    vstore_options: VecStoreOptions,
     hns_index: Option<HNSWIndex>,
 }
 
@@ -42,6 +43,7 @@ impl StoreBuilder {
             collection_name: DEFAULT_COLLECTION_NAME.into(),
             collection_table_name: DEFAULT_COLLECTION_STORE_TABLE_NAME.into(),
             collection_metadata: HashMap::new(),
+            vstore_options: VecStoreOptions::default(),
             hns_index: None,
         }
     }
@@ -86,6 +88,11 @@ impl StoreBuilder {
         self
     }
 
+    pub fn vstore_options(mut self, vstore_options: VecStoreOptions) -> Self {
+        self.vstore_options = vstore_options;
+        self
+    }
+
     fn collecion_metadata(mut self, collecion_metadata: HashMap<String, Value>) -> Self {
         self.collection_metadata = collecion_metadata;
         self
@@ -102,17 +109,24 @@ impl StoreBuilder {
             return Err("Embedder is required".into());
         }
         let pool = self.get_pool().await?;
+        println!("Pool obtiened");
         let mut tx = pool.begin().await?;
+        println!("transaciton obtiened");
         self.create_vector_extension_if_not_exists(&mut tx).await?;
+        println!("step 1");
         self.create_collection_table_if_not_exists(&mut tx).await?;
+        println!("step 2");
         self.create_embedding_table_if_not_exists(&mut tx).await?;
+        println!("step 3");
 
         if self.pre_delete_collection {
             self.remove_collection(&mut tx).await?;
         }
+        println!("step 4");
 
         let collection_uuid = self.create_or_get_collection(&mut tx).await?;
 
+        println!("step 5");
         tx.commit().await?;
 
         Ok(Store {
@@ -125,6 +139,7 @@ impl StoreBuilder {
             collection_metadata: self.collection_metadata,
             embedder_table_name: self.embedder_table_name,
             vector_dimensions: self.vector_dimensions,
+            vstore_options: self.vstore_options,
             hns_index: self.hns_index,
         })
     }
@@ -229,21 +244,29 @@ impl StoreBuilder {
         // https://github.com/langchain-ai/langchain/issues/12933
         // For more information see:
         // https://www.postgresql.org/docs/16/explicit-locking.html#ADVISORY-LOCKS
+        let create_extension_sql = format!("CREATE EXTENSION IF NOT EXISTS vector");
+        sqlx::query(&create_extension_sql)
+            .execute(&mut **tx)
+            .await?;
+
+        // Use advisory lock as before
         sqlx::query("SELECT pg_advisory_xact_lock($1)")
             .bind(PG_LOCK_ID_COLLECTION_TABLE)
             .execute(&mut **tx)
             .await?;
 
-        let sql = format!(
-            r#"CREATE EXTENSION IF NOT EXISTS {}
-                     name varchar,
-                     cmetadata json,
-                     "uuid" uuid NOT NULL,
-                     UNIQUE (name),
-                 PRIMARY KEY (uuid))"#,
-            self.collection_name
+        // Now, create the table
+        let create_table_sql = format!(
+            r#"CREATE TABLE IF NOT EXISTS {} (
+        name VARCHAR,
+        cmetadata JSON,
+        "uuid" TEXT NOT NULL,
+        UNIQUE (name),
+        PRIMARY KEY (uuid)
+    )"#,
+            self.collection_table_name
         );
-        sqlx::query(&sql).execute(&mut **tx).await?;
+        sqlx::query(&create_table_sql).execute(&mut **tx).await?;
 
         Ok(())
     }
@@ -252,13 +275,6 @@ impl StoreBuilder {
         &self,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<(), Box<dyn Error>> {
-        // inspired by
-        // https://github.com/langchain-ai/langchain/blob/v0.0.340/libs/langchain/langchain/vectorstores/pgvector.py#L167
-        // The advisor lock fixes issue arising from concurrent
-        // creation of the vector extension.
-        // https://github.com/langchain-ai/langchain/issues/12933
-        // For more information see:
-        // https://www.postgresql.org/docs/16/explicit-locking.html#ADVISORY-LOCKS
         sqlx::query("SELECT pg_advisory_xact_lock($1)")
             .bind(PG_LOCK_ID_EMBEDDING_TABLE)
             .execute(&mut **tx)
@@ -271,22 +287,26 @@ impl StoreBuilder {
 
         let sql = format!(
             r#"CREATE TABLE IF NOT EXISTS {}
-                     collection_id uuid,
-                     embedding vector({}),
-                     document varchar,
-                     cmetadata json,
-                     "uuid" uuid NOT NULL,
-                     CONSTRAINT langchain_pg_embedding_collection_id_fkey
-                     FOREIGN KEY (collection_id) REFERENCES {} (uuid) ON DELETE CASCADE,
-                 PRIMARY KEY (uuid))"#,
-            self.collection_name, vector_dimensions, self.collection_name
+             (collection_id TEXT,
+             embedding VECTOR{},
+             document VARCHAR,
+             cmetadata JSON,
+             "uuid" TEXT NOT NULL,
+             CONSTRAINT langchain_pg_embedding_collection_id_fkey
+             FOREIGN KEY (collection_id) REFERENCES {}("uuid") ON DELETE CASCADE,
+             PRIMARY KEY ("uuid"))"#,
+            self.embedder_table_name, vector_dimensions, self.collection_table_name
         );
+
+        println!("sql: {}", sql);
+
         sqlx::query(&sql).execute(&mut **tx).await?;
 
         let sql = format!(
             r#"CREATE INDEX IF NOT EXISTS {}_collection_id ON {} (collection_id)"#,
             self.embedder_table_name, self.embedder_table_name
         );
+        println!("sql: {}", sql);
         sqlx::query(&sql).execute(&mut **tx).await?;
 
         // See this for more details on HNWS indexes: https://github.com/pgvector/pgvector#hnsw

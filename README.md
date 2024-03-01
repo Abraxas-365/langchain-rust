@@ -211,3 +211,39 @@ Then whe create the agent with memory
         Err(e) => panic!("Error invoking LLMChain: {:?}", e),
     }
 ```
+
+### Vectore Stores
+
+The vector stores allow you to save embedding data to a database, and retrive it
+Using embedding you can search base on `context`
+
+```rust
+async fn db_test() {
+    let embedder = OpenAiEmbedder::default();
+    let store = StoreBuilder::new()
+        .embedder(embedder)
+        .connection_url("postgresql://postgres:postgres@localhost:5432/postgres")
+        .vector_dimensions(1536)
+        .build()
+        .await
+        .unwrap();
+    let document = Document {
+        page_content: "this is a test".to_string(),
+        metadata: HashMap::new(),
+        score: 0.0,
+    };
+    let docs = vec![document];
+
+    store
+        .add_documents(&docs, &VecStoreOptions::default())
+        .await
+        .unwrap();
+    println!("Result:");
+
+    let similar = store
+        .similarity_search("this is a test", 10, &VecStoreOptions::default())
+        .await
+        .unwrap();
+    println!("Similar: {:?}", similar);
+}
+```

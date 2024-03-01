@@ -1252,7 +1252,7 @@ dependencies = [
 
 [[package]]
 name = "langchain-rust"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "async-openai",
  "async-trait",
@@ -1276,7 +1276,7 @@ dependencies = [
  "tiktoken-rs",
  "tokio",
  "tokio-test",
- "uuid",
+ "uuid 1.7.0",
 ]
 
 [[package]]
@@ -2623,6 +2623,7 @@ dependencies = [
  "thiserror",
  "tokio-stream",
  "url",
+ "uuid 0.8.2",
  "whoami",
 ]
 
@@ -3199,6 +3200,12 @@ name = "utf8-width"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86bd8d4e895da8537e5315b8254664e6b769c4ff3db18321b297a1e7004392e3"
+
+[[package]]
+name = "uuid"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 
 [[package]]
 name = "uuid"
