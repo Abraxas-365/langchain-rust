@@ -9,6 +9,10 @@
 
 This is the Rust language implementation of [LangChain](https://github.com/langchain-ai/langchain).
 
+# Version
+
+_PLS use the version 1.0.8_ This is the most stable release
+
 # Quickstart
 
 ## Setup
