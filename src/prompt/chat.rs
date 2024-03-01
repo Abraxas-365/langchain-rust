@@ -131,7 +131,7 @@ pub enum MessageOrTemplate {
 #[macro_export]
 macro_rules! fmt_message {
     ($msg:expr) => {
-        MessageOrTemplate::Message($msg)
+        $crate::prompt::MessageOrTemplate::Message($msg)
     };
 }
 
@@ -139,7 +139,7 @@ macro_rules! fmt_message {
 #[macro_export]
 macro_rules! fmt_template {
     ($template:expr) => {
-        MessageOrTemplate::Template(Box::new($template))
+        $crate::prompt::MessageOrTemplate::Template(Box::new($template))
     };
 }
 
@@ -147,7 +147,7 @@ macro_rules! fmt_template {
 #[macro_export]
 macro_rules! fmt_placeholder {
     ($placeholder:expr) => {
-        MessageOrTemplate::MessagesPlaceholder($placeholder.into())
+        $crate::prompt::MessageOrTemplate::MessagesPlaceholder($placeholder.into())
     };
 }
 
@@ -229,9 +229,9 @@ macro_rules! message_formatter {
     let mut formatter = $crate::prompt::MessageFormatterStruct::new();
     $(
         match $item {
-            MessageOrTemplate::Message(msg) => formatter.add_message(msg),
-            MessageOrTemplate::Template(tmpl) => formatter.add_template(tmpl),
-            MessageOrTemplate::MessagesPlaceholder(placeholder) => formatter.add_messages_placeholder(&placeholder.clone()),
+            $crate::prompt::MessageOrTemplate::Message(msg) => formatter.add_message(msg),
+            $crate::prompt::MessageOrTemplate::Template(tmpl) => formatter.add_template(tmpl),
+            $crate::prompt::MessageOrTemplate::MessagesPlaceholder(placeholder) => formatter.add_messages_placeholder(&placeholder.clone()),
         }
     )*
     formatter
@@ -242,10 +242,7 @@ macro_rules! message_formatter {
 mod tests {
     use crate::{
         message_formatter,
-        prompt::{
-            chat::{AIMessagePromptTemplate, MessageOrTemplate},
-            FormatPrompter,
-        },
+        prompt::{chat::AIMessagePromptTemplate, FormatPrompter},
         prompt_args,
         schemas::messages::Message,
         template_fstring,
