@@ -1,6 +1,6 @@
 [package]
 name = "langchain-rust"
-version = "1.0.4"
+version = "1.0.5"
 edition = "2021"
 publish = true
 repository = "https://github.com/Abraxas-365/langchain-rust"
@@ -29,7 +29,10 @@ reqwest-eventsource = "0.5.0"
 async-openai = "0.18.3"
 mockito = "1.3.0"
 tiktoken-rs = "0.5.8"
-sqlx = { version = "0.5", features = ["postgres", "runtime-tokio-native-tls"] }
+sqlx = { version = "0.5", features = ["postgres", "runtime-tokio-native-tls", "json", "uuid" ] }
+uuid = {version = "1.7.0", features = ["v4"] }
+pgvector = {version = "0.3.2", features = ["postgres", "sqlx"] }
+
 
 [dev-dependencies]
 tokio-test = "0.4.0"
