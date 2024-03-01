@@ -121,7 +121,7 @@ match chain.invoke(prompt_args! {
 
 ### Conversational Chain
 
-Now we well create a conversational chain with memory, by default , the conversation chain comes with a simple memory, will be inject that as an example, if you dont want then conversation chain to have memory you could inject the `DummyMemroy`
+Now we well create a conversational chain with memory, by default , the conversation chain comes with a simple memory, will be inject that as an example, if you dont want the conversation chain to have memory you could inject the `DummyMemroy`
 
 ```rust
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
