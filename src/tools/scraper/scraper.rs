@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 
 use crate::tools::Tool;
 
@@ -29,6 +29,12 @@ impl Tool for WebScrapper {
             Ok(content) => Ok(content),
             Err(e) => Ok(format!("Error scraping {}: {}\n", input, e)),
         }
+    }
+}
+
+impl Into<Arc<dyn Tool>> for WebScrapper {
+    fn into(self) -> Arc<dyn Tool> {
+        Arc::new(self)
     }
 }
 
