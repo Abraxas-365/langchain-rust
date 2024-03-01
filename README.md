@@ -247,3 +247,35 @@ async fn db_test() {
     println!("Similar: {:?}", similar);
 }
 ```
+
+Or you can use the powerful macros
+
+```rust
+async fn db_test() {
+    let embedder = OpenAiEmbedder::default();
+    let store = StoreBuilder::new()
+        .embedder(embedder)
+        .connection_url("postgresql://postgres:postgres@localhost:5432/postgres")
+        .vector_dimensions(1536)
+        .build()
+        .await
+        .unwrap();
+    let document = Document {
+        page_content: "this is a test".to_string(),
+        metadata: HashMap::new(),
+        score: 0.0,
+    };
+    let docs = vec![document];
+
+    //If you want to send options:
+    //add_documents!(store, &docs,&VecStoreOptions::default()).await.unwrap();
+    add_documents!(store, &docs).await.unwrap();
+
+    //If you want to send options:
+    //similarity_search!(store, "this is a test", 10,&VecStoreOptions::default()).await.unwrap();
+    let similar = similarity_search!(store, "this is a test", 10)
+        .await
+        .unwrap();
+    println!("Similar: {:?}", similar);
+}
+```
