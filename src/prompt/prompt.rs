@@ -69,6 +69,7 @@ impl PromptFromatter for PromptTemplate {
             prompt = prompt.replace(&key, &value_str);
         }
 
+        log::debug!("Formatted prompt: {}", prompt);
         Ok(prompt)
     }
 }

@@ -68,6 +68,7 @@ where
         let mut input_variables = input_variables.clone();
         let name_to_tools = self.get_name_to_tools();
         let mut steps: Vec<(AgentAction, String)> = Vec::new();
+        log::debug!("steps: {:?}", steps);
         if let Some(memory) = &self.memory {
             let memory = memory.lock().await;
             input_variables.insert("chat_history".to_string(), json!(memory.messages()));

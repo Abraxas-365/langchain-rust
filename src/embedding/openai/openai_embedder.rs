@@ -61,6 +61,7 @@ impl Default for OpenAiEmbedder {
 #[async_trait]
 impl Embedder for OpenAiEmbedder {
     async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
+        log::debug!("Embedding documents: {:?}", documents);
         let client = Client::new();
         let url = Url::parse("https://api.openai.com/v1/embeddings")?;
         let res = client
@@ -81,6 +82,7 @@ impl Embedder for OpenAiEmbedder {
     }
 
     async fn embed_query(&self, text: &str) -> Result<Vec<f64>, Box<dyn Error>> {
+        log::debug!("Embedding query: {:?}", text);
         let client = Client::new();
         let url = Url::parse("https://api.openai.com/v1/embeddings")?;
 

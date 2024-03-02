@@ -81,6 +81,7 @@ pub struct LLMChain {
 impl Chain for LLMChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
+        log::debug!("Prompt: {:?}", prompt);
         let output = self.llm.generate(&prompt.to_chat_messages()).await?;
         if let Some(memory) = &self.memory {
             let mut memory = memory.lock().await;
@@ -92,6 +93,7 @@ impl Chain for LLMChain {
 
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
+        log::debug!("Prompt: {:?}", prompt);
         let output = self
             .llm
             .generate(&prompt.to_chat_messages())
