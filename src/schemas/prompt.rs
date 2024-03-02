@@ -1,5 +1,6 @@
 use super::messages::Message;
 
+#[derive(Debug, Clone)]
 pub struct PromptValue {
     messages: Vec<Message>,
 }
