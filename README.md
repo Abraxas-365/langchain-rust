@@ -4,7 +4,7 @@
 
 [![Discord](https://dcbadge.vercel.app/api/server/fe3PPm69?style=for-the-badge)](https://discord.gg/JJFcTFbanu)
 [![Docs: Tutorial](https://img.shields.io/badge/docs-tutorial-success?style=for-the-badge&logo=appveyor)](https://langchain-rust.sellie.tech/get-started/quickstart)
-[Crates.io](https://crates.io/crates/langchain-rust)
+[crates.io]: https://crates.io/crates/langchain-rust
 
 ## 🤔 What is this?
 
