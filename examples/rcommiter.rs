@@ -5,16 +5,15 @@ use langchain_rust::chain::chain_trait::Chain;
 use langchain_rust::chain::llm_chain::LLMChainBuilder;
 use langchain_rust::llm::openai::OpenAI;
 use langchain_rust::prompt::HumanMessagePromptTemplate;
-use langchain_rust::{fmt_template, message_formatter, prompt_args, template_jinja2};
+use langchain_rust::{prompt_args, template_jinja2};
 
 //to try this in action , add something to this file stage it an run it
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let llm = OpenAI::default();
     let chain = LLMChainBuilder::new()
-        .prompt(message_formatter!(fmt_template!(
-            HumanMessagePromptTemplate::new(template_jinja2!(
-                r#"
+        .prompt(HumanMessagePromptTemplate::new(template_jinja2!(
+            r#"
     Create a conventional commit message for the following changes.
 
     File changes: 
@@ -23,8 +22,7 @@ async fn main() -> io::Result<()> {
 
 
     "#,
-                "input"
-            ))
+            "input"
         )))
         .llm(llm)
         .build()
