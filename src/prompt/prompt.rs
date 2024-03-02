@@ -1,6 +1,8 @@
 use std::error::Error;
 
-use super::{PromptArgs, PromptFromatter};
+use crate::schemas::{messages::Message, prompt::PromptValue};
+
+use super::{FormatPrompter, PromptArgs, PromptFromatter};
 
 #[derive(Clone)]
 pub enum TemplateFormat {
@@ -22,6 +24,17 @@ impl PromptTemplate {
             variables,
             format,
         }
+    }
+}
+
+//PromptTemplate will be default transformed to an Human Input when used as FromatPrompter
+impl FormatPrompter for PromptTemplate {
+    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>> {
+        let messages = vec![Message::new_human_message(self.format(input_variables)?)];
+        Ok(PromptValue::from_messages(messages))
+    }
+    fn get_input_variables(&self) -> Vec<String> {
+        self.variables.clone()
     }
 }
 
