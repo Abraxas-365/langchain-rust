@@ -2,7 +2,7 @@
 
 [![Latest Version]][crates.io]
 
-[Latest Version]: https://img.shields.io/crates/v/langchain_rs.svg
+[Latest Version]: https://img.shields.io/crates/v/langchain-rust.svg
 [crates.io]: https://crates.io/crates/langchain-rust
 
 ⚡ Building applications with LLMs through composability, with Rust! ⚡
