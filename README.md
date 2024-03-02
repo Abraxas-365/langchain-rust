@@ -11,7 +11,11 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 # Version
 
-_PLS use the version 2.0.0_ This is the most stable release
+_PLS use the version 2.0.x_ This is the most stable release
+
+# Examples
+
+[rcommit](https://github.com/Abraxas-365/rcommit): rcommit allows you to create git commits with AI
 
 # Quickstart
 
