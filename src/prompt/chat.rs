@@ -24,9 +24,9 @@ impl HumanMessagePromptTemplate {
 }
 impl MessageFormatter for HumanMessagePromptTemplate {
     fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
-        Ok(vec![Message::new_human_message(
-            &self.prompt.format(input_variables)?,
-        )])
+        let message = Message::new_human_message(&self.prompt.format(input_variables)?);
+        log::debug!("message: {:?}", message);
+        Ok(vec![message])
     }
     fn input_variables(&self) -> Vec<String> {
         self.prompt.variables().clone()
@@ -73,9 +73,9 @@ impl FormatPrompter for SystemMessagePromptTemplate {
 
 impl MessageFormatter for SystemMessagePromptTemplate {
     fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
-        Ok(vec![Message::new_system_message(
-            &self.prompt.format(input_variables)?,
-        )])
+        let message = Message::new_system_message(&self.prompt.format(input_variables)?);
+        log::debug!("message: {:?}", message);
+        Ok(vec![message])
     }
     fn input_variables(&self) -> Vec<String> {
         self.prompt.variables().clone()
@@ -106,9 +106,9 @@ impl FormatPrompter for AIMessagePromptTemplate {
 
 impl MessageFormatter for AIMessagePromptTemplate {
     fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
-        Ok(vec![Message::new_ai_message(
-            &self.prompt.format(input_variables)?,
-        )])
+        let message = Message::new_ai_message(&self.prompt.format(input_variables)?);
+        log::debug!("message: {:?}", message);
+        Ok(vec![message])
     }
     fn input_variables(&self) -> Vec<String> {
         self.prompt.variables().clone()
