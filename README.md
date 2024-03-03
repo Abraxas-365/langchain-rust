@@ -16,7 +16,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 # Version
 
-_PLS use the version 2.0.x_ This is the most stable release
+_PLS use the version 2.x.x_ This is the most stable release
 
 # Examples
 
