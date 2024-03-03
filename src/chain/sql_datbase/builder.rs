@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use crate::{
-    chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions},
+    chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions, DEFAULT_OUTPUT_KEY},
     language_models::llm::LLM,
     prompt::HumanMessagePromptTemplate,
     template_jinja2,
@@ -22,6 +22,7 @@ where
     options: Option<ChainCallOptions>,
     top_k: Option<usize>,
     database: Option<SQLDatabase>,
+    output_key: Option<String>,
 }
 
 impl<L> SQLDatabaseChainBuilder<L>
@@ -34,6 +35,7 @@ where
             options: None,
             top_k: None,
             database: None,
+            output_key: None,
         }
     }
 
@@ -74,10 +76,12 @@ where
             Some(options) => LLMChainBuilder::new()
                 .prompt(prompt)
                 .llm(llm)
+                .output_key(self.output_key.unwrap_or(DEFAULT_OUTPUT_KEY.into()))
                 .options(options.with_stop_words(vec![STOP_WORD.to_string()]))
                 .build()?,
             None => LLMChainBuilder::new()
                 .prompt(prompt)
+                .output_key(self.output_key.unwrap_or(DEFAULT_OUTPUT_KEY.into()))
                 .options(ChainCallOptions::default().with_stop_words(vec![STOP_WORD.to_string()]))
                 .llm(llm)
                 .build()?,

@@ -15,6 +15,7 @@ pub struct LLMChainBuilder {
     prompt: Option<Box<dyn FormatPrompter>>,
     llm: Option<Box<dyn LLM>>,
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
+    output_key: Option<String>,
     options: Option<ChainCallOptions>,
 }
 
@@ -25,6 +26,7 @@ impl LLMChainBuilder {
             llm: None,
             memory: None,
             options: None,
+            output_key: None,
         }
     }
     pub fn options(mut self, options: ChainCallOptions) -> Self {
@@ -53,6 +55,11 @@ impl LLMChainBuilder {
         self
     }
 
+    pub fn output_key<S: Into<String>>(mut self, output_key: S) -> Self {
+        self.output_key = Some(output_key.into());
+        self
+    }
+
     pub fn build(self) -> Result<LLMChain, Box<dyn Error>> {
         let prompt = self.prompt.ok_or("Prompt must be set")?;
         let mut llm = self.llm.ok_or("LLM must be set")?;
@@ -65,6 +72,7 @@ impl LLMChainBuilder {
             prompt,
             llm,
             memory: self.memory,
+            output_key: self.output_key.unwrap_or("output".to_string()),
         };
 
         Ok(chain)
@@ -75,12 +83,17 @@ pub struct LLMChain {
     prompt: Box<dyn FormatPrompter>,
     llm: Box<dyn LLM>,
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
+    output_key: String,
 }
 
 #[async_trait]
 impl Chain for LLMChain {
     fn get_input_keys(&self) -> Vec<String> {
         return self.prompt.get_input_variables();
+    }
+
+    fn get_output_keys(&self) -> Vec<String> {
+        vec![self.output_key.clone()]
     }
 
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
