@@ -78,7 +78,7 @@ mod tests {
     #[tokio::test]
     async fn test_scrape_url() {
         // Request a new server from the pool
-        let mut server = mockito::Server::new();
+        let mut server = mockito::Server::new_async().await;
 
         // Create a mock on the server
         let mock = server
