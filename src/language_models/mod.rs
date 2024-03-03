@@ -26,6 +26,12 @@ impl TokenUsage {
             total_tokens: self.total_tokens + other.total_tokens,
         }
     }
+
+    pub fn add(&mut self, other: &TokenUsage) {
+        self.prompt_tokens += other.prompt_tokens;
+        self.completion_tokens += other.completion_tokens;
+        self.total_tokens += other.total_tokens;
+    }
 }
 
 impl Default for TokenUsage {
