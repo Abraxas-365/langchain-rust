@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 pub mod llm;
 pub mod options;
 
+//TODO: check if its this should have a data:serde::Value to save all other things, like OpenAI
+//function responses
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GenerateResult {
     pub tokens: Option<TokenUsage>,
