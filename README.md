@@ -167,7 +167,7 @@ Now we well create a conversational chain with memory, by default , the conversa
 }
 ```
 
-### Sequential Chain
+### Sequential Chain [Still Experimental]
 
 The sequential chain allows you to pass the result of n chain to the n+1 chain as input.
 

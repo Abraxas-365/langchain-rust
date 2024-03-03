@@ -9,6 +9,7 @@ use crate::{
     prompt::PromptArgs,
 };
 
+//THIS IS EXPERIMENTAL
 pub struct SequentialChain {
     pub(crate) chains: Vec<Box<dyn Chain>>,
     pub(crate) outputs: Vec<String>,
