@@ -23,6 +23,7 @@ use crate::{
     schemas::messages::{Message, MessageType},
 };
 
+#[derive(Clone)]
 pub enum OpenAIModel {
     Gpt35,
     Gpt4,
@@ -39,6 +40,7 @@ impl ToString for OpenAIModel {
     }
 }
 
+#[derive(Clone)]
 pub struct OpenAI {
     config: OpenAIConfig,
     model: OpenAIModel,
