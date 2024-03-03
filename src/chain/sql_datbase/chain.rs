@@ -24,6 +24,10 @@ pub struct SQLDatabaseChain {
 
 #[async_trait]
 impl Chain for SQLDatabaseChain {
+    fn get_input_keys(&self) -> Vec<String> {
+        self.llmchain.get_input_keys()
+    }
+
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
         let mut token_usage: Option<TokenUsage> = None;
 

@@ -1,0 +1,44 @@
+use crate::chain::Chain;
+
+use super::SequentialChain;
+
+pub struct SequentialChainBuilder {
+    chains: Vec<Box<dyn Chain>>,
+}
+
+impl SequentialChainBuilder {
+    pub fn new() -> Self {
+        Self { chains: Vec::new() }
+    }
+
+    pub fn add_chain<C: Chain + 'static>(mut self, chain: C) -> Self {
+        self.chains.push(Box::new(chain));
+        self
+    }
+
+    pub fn build(self) -> SequentialChain {
+        let outputs: Vec<String> = self
+            .chains
+            .iter()
+            .flat_map(|c| c.get_input_keys())
+            .collect();
+
+        SequentialChain {
+            chains: self.chains,
+            outputs,
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! sequential_chain {
+    ( $( $chain:expr ),* $(,)? ) => {
+        {
+            let mut builder = $crate::chain::SequentialChainBuilder::new();
+            $(
+                builder = builder.add_chain($chain);
+            )*
+            builder.build()
+        }
+    };
+}

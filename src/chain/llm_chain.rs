@@ -79,6 +79,10 @@ pub struct LLMChain {
 
 #[async_trait]
 impl Chain for LLMChain {
+    fn get_input_keys(&self) -> Vec<String> {
+        return self.prompt.get_input_variables();
+    }
+
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
         log::debug!("Prompt: {:?}", prompt);
@@ -162,12 +166,16 @@ mod tests {
             "nombre" => "luis",
 
         };
-        match chain.invoke(input_variables).await {
-            Ok(result) => {
-                println!("Result: {:?}", result);
-                println!("Complete message: {:?}", message_complete.lock().await);
-            }
-            Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+        // Execute `chain.invoke` and assert that it should succeed
+        let result = chain.invoke(input_variables).await;
+        assert!(
+            result.is_ok(),
+            "Error invoking LLMChain: {:?}",
+            result.err()
+        );
+
+        if let Ok(_) = result {
+            println!("Complete message: {:?}", message_complete.lock().await);
         }
     }
 }

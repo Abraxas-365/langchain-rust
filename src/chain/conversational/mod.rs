@@ -68,6 +68,10 @@ impl Chain for ConversationalChain {
         memory.add_message(Message::new_ai_message(&result));
         Ok(result)
     }
+
+    fn get_input_keys(&self) -> Vec<String> {
+        self.llm.get_input_keys()
+    }
 }
 
 #[cfg(test)]
@@ -88,24 +92,36 @@ mod tests {
             .build()
             .expect("Error building ConversationalChain");
 
-        let input_variables = prompt_args! {
+        let input_variables_first = prompt_args! {
             "input" => "Soy de peru",
         };
-        match chain.invoke(input_variables).await {
-            Ok(result) => {
-                println!("Result: {:?}", result);
-            }
-            Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+        // Execute the first `chain.invoke` and assert that it should succeed
+        let result_first = chain.invoke(input_variables_first).await;
+        assert!(
+            result_first.is_ok(),
+            "Error invoking LLMChain: {:?}",
+            result_first.err()
+        );
+
+        // Optionally, if you want to print the successful result, you can do so like this:
+        if let Ok(result) = result_first {
+            println!("Result: {:?}", result);
         }
 
-        let input_variables = prompt_args! {
+        let input_variables_second = prompt_args! {
             "input" => "Cuales son platos tipicos de mi pais",
         };
-        match chain.invoke(input_variables).await {
-            Ok(result) => {
-                println!("Result: {:?}", result);
-            }
-            Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+        // Execute the second `chain.invoke` and assert that it should succeed
+        let result_second = chain.invoke(input_variables_second).await;
+        assert!(
+            result_second.is_ok(),
+            "Error invoking LLMChain: {:?}",
+            result_second.err()
+        );
+
+        // Optionally, if you want to print the successful result, you can do so like this:
+        if let Ok(result) = result_second {
+            println!("Result: {:?}", result);
         }
     }
 }

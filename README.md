@@ -167,7 +167,37 @@ Now we well create a conversational chain with memory, by default , the conversa
 }
 ```
 
-###
+### Sequential Chain
+
+The sequential chain allows you to pass the result of n chain to the n+1 chain as input.
+
+```rust
+let llm = OpenAI::default();
+let chain1 = LLMChainBuilder::new()
+    .prompt(template_fstring!(
+        "dame un nombre para una tienda de {input}",
+        "input"
+    ))
+    .llm(llm.clone())
+    .build()
+    .expect("Failed to build LLMChain");
+
+let chain2 = LLMChainBuilder::new()
+    .prompt(template_fstring!(
+        "dame un slogan para una tienda llamada {output}",
+        "output"
+    ))
+    .llm(llm.clone())
+    .build()
+    .expect("Failed to build LLMChain");
+
+let chain = sequential_chain!(chain1, chain2);
+
+println!(
+    "{:?}",
+    chain.call(prompt_args! {"input"=>"medias"}).await.unwrap()
+);
+```
 
 ### Agent
 
