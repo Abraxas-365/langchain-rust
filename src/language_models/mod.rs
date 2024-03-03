@@ -18,6 +18,16 @@ pub struct TokenUsage {
     pub total_tokens: u32,
 }
 
+impl TokenUsage {
+    pub fn sum(&self, other: &TokenUsage) -> TokenUsage {
+        TokenUsage {
+            prompt_tokens: self.prompt_tokens + other.prompt_tokens,
+            completion_tokens: self.completion_tokens + other.completion_tokens,
+            total_tokens: self.total_tokens + other.total_tokens,
+        }
+    }
+}
+
 impl Default for TokenUsage {
     fn default() -> Self {
         Self {
