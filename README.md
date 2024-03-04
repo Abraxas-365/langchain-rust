@@ -335,3 +335,39 @@ async fn db_test() {
     println!("Similar: {:?}", similar);
 }
 ```
+
+# LLM Integrations
+
+## OpenAI
+
+- Initialize
+
+```rust
+let open_ai = OpenAI::default();
+```
+
+If you'd prefer not to set an environment variable you can pass the key in directly via the `openai_api_key`
+named parameter when initiating the OpenAI LLM class:
+
+```rust
+let open_ai = OpenAI::default().with_api_key("...");
+```
+
+When can use a simple call to call the llm with a string
+
+```rust
+let resp=open_ai.invoke("how can langsmith help with testing?").await.unwrap();
+```
+
+## Ollama
+
+_The ollama api could be use through the open ai implementation_
+
+- Initialise
+
+```rust
+ let ollama = OpenAI::default()
+        .with_api_base("http://localhost:11434/v1")
+        .with_api_key("ollama")
+        .with_model("llama2");
+```
