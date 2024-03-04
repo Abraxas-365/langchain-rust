@@ -172,31 +172,44 @@ Now we well create a conversational chain with memory, by default , the conversa
 The sequential chain allows you to pass the result of n chain to the n+1 chain as input.
 
 ```rust
-let llm = OpenAI::default();
-let chain1 = LLMChainBuilder::new()
-    .prompt(template_fstring!(
-        "dame un nombre para una tienda de {input}",
-        "input"
-    ))
-    .llm(llm.clone())
-    .build()
-    .expect("Failed to build LLMChain");
+#[tokio::test]
+async fn test_sequential() {
+    let llm = OpenAI::default();
+    let chain1 = LLMChainBuilder::new()
+        .prompt(template_fstring!(
+            "dame un nombre para una tienda de {input}",
+            "input"
+        ))
+        .llm(llm.clone())
+        .output_key("nombre")
+        .build()
+        .expect("Failed to build LLMChain");
 
-let chain2 = LLMChainBuilder::new()
-    .prompt(template_fstring!(
-        "dame un slogan para una tienda llamada {output}",
-        "output"
-    ))
-    .llm(llm.clone())
-    .build()
-    .expect("Failed to build LLMChain");
+    let chain2 = LLMChainBuilder::new()
+        .prompt(template_fstring!(
+            "dame un slogan para una tienda llamada {nombre},tiene que incluir la palabra {palabra}",
+            "nombre",
+        "palabra"
+        ))
+        .llm(llm.clone())
+        .output_key("slogan")
+        .build()
+        .expect("Failed to build LLMChain");
 
-let chain = sequential_chain!(chain1, chain2);
+    let chain = sequential_chain!(chain1, chain2);
+    let result = chain
+        .execute(prompt_args! {"input"=>"medias","palabra"=>"arroz"})
+        .await;
+    assert!(
+        result.is_ok(),
+        "Expected `chain.call` to succeed, but it failed with error: {:?}",
+        result.err()
+    );
 
-println!(
-    "{:?}",
-    chain.call(prompt_args! {"input"=>"medias"}).await.unwrap()
-);
+    if let Ok(output) = result {
+        println!("{:?}", output);
+    }
+}
 ```
 
 ### Agent
