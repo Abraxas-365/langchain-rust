@@ -46,12 +46,8 @@ pub trait TextSplitter {
 }
 
 pub(crate) fn join_documents(docs: &[String], separator: &str) -> Option<String> {
-    let text = docs.join(separator);
-    if text.trim().is_empty() {
-        None
-    } else {
-        Some(text)
-    }
+    let joined = docs.join(separator).trim().to_string();
+    Some(joined).filter(|s| !s.is_empty())
 }
 
 pub(crate) fn merge_splits(
