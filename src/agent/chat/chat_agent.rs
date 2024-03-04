@@ -142,7 +142,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invoke_agent() {
-        let llm = OpenAI::default().with_model(OpenAIModel::Gpt4);
+        let llm = OpenAI::default().with_model(OpenAIModel::Gpt4.to_string());
         let memory = SimpleMemory::new();
         let tool_calc = Calc {};
         let agent = ConversationalAgentBuilder::new()

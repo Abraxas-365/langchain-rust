@@ -167,7 +167,7 @@ mod tests {
             message_formatter![MessageOrTemplate::Template(human_message_prompt.into()),];
 
         let options = ChainCallOptions::default().with_streaming_func(streaming_func);
-        let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
+        let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
         let chain = LLMChainBuilder::new()
             .prompt(formatter)
             .llm(llm)
