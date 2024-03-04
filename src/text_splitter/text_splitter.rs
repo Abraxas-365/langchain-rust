@@ -8,6 +8,7 @@ pub trait TextSplitter {
     fn split_text(&self, text: &str) -> Result<Vec<String>, Box<dyn Error>>;
 }
 
+#[derive(Clone)]
 pub struct Splitter {
     text_splitter: Arc<dyn TextSplitter>,
 }
@@ -54,5 +55,11 @@ impl Splitter {
         }
 
         Ok(documents)
+    }
+}
+
+impl TextSplitter for Splitter {
+    fn split_text(&self, text: &str) -> Result<Vec<String>, Box<dyn Error>> {
+        self.text_splitter.split_text(text)
     }
 }
