@@ -43,7 +43,7 @@ impl ToString for OpenAIModel {
 #[derive(Clone)]
 pub struct OpenAI {
     config: OpenAIConfig,
-    model: OpenAIModel,
+    model: String,
     stop_words: Option<Vec<String>>,
     max_tokens: u16,
     temperature: f32,
@@ -69,7 +69,7 @@ impl Default for OpenAI {
     fn default() -> Self {
         Self {
             config: OpenAIConfig::default(),
-            model: OpenAIModel::Gpt35,
+            model: OpenAIModel::Gpt35.to_string(),
             stop_words: None,
             max_tokens: 256,
             temperature: 0.0,
@@ -87,7 +87,7 @@ impl OpenAI {
     pub fn new(opt: CallOptions) -> Self {
         Self {
             config: OpenAIConfig::default(),
-            model: OpenAIModel::Gpt35,
+            model: OpenAIModel::Gpt35.to_string(),
             stop_words: opt.stop_words,
             max_tokens: opt.max_tokens.unwrap_or(256),
             temperature: opt.temperature.unwrap_or(0.0),
@@ -100,13 +100,23 @@ impl OpenAI {
         }
     }
 
-    pub fn with_model(mut self, model: OpenAIModel) -> Self {
-        self.model = model;
+    pub fn with_model<S: Into<String>>(mut self, model: S) -> Self {
+        self.model = model.into();
         self
     }
 
     pub fn with_api_key<S: Into<String>>(mut self, api_key: S) -> Self {
-        self.config = OpenAIConfig::new().with_api_key(api_key);
+        self.config = self.config.with_api_key(api_key);
+        self
+    }
+
+    pub fn with_api_base<S: Into<String>>(mut self, api_base: S) -> Self {
+        self.config = self.config.with_api_base(api_base);
+        self
+    }
+
+    pub fn with_org_id<S: Into<String>>(mut self, org_id: S) -> Self {
+        self.config = self.config.with_org_id(org_id);
         self
     }
 }
@@ -273,7 +283,7 @@ mod tests {
         };
         let options = CallOptions::new().with_streaming_func(streaming_func);
         // Setup the OpenAI client with the necessary options
-        let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35); // You can change the model as needed
+        let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35.to_string()); // You can change the model as needed
 
         // Define a set of messages to send to the generate function
 
@@ -312,7 +322,7 @@ mod tests {
         // Define the streaming function as an async block without capturing external references directly
         let options = CallOptions::new().with_streaming_func(streaming_func);
         // Setup the OpenAI client with the necessary options
-        let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35); // You can change the model as needed
+        let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35.to_string()); // You can change the model as needed
 
         // Define a set of messages to send to the generate function
         let messages = vec![Message::new_human_message("Hello, how are you?")];
