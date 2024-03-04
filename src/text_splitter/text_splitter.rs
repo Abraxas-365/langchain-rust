@@ -6,6 +6,7 @@ use crate::schemas::Document;
 
 pub trait TextSplitter {
     fn split_text(&self, text: &str) -> Result<Vec<String>, Box<dyn Error>>;
+
     fn split_documents(&self, documents: &[Document]) -> Result<Vec<Document>, Box<dyn Error>> {
         let mut texts: Vec<String> = Vec::new();
         let mut metadatas: Vec<HashMap<String, Value>> = Vec::new();
