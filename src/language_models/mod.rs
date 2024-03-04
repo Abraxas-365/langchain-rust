@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 pub mod llm;
@@ -9,6 +11,30 @@ pub mod options;
 pub struct GenerateResult {
     pub tokens: Option<TokenUsage>,
     pub generation: String,
+}
+
+impl GenerateResult {
+    pub fn to_hashmap(&self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+
+        // Insert the 'generation' field into the hashmap
+        map.insert("generation".to_string(), self.generation.clone());
+
+        // Check if 'tokens' is Some and insert its fields into the hashmap
+        if let Some(ref tokens) = self.tokens {
+            map.insert(
+                "prompt_tokens".to_string(),
+                tokens.prompt_tokens.to_string(),
+            );
+            map.insert(
+                "completion_tokens".to_string(),
+                tokens.completion_tokens.to_string(),
+            );
+            map.insert("total_tokens".to_string(), tokens.total_tokens.to_string());
+        }
+
+        map
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

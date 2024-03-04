@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::chain::Chain;
 
 use super::SequentialChain;
@@ -17,7 +19,13 @@ impl SequentialChainBuilder {
     }
 
     pub fn build(self) -> SequentialChain {
-        let outputs: Vec<String> = self
+        let outputs: HashSet<String> = self
+            .chains
+            .iter()
+            .flat_map(|c| c.get_output_keys())
+            .collect();
+
+        let input_keys: HashSet<String> = self
             .chains
             .iter()
             .flat_map(|c| c.get_input_keys())
@@ -25,6 +33,7 @@ impl SequentialChainBuilder {
 
         SequentialChain {
             chains: self.chains,
+            input_keys,
             outputs,
         }
     }

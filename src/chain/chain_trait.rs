@@ -1,10 +1,12 @@
 use std::{collections::HashMap, error::Error};
 
 use async_trait::async_trait;
+use serde_json::{json, Value};
 
 use crate::{language_models::GenerateResult, prompt::PromptArgs};
 
 pub(crate) const DEFAULT_OUTPUT_KEY: &str = "output";
+pub(crate) const DEFAULT_RESULT_KEY: &str = "generate_result";
 
 #[async_trait]
 pub trait Chain: Sync + Send {
@@ -20,16 +22,18 @@ pub trait Chain: Sync + Send {
     async fn execute(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<HashMap<String, String>, Box<dyn Error>> {
+    ) -> Result<HashMap<String, Value>, Box<dyn Error>> {
         log::info!("Using defualt implementation");
-        let result = self.invoke(input_variables.clone()).await?;
-        let output = self
+        let result = self.call(input_variables.clone()).await?;
+        let mut output = HashMap::new();
+        let output_key = self
             .get_output_keys()
-            .first()
-            .unwrap_or(&String::from(DEFAULT_OUTPUT_KEY))
+            .get(0)
+            .unwrap_or(&DEFAULT_OUTPUT_KEY.to_string())
             .clone();
-
-        Ok(HashMap::from([(output, result)]))
+        output.insert(output_key, json!(result.generation));
+        output.insert(DEFAULT_RESULT_KEY.to_string(), json!(result));
+        Ok(output)
     }
 
     // Get the input keys of the prompt
