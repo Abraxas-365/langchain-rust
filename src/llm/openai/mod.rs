@@ -40,6 +40,12 @@ impl ToString for OpenAIModel {
     }
 }
 
+impl Into<String> for OpenAIModel {
+    fn into(self) -> String {
+        self.to_string()
+    }
+}
+
 #[derive(Clone)]
 pub struct OpenAI {
     config: OpenAIConfig,
