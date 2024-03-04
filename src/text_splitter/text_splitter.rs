@@ -115,12 +115,3 @@ pub(crate) fn should_pop(
     current_doc_len > 0
         && (total > chunk_overlap || (total + split_len + separator_len > chunk_size && total > 0))
 }
-
-// func shouldPop(chunkOverlap, chunkSize, total, splitLen, separatorLen, currentDocLen int) bool {
-// 	docsNeededToAddSep := 2
-// 	if currentDocLen < docsNeededToAddSep {
-// 		separatorLen = 0
-// 	}
-//
-// 	return currentDocLen > 0 && (total > chunkOverlap || (total+splitLen+separatorLen > chunkSize && total > 0))
-// }
