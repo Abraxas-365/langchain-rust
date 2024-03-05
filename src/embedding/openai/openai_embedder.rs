@@ -37,24 +37,41 @@ struct UsageData {
 }
 #[derive(Debug)]
 pub struct OpenAiEmbedder {
-    pub model: String,
-    pub openai_key: String,
+    pub(crate) model: String,
+    pub(crate) openai_key: String,
+    pub(crate) base_url: String,
 }
 impl OpenAiEmbedder {
-    pub fn new(openai_key: String) -> Self {
+    pub fn new<S: Into<String>>(openai_key: S, model: S, base_url: S) -> Self {
         OpenAiEmbedder {
-            model: String::from("text-embedding-ada-002"),
-            openai_key,
+            model: model.into(),
+            openai_key: openai_key.into(),
+            base_url: base_url.into(),
         }
+    }
+
+    pub fn with_model<S: Into<String>>(mut self, model: S) -> Self {
+        self.model = model.into();
+        self
+    }
+
+    pub fn with_api_key<S: Into<String>>(mut self, openai_key: S) -> Self {
+        self.openai_key = openai_key.into();
+        self
+    }
+
+    pub fn with_api_base<S: Into<String>>(mut self, base_url: S) -> Self {
+        self.base_url = base_url.into();
+        self
     }
 }
 
 impl Default for OpenAiEmbedder {
     fn default() -> Self {
-        OpenAiEmbedder {
-            model: String::from("text-embedding-ada-002"),
-            openai_key: env::var("OPENAI_API_KEY").unwrap_or(String::new()),
-        }
+        let model = String::from("text-embedding-ada-002");
+        let openai_key = env::var("OPENAI_API_KEY").unwrap_or(String::new());
+        let base_url = String::from("https://api.openai.com/v1/embeddings");
+        OpenAiEmbedder::new(openai_key, model, base_url)
     }
 }
 
@@ -63,7 +80,7 @@ impl Embedder for OpenAiEmbedder {
     async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
         log::debug!("Embedding documents: {:?}", documents);
         let client = Client::new();
-        let url = Url::parse("https://api.openai.com/v1/embeddings")?;
+        let url = Url::parse(&self.base_url)?;
         let res = client
             .post(url)
             .bearer_auth(&self.openai_key)
