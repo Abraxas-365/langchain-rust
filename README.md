@@ -29,7 +29,7 @@ _PLS use the version 2.x.x_ This is the most stable release
 ### Installation
 
 ```bash
-cargo add langchain-rust
+cargo add langchain-rust --features postgres
 ```
 
 ### Building with LangChain[​](https://python.langchain.com/docs/get_started/quickstart#building-with-langchain) <a href="#building-with-langchain" id="building-with-langchain"></a>
