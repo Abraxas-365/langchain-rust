@@ -5,8 +5,8 @@ use tiktoken_rs::{get_bpe_from_model, get_bpe_from_tokenizer, tokenizer::Tokeniz
 use super::{SplitterOptions, TextSplitter};
 
 pub struct TokenSplitter {
-    chunk_size: i32,
-    chunk_overlap: i32,
+    chunk_size: usize,
+    chunk_overlap: usize,
     model_name: String,
     encoding_name: String,
     allowed_special: Vec<String>,
@@ -43,17 +43,17 @@ impl TokenSplitter {
             self.allowed_special.iter().map(|s| s.as_str()).collect();
         let input_ids = tokenizer.encode(text, allowed_special);
         let mut start_idx = 0;
-        let mut cur_idx = input_ids.len() as i32;
-        if start_idx + self.chunk_size < cur_idx as i32 {
+        let mut cur_idx = input_ids.len();
+        if start_idx + self.chunk_size < cur_idx {
             cur_idx = start_idx + self.chunk_size;
         }
-        while start_idx < input_ids.len() as i32 {
+        while start_idx < input_ids.len() {
             let chunk_ids = input_ids[start_idx as usize..cur_idx as usize].to_vec();
             splits.push(tokenizer.decode(chunk_ids).unwrap_or_default());
             start_idx += self.chunk_size - self.chunk_overlap;
             cur_idx = start_idx + self.chunk_size;
-            if cur_idx > input_ids.len() as i32 {
-                cur_idx = input_ids.len() as i32;
+            if cur_idx > input_ids.len() {
+                cur_idx = input_ids.len();
             }
         }
         splits

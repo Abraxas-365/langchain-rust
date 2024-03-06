@@ -1,15 +1,18 @@
+use super::TextSplitter;
+
 // Options is a struct that contains options for a text splitter.
 pub struct SplitterOptions {
-    pub chunk_size: i32,
-    pub chunk_overlap: i32,
+    pub chunk_size: usize,
+    pub chunk_overlap: usize,
     pub separators: Vec<String>,
-    pub len_func: Option<Box<dyn Fn(&str) -> usize>>,
+    pub len_func: fn(&str) -> usize,
     pub model_name: String,
     pub encoding_name: String,
     pub allowed_special: Vec<String>,
     pub disallowed_special: Vec<String>,
     pub code_blocks: bool,
     pub reference_links: bool,
+    pub second_splitter: Option<Box<dyn TextSplitter>>,
 }
 
 impl Default for SplitterOptions {
@@ -24,12 +27,13 @@ impl SplitterOptions {
             chunk_size: 512,
             chunk_overlap: 100,
             separators: vec!["\n\n".into(), "\n".into(), " ".into(), "".into()],
-            len_func: Some(Box::new(|s: &str| s.chars().count())),
+            len_func: |s| s.chars().count(),
             model_name: String::from("gpt-3.5-turbo"),
             encoding_name: String::from("cl100k_base"),
             allowed_special: Vec::new(),
             disallowed_special: Vec::from(["all".into()]),
             code_blocks: false,
+            second_splitter: None,
             reference_links: false,
         }
     }
@@ -37,12 +41,12 @@ impl SplitterOptions {
 
 // Builder pattern for Options struct
 impl SplitterOptions {
-    pub fn with_chunk_size(mut self, chunk_size: i32) -> Self {
+    pub fn with_chunk_size(mut self, chunk_size: usize) -> Self {
         self.chunk_size = chunk_size;
         self
     }
 
-    pub fn with_chunk_overlap(mut self, chunk_overlap: i32) -> Self {
+    pub fn with_chunk_overlap(mut self, chunk_overlap: usize) -> Self {
         self.chunk_overlap = chunk_overlap;
         self
     }
@@ -52,8 +56,8 @@ impl SplitterOptions {
         self
     }
 
-    pub fn with_len_func(mut self, len_func: Box<dyn Fn(&str) -> usize>) -> Self {
-        self.len_func = Some(len_func);
+    pub fn with_len_func(mut self, len_func: fn(&str) -> usize) -> Self {
+        self.len_func = len_func;
         self
     }
 
@@ -84,6 +88,11 @@ impl SplitterOptions {
 
     pub fn with_reference_links(mut self, reference_links: bool) -> Self {
         self.reference_links = reference_links;
+        self
+    }
+
+    pub fn with_second_splitter<TS: TextSplitter + 'static>(mut self, second_splitter: TS) -> Self {
+        self.second_splitter = Some(Box::new(second_splitter));
         self
     }
 }
