@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+      branches:
+      - main
+  push:
+    branches:
+      - main
+    tags:
+      - 'v0.[0-9]+.[0-9]+'
+      - 'v0.[0-9]+.[0-9]+-beta.[0-9]+'
+      - 'v0.[0-9]+.[0-9]+-alpha.[0-9]+'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # emit backtraces on panics.
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Get the build metadata
+        shell: bash
+        run: |
+          echo "TAG_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+          echo "CARGO_VERSION=$(grep -m 1 '^version = ' Cargo.toml | cut -f 3 -d ' ' | tr -d \")" >> $GITHUB_ENV
+      - name: Validate git tag and Cargo.toml version
+        shell: bash
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [ "${{ env.TAG_VERSION }}" != "v${{ env.CARGO_VERSION }}" ]; then
+            echo "git tag version (${{ env.TAG_VERSION }}) does not match Cargo.toml version (v${{ env.CARGO_VERSION }})"
+            exit 1
+          fi
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+          components: rustfmt, clippy
+      - uses: swatinem/rust-cache@v2.7.3
+      - name: rust fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+      - name: Build release
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --verbose --all --release --all-features
+
+  publish_crate:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Login to crates.io
+        uses: actions-rs/cargo@v1
+        with:
+          command: login
+          args: ${{ secrets.CRATES_TOKEN }}
+      - name: Publish langchain-rust to crates.io
+        uses: actions-rs/cargo@v1
+        with:
+          command: publish
+          args: --all-features
