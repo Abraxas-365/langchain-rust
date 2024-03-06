@@ -4,16 +4,16 @@ use super::{SplitterOptions, TextSplitter};
 
 // RecursiveCharacter is a text splitter that will split texts recursively by different
 // characters.
-pub struct RecursiveCharacter {
+pub struct RecursiveCharacterSplitter {
     pub separators: Vec<String>,
     pub chunk_size: usize,
     pub chunk_overlap: usize,
     pub len_func: fn(&str) -> usize,
 }
 
-impl RecursiveCharacter {
+impl RecursiveCharacterSplitter {
     pub fn new(opt: SplitterOptions) -> Self {
-        RecursiveCharacter {
+        RecursiveCharacterSplitter {
             separators: opt.separators,
             chunk_size: opt.chunk_size,
             chunk_overlap: opt.chunk_overlap,
@@ -22,7 +22,13 @@ impl RecursiveCharacter {
     }
 }
 
-impl TextSplitter for RecursiveCharacter {
+impl Default for RecursiveCharacterSplitter {
+    fn default() -> Self {
+        Self::new(SplitterOptions::default())
+    }
+}
+
+impl TextSplitter for RecursiveCharacterSplitter {
     fn split_text(&self, text: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut final_chunks = Vec::new();
 
@@ -102,7 +108,7 @@ mod tests {
         let chunk_size = 10;
         let chunk_overlap = 0;
 
-        let splitter = RecursiveCharacter {
+        let splitter = RecursiveCharacterSplitter {
             separators,
             chunk_size,
             chunk_overlap,
@@ -122,7 +128,7 @@ mod tests {
         let chunk_size = 20;
         let chunk_overlap = 1;
 
-        let splitter = RecursiveCharacter {
+        let splitter = RecursiveCharacterSplitter {
             separators,
             chunk_size,
             chunk_overlap,

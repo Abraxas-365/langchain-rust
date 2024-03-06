@@ -1,3 +1,5 @@
+use super::TextSplitter;
+
 // Options is a struct that contains options for a text splitter.
 pub struct SplitterOptions {
     pub chunk_size: usize,
@@ -10,6 +12,7 @@ pub struct SplitterOptions {
     pub disallowed_special: Vec<String>,
     pub code_blocks: bool,
     pub reference_links: bool,
+    pub second_splitter: Option<Box<dyn TextSplitter>>,
 }
 
 impl Default for SplitterOptions {
@@ -30,6 +33,7 @@ impl SplitterOptions {
             allowed_special: Vec::new(),
             disallowed_special: Vec::from(["all".into()]),
             code_blocks: false,
+            second_splitter: None,
             reference_links: false,
         }
     }
@@ -84,6 +88,11 @@ impl SplitterOptions {
 
     pub fn with_reference_links(mut self, reference_links: bool) -> Self {
         self.reference_links = reference_links;
+        self
+    }
+
+    pub fn with_second_splitter<TS: TextSplitter + 'static>(mut self, second_splitter: TS) -> Self {
+        self.second_splitter = Some(Box::new(second_splitter));
         self
     }
 }
