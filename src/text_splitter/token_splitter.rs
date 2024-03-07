@@ -4,6 +4,7 @@ use tiktoken_rs::{get_bpe_from_model, get_bpe_from_tokenizer, tokenizer::Tokeniz
 
 use super::{SplitterOptions, TextSplitter};
 
+#[derive(Debug, Clone)]
 pub struct TokenSplitter {
     chunk_size: usize,
     model_name: String,
