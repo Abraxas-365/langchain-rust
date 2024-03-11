@@ -321,14 +321,13 @@ mod tests {
             move |content: String| {
                 let message_complete = message_complete.clone();
                 async move {
-                    let content = serde_json::from_str::<ChatChoiceStream>(&content)
-                        .unwrap()
-                        .delta
-                        .content
-                        .unwrap();
+                    let content = serde_json::from_str::<ChatChoiceStream>(&content).unwrap();
+                    if content.finish_reason.is_some() {
+                        return Ok(());
+                    }
                     let mut message_complete_lock = message_complete.lock().await;
                     println!("Content: {:?}", content);
-                    message_complete_lock.push_str(&content);
+                    message_complete_lock.push_str(&content.delta.content.unwrap());
                     Ok(())
                 }
             }
