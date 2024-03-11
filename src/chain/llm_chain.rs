@@ -136,6 +136,7 @@ mod tests {
     };
 
     use super::*;
+    use async_openai::types::ChatChoiceStream;
     use futures::lock::Mutex;
 
     #[tokio::test]
@@ -155,6 +156,11 @@ mod tests {
             move |content: String| {
                 let message_complete = message_complete.clone();
                 async move {
+                    let content = serde_json::from_str::<ChatChoiceStream>(&content)
+                        .unwrap()
+                        .delta
+                        .content
+                        .unwrap();
                     let mut message_complete_lock = message_complete.lock().await;
                     println!("Content: {:?}", content);
                     message_complete_lock.push_str(&content);
