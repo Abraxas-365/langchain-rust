@@ -3,7 +3,7 @@ use std::{error::Error, pin::Pin, sync::Arc};
 use async_openai::{
     config::OpenAIConfig,
     types::{
-        ChatCompletionFunctions, ChatCompletionFunctionsArgs,
+        ChatChoiceStream, ChatCompletionFunctions, ChatCompletionFunctionsArgs,
         ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
         CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
@@ -141,8 +141,12 @@ impl LLM for OpenAI {
                         Ok(response) => {
                             for chat_choice in response.choices.iter() {
                                 if let Some(ref content) = chat_choice.delta.content {
+                                    let chat_choice: ChatChoiceStream = chat_choice.clone();
                                     let mut func = func.lock().await;
-                                    let _ = func(content.clone()).await;
+                                    let _ = func(
+                                        serde_json::to_string(&chat_choice).unwrap_or("".into()),
+                                    )
+                                    .await;
                                     complete_response.push_str(content);
                                 }
                             }
@@ -318,6 +322,11 @@ mod tests {
             move |content: String| {
                 let message_complete = message_complete.clone();
                 async move {
+                    let content = serde_json::from_str::<ChatChoiceStream>(&content)
+                        .unwrap()
+                        .delta
+                        .content
+                        .unwrap();
                     let mut message_complete_lock = message_complete.lock().await;
                     println!("Content: {:?}", content);
                     message_complete_lock.push_str(&content);
