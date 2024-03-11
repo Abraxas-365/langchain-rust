@@ -32,7 +32,7 @@ tiktoken-rs = "0.5.8"
 sqlx = { version = "0.7.3", features = ["postgres", "runtime-tokio-native-tls", "json", "uuid" ], optional = true }
 uuid = {version = "1.7.0", features = ["v4"], optional = true }
 pgvector = {version = "0.3.2", features = ["postgres", "sqlx"], optional = true }
-text-splitter = { version = "0.6", features = ["tiktoken-rs"] }
+text-splitter = { version = "0.7", features = ["tiktoken-rs","markdown"] }
 
 
 [features]
