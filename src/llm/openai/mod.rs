@@ -141,11 +141,13 @@ impl LLM for OpenAI {
                         Ok(response) => {
                             for chat_choice in response.choices.iter() {
                                 let chat_choice: ChatChoiceStream = chat_choice.clone();
-                                log::debug!("Chat Choice: {:?}", chat_choice);
-                                let mut func = func.lock().await;
-                                let _ =
-                                    func(serde_json::to_string(&chat_choice).unwrap_or("".into()))
-                                        .await;
+                                {
+                                    let mut func = func.lock().await;
+                                    let _ = func(
+                                        serde_json::to_string(&chat_choice).unwrap_or("".into()),
+                                    )
+                                    .await;
+                                }
                                 if let Some(content) = chat_choice.delta.content {
                                     complete_response.push_str(&content);
                                 }
