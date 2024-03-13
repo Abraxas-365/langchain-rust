@@ -1,4 +1,4 @@
-//To run this example ecute: cargo run --example vectore_stores --features postgres
+// To run this example execute: cargo run --example vector_stores --features postgres
 use langchain_rust::{
     add_documents,
     embedding::openai::openai_embedder::OpenAiEmbedder,
@@ -11,10 +11,10 @@ use tokio::io::{self, AsyncBufReadExt, BufReader};
 
 #[tokio::main]
 async fn main() {
-    //Inicializo el ebedder
+    // Initialize Embedder
     let embedder = OpenAiEmbedder::default();
 
-    //Inicializo el Vectore Store de postgres
+    // Initialize the Postgres Vector Store
     let store = StoreBuilder::new()
         .embedder(embedder)
         .pre_delete_collection(true)
@@ -24,27 +24,27 @@ async fn main() {
         .await
         .unwrap();
 
-    //Obtiene el input con lista de palabras
+    // Get input with words list
     let mut input = String::new();
-    print!("Please, enter a list separated by commas: ");
+    print!("Please enter a list separated by commas: ");
     std::io::stdout().flush().unwrap();
     let mut reader = BufReader::new(io::stdin());
     reader.read_line(&mut input).await.unwrap();
     let input = input.trim_end();
     let list: Vec<&str> = input.split(',').collect();
 
-    //Lo vulevo una lista de documentos
+    // Transform it to a list of documents
     let documents: Vec<Document> = list
         .iter()
         .map(|text| Document::new(text.trim().to_string()))
         .collect();
 
-    //Anado los documetos a la base de datos
+    // Add documents to the database
     let _ = add_documents!(store, &documents).await.map_err(|e| {
         println!("Error adding documents: {:?}", e);
     });
 
-    //Se obtiene el input que buscar
+    // Get the input to search
     let mut search_input = String::new();
     print!("Please enter the text you want to search: ");
     std::io::stdout().flush().unwrap();
@@ -52,7 +52,7 @@ async fn main() {
     reader.read_line(&mut search_input).await.unwrap();
     let search_input = search_input.trim_end();
 
-    //Se hace un similarity search en la base de datos
+    // Perform a similarity search in the database
     let data = similarity_search!(store, search_input, 10)
         .await
         .map_err(|e| {
