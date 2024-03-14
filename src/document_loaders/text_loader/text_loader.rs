@@ -4,6 +4,7 @@ use async_trait::async_trait;
 
 use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
 
+#[derive(Debug, Clone)]
 pub struct TextLoader {
     content: String,
 }
