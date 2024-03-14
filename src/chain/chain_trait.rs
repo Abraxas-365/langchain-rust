@@ -1,6 +1,7 @@
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, pin::Pin};
 
 use async_trait::async_trait;
+use futures::Stream;
 use serde_json::{json, Value};
 
 use crate::{language_models::GenerateResult, prompt::PromptArgs};
@@ -34,6 +35,17 @@ pub trait Chain: Sync + Send {
         output.insert(output_key, json!(result.generation));
         output.insert(DEFAULT_RESULT_KEY.to_string(), json!(result));
         Ok(output)
+    }
+
+    async fn stream(
+        &self,
+        _input_variables: PromptArgs,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
+        Box<dyn Error>,
+    > {
+        log::warn!("stream not implemented for this chain");
+        unimplemented!()
     }
 
     // Get the input keys of the prompt

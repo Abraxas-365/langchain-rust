@@ -11,7 +11,7 @@ use async_openai::{
     Client,
 };
 use async_trait::async_trait;
-use futures::{Future, StreamExt};
+use futures::{Future, Stream, StreamExt};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -191,6 +191,28 @@ impl LLM for OpenAI {
             .map(|res| res.generation)
     }
 
+    async fn stream(
+        &self,
+        messages: &[Message],
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
+        Box<dyn Error>,
+    > {
+        let client = Client::with_config(self.config.clone());
+        let request = self.generate_request(messages)?;
+
+        let original_stream = client.chat().create_stream(request).await?;
+
+        let new_stream = original_stream.map(|result| match result {
+            Ok(completion) => {
+                serde_json::to_value(completion).map_err(|e| Box::new(e) as Box<dyn Error + Send>)
+            }
+            Err(e) => Err(Box::new(e) as Box<dyn Error + Send>),
+        });
+
+        Ok(Box::pin(new_stream))
+    }
+
     fn with_options(&mut self, options: CallOptions) {
         self.max_tokens = options.max_tokens.unwrap_or(256);
         self.stop_words = options.stop_words;
@@ -355,5 +377,33 @@ mod tests {
                 eprintln!("Error calling generate: {:?}", e);
             }
         }
+    }
+
+    #[test]
+    async fn test_openai_stream() {
+        let options = CallOptions::new();
+        // Setup the OpenAI client with the necessary options
+        let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35.to_string());
+
+        // Define a set of messages to send to the generate function
+        let messages = vec![Message::new_human_message("Hello, how are you?")];
+
+        open_ai
+            .stream(&messages)
+            .await
+            .unwrap()
+            .for_each(|result| async {
+                match result {
+                    Ok(response) => {
+                        if let Some(content) = response.pointer("/choices/0/delta/content") {
+                            println!("Content: {}", content.as_str().unwrap_or(""));
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error: {:?}", e);
+                    }
+                }
+            })
+            .await;
     }
 }
