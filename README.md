@@ -28,8 +28,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 - [Agentes](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/agent.rs) : Agent implementation for complex tasks
 
-- Todo:
-- [ ] Create examples with streams
+- [Streaming from a Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/streaming_from_chain.rs) : Streming example
 
 ## Installation
 
