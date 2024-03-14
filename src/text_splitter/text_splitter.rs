@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::schemas::Document;
 
-pub trait TextSplitter {
+pub trait TextSplitter: Send + Sync {
     fn split_text(&self, text: &str) -> Result<Vec<String>, Box<dyn Error>>;
 
     fn split_documents(&self, documents: &[Document]) -> Result<Vec<Document>, Box<dyn Error>> {
