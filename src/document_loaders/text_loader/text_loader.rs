@@ -1,35 +1,29 @@
 use std::error::Error;
 
 use async_trait::async_trait;
-use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 
-use crate::{document_loaders::Loader, schemas::Document};
+use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
 
-pub struct TextLoader<R: AsyncRead> {
-    pub(crate) reader: R,
+pub struct TextLoader {
+    content: String,
 }
 
-impl<R: AsyncRead> TextLoader<R> {
-    pub fn new(reader: R) -> Self {
-        Self { reader }
+impl TextLoader {
+    pub fn new<T: Into<String>>(input: T) -> Self {
+        Self {
+            content: input.into(),
+        }
     }
 }
 
 #[async_trait]
-impl<R: AsyncRead + Unpin + Send + Sync> Loader for TextLoader<R> {
-    async fn load(&mut self) -> Result<Vec<Document>, Box<dyn Error>> {
-        let mut reader = BufReader::new(&mut self.reader);
-        let mut buffer = Vec::new();
-
-        reader.read_to_end(&mut buffer).await?;
-
-        let buffer_string = std::str::from_utf8(&buffer)?.to_owned();
-
-        Ok(vec![Document::new(buffer_string)])
+impl Loader for TextLoader {
+    async fn load(mut self) -> Result<Vec<Document>, Box<dyn Error>> {
+        Ok(vec![Document::new(self.content.clone())])
     }
 
-    async fn load_and_split<TS: crate::text_splitter::TextSplitter + 'static>(
-        &mut self,
+    async fn load_and_split<TS: TextSplitter + 'static>(
+        mut self,
         splitter: TS,
     ) -> Result<Vec<Document>, Box<dyn Error>> {
         let documents = self.load().await?;
@@ -40,24 +34,21 @@ impl<R: AsyncRead + Unpin + Send + Sync> Loader for TextLoader<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use super::*;
 
     #[tokio::test]
-    async fn test_load() {
-        let data = b"Hello, world!";
-        let reader = Cursor::new(data as &[u8]);
-        let mut loader = crate::document_loaders::TextLoader { reader };
+    async fn test_reading_mocked_file_content() {
+        let mocked_file_content = "This is the content of the mocked file.";
 
-        let result = crate::document_loaders::Loader::load(&mut loader).await;
+        // Create a new TextLoader with the mocked content
+        let loader = TextLoader::new(mocked_file_content.to_string());
 
-        match result {
-            Ok(docs) => {
-                assert_eq!(docs.len(), 1);
-                assert_eq!(docs[0].page_content, "Hello, world!");
-            }
-            Err(e) => {
-                panic!("Error during loading: {}", e);
-            }
-        }
+        // Use the loader to load the content, which should be wrapped in a Document
+        let documents = loader.load().await.expect("Failed to load content");
+
+        // Assert that the documents contain the expected content
+        // This part depends on how your Document struct is defined and how you want to verify its content
+        assert_eq!(documents.len(), 1); // Assuming the content should be wrapped in a single Document
+        assert_eq!(documents[0].page_content, mocked_file_content); // Ensure the Document contains the mocked content
     }
 }
