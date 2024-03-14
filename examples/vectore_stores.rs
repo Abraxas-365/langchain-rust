@@ -1,4 +1,6 @@
 // To run this example execute: cargo run --example vector_stores --features postgres
+
+#[cfg(feature = "postgres")]
 use langchain_rust::{
     add_documents,
     embedding::openai::openai_embedder::OpenAiEmbedder,
@@ -6,9 +8,12 @@ use langchain_rust::{
     similarity_search,
     vectorstore::{pgvector::StoreBuilder, VectorStore},
 };
+#[cfg(feature = "postgres")]
 use std::io::Write;
+#[cfg(feature = "postgres")]
 use tokio::io::{self, AsyncBufReadExt, BufReader};
 
+#[cfg(feature = "postgres")]
 #[tokio::main]
 async fn main() {
     // Initialize Embedder
@@ -61,4 +66,11 @@ async fn main() {
         .unwrap();
 
     data.iter().for_each(|d| println!("{:?}", d.page_content));
+}
+
+#[cfg(not(feature = "postgres"))]
+fn main() {
+    println!("This example requires the 'postgres' feature to be enabled.");
+    println!("Please run the command as follows:");
+    println!("cargo run --example vector_stores --features postgres");
 }
