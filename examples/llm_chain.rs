@@ -72,7 +72,7 @@ async fn main() {
         .unwrap();
     match chain
         .invoke(prompt_args! {
-        "input" => "Quien es el escritor de 20000 millas de viaje submarino, y como me llamo",
+        "input" => "Who is the writer of 20,000 Leagues Under the Sea, and what is my name?",
         "history" => vec![
                 Message::new_human_message("My name is: luis"),
                 Message::new_ai_message("Hi luis"),
