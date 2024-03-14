@@ -31,7 +31,7 @@ async fn main() {
 
     let mut stream = chain
         .stream(prompt_args! {
-        "input" => "Quien es el escritor de 20000 millas de viaje submarino",
+        "input" => "Who is the writer of 20,000 Leagues Under the Sea?",
            })
         .await
         .unwrap();
