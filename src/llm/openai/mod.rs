@@ -3,10 +3,10 @@ use std::{error::Error, pin::Pin, sync::Arc};
 use async_openai::{
     config::OpenAIConfig,
     types::{
-        ChatChoiceStream, ChatCompletionFunctions, ChatCompletionFunctionsArgs,
-        ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-        CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+        ChatChoiceStream, ChatCompletionFunctionsArgs, ChatCompletionRequestAssistantMessageArgs,
+        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequest,
+        CreateChatCompletionRequestArgs,
     },
     Client,
 };
@@ -248,7 +248,7 @@ impl OpenAI {
         }
 
         if let Some(behavior) = &self.functions {
-            let mut functions: Vec<ChatCompletionFunctions> = Vec::new();
+            let mut functions = Vec::new();
             for f in behavior.iter() {
                 let tool = ChatCompletionFunctionsArgs::default()
                     .name(f.name.clone())
