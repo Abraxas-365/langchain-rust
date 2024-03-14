@@ -90,8 +90,14 @@ impl Embedder for OpenAiEmbedder {
             }))
             .send()
             .await?;
+
         if res.status() != 200 {
-            return Err("Error from OPENAI".into());
+            let error_message: String = res
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read error message".into());
+            log::error!("Error from OpenAI: {}", &error_message);
+            return Err(error_message.into());
         }
 
         let data: EmbeddingResponse = res.json().await?;
@@ -114,8 +120,12 @@ impl Embedder for OpenAiEmbedder {
             .await?;
 
         if res.status() != 200 {
-            log::error!("Error from OPENAI: {}", &res.status());
-            return Err("Error from OPENAI".into());
+            let error_message: String = res
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read error message".into());
+            log::error!("Error from OpenAI: {}", &error_message);
+            return Err(error_message.into());
         }
         let data: EmbeddingResponse = res.json().await?;
         Ok(data.extract_embedding())
