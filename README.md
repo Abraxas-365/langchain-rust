@@ -14,11 +14,7 @@
 
 This is the Rust language implementation of [LangChain](https://github.com/langchain-ai/langchain).
 
-# Version
-
-_PLS use the version 2.x.x_ This is the most stable release
-
-# Examples
+## Examples
 
 - [rcommit](https://github.com/Abraxas-365/rcommit): rcommit allows you to create git commits with AI
 
@@ -35,7 +31,50 @@ _PLS use the version 2.x.x_ This is the most stable release
 - Todo:
 - [ ] Create examples with streams
 
-## Quick Start Conversational Chain
+## Installation
+
+This library heavily relies on `serde_json` for its operation.
+
+### Step 1: Add `serde_json`
+
+First, ensure `serde_json` is added to your Rust project.
+
+```bash
+cargo add serde_json
+```
+
+### Step 2: Add `langchain-rust`
+
+Then, you can add `langchain-rust` to your Rust project.
+
+#### Simple install
+
+```bash
+cargo add langchain-rust
+```
+
+#### With Postgres
+
+```bash
+cargo add langchain-rust --features postgres
+```
+
+#### With SurrialDB
+
+```bash
+cargo add langchain-rust --features surrealdb
+```
+
+Please remember to replace the feature flags `postgres` or `surrealdb` based on your
+specific use case.
+
+This will add both `serde_json` and `langchain-rust` as dependencies in your `Cargo.toml`
+file. Now, when you build your project, both dependencies will be fetched and compiled, and will be available for use in your project.
+
+Remember, `serde_json` is a necessary dependencies, and `postgres` and `surrealdb`
+are optional features that may be added according to project needs.
+
+### Quick Start Conversational Chain
 
 ```rust
 use langchain_rust::{
