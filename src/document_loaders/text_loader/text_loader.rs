@@ -46,8 +46,6 @@ mod tests {
         // Use the loader to load the content, which should be wrapped in a Document
         let documents = loader.load().await.expect("Failed to load content");
 
-        // Assert that the documents contain the expected content
-        // This part depends on how your Document struct is defined and how you want to verify its content
         assert_eq!(documents.len(), 1); // Assuming the content should be wrapped in a single Document
         assert_eq!(documents[0].page_content, mocked_file_content); // Ensure the Document contains the mocked content
     }
