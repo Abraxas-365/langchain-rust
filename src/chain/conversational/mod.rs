@@ -1,6 +1,7 @@
-use std::{error::Error, sync::Arc};
+use std::{error::Error, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
+use futures::Stream;
 use tokio::sync::Mutex;
 
 use crate::{
@@ -67,6 +68,16 @@ impl Chain for ConversationalChain {
         memory.add_message(Message::new_ai_message(&input_variables["input"]));
         memory.add_message(Message::new_ai_message(&result));
         Ok(result)
+    }
+
+    async fn stream(
+        &self,
+        input_variables: PromptArgs,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
+        Box<dyn Error>,
+    > {
+        self.llm.stream(input_variables).await
     }
 
     fn get_input_keys(&self) -> Vec<String> {
