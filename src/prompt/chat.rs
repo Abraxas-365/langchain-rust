@@ -4,8 +4,16 @@ use crate::schemas::{messages::Message, prompt::PromptValue};
 
 use super::{FormatPrompter, MessageFormatter, PromptArgs, PromptFromatter, PromptTemplate};
 
-/// A template for creating human-readable messages.
-
+/// Struct `HumanMessagePromptTemplate` defines a template for creating human (user) messages.
+/// `PromptTemplate` is used to generate the message template.
+///
+/// # Usage
+/// ```rust,ignore
+/// let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
+///    "User says: {content}",
+///    "content",
+/// ));
+/// ```
 #[derive(Clone)]
 pub struct HumanMessagePromptTemplate {
     prompt: PromptTemplate,
@@ -43,7 +51,17 @@ impl FormatPrompter for HumanMessagePromptTemplate {
     }
 }
 
-/// A template for creating system messages.
+/// Struct `SystemMessagePromptTemplate` defines a template for creating system-level messages.
+/// `PromptTemplate` is used to generate the message template.
+///
+/// # Usage
+/// ```rust,ignore
+/// let system_message_prompt = SystemMessagePromptTemplate::new(template_fstring!(
+///    "System alert: {alert_type} {alert_detail}",
+///    "alert_type",
+///    "alert_detail"
+/// ));
+/// ```
 #[derive(Clone)]
 pub struct SystemMessagePromptTemplate {
     prompt: PromptTemplate,
@@ -82,7 +100,16 @@ impl MessageFormatter for SystemMessagePromptTemplate {
     }
 }
 
-/// A template for creating AI (assistant) messages.
+/// Struct `AIMessagePromptTemplate` defines a template for creating AI (assistant) messages.
+/// `PromptTemplate` is used to generate the message template.
+///
+/// # Usage
+/// ```rust,ignore
+/// let ai_message_prompt = AIMessagePromptTemplate::new(template_fstring!(
+///    "AI response: {content} {additional_info}",
+///    "content",
+///    "additional_info"
+/// ));
 #[derive(Clone)]
 pub struct AIMessagePromptTemplate {
     prompt: PromptTemplate,
@@ -127,7 +154,14 @@ pub enum MessageOrTemplate {
     MessagesPlaceholder(String),
 }
 
-// Macro for formatting a `Message` variant for the formatter
+/// `fmt_message` is a utility macro used to create a `MessageOrTemplate::Message` variant.
+///
+/// # Usage
+/// The macro is called with a `Message` object. For example:
+/// ```rust,ignore
+/// let message = Message::new_human_message("Hello World");
+/// fmt_message!(message) // Returns a `MessageOrTemplate::Message` variant that wraps the `Message` object
+/// ```
 #[macro_export]
 macro_rules! fmt_message {
     ($msg:expr) => {
@@ -135,7 +169,17 @@ macro_rules! fmt_message {
     };
 }
 
-// Macro for formatting a `Template` variant for the formatter
+/// `fmt_template` is a utility macro used to create a `MessageOrTemplate::Template` variant.
+///
+/// # Usage
+/// The macro is called with a `MessageFormatter` object, for instance `HumanMessagePromptTemplate`,
+/// `SystemMessagePromptTemplate`, `AIMessagePromptTemplate` or any other implementation of `MessageFormatter`.
+///
+/// ```rust,ignore
+/// let prompt_template = HumanMessagePromptTemplate::new(template);
+/// fmt_template!(prompt_template)
+/// ```
+/// This returns a `MessageOrTemplate::Template` variant that wraps the `MessageFormatter` object within a Box.
 #[macro_export]
 macro_rules! fmt_template {
     ($template:expr) => {
@@ -143,7 +187,14 @@ macro_rules! fmt_template {
     };
 }
 
-// Macro for formatting a `MessagesPlaceholder` variant for the formatter
+/// `fmt_placeholder` is a utility macro used to create a `MessageOrTemplate::MessagesPlaceholder` variant.
+///
+/// # Usage
+/// The macro is called with a string literal or a String object:
+/// ```rust,ignore
+/// fmt_placeholder!("Placeholder message")
+/// ```
+/// This returns a `MessageOrTemplate::MessagesPlaceholder` variant that wraps the given string.
 #[macro_export]
 macro_rules! fmt_placeholder {
     ($placeholder:expr) => {
@@ -224,6 +275,28 @@ impl FormatPrompter for MessageFormatterStruct {
 }
 
 #[macro_export]
+// A macro for creating a new MessageFormatterStruct with various types of messages.
+///
+///# Example
+/// ```rust,ignore
+/// // Create an AI message prompt template
+/// let ai_message_prompt = AIMessagePromptTemplate::new(
+/// template_fstring!(
+///     "AI response: {content} {test}",
+///     "content",
+///     "test"
+/// ));
+///
+///
+/// let human_msg = Message::new_human_message("Hello from user");
+///
+/// // Use the `message_formatter` macro to construct the formatter.
+/// let formatter = message_formatter![
+///     fmt_message!(human_msg),
+///     fmt_template!(ai_message_prompt),
+///     fmt_placeholder!("history")
+/// ];
+/// ```
 macro_rules! message_formatter {
 ($($item:expr),* $(,)?) => {{
     let mut formatter = $crate::prompt::MessageFormatterStruct::new();

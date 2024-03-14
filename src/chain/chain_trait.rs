@@ -11,15 +11,99 @@ pub(crate) const DEFAULT_RESULT_KEY: &str = "generate_result";
 
 #[async_trait]
 pub trait Chain: Sync + Send {
-    //Call will return te output of the LLM plus the other metadata
+    /// Call the `Chain` and receive as output the result of the generation process along with
+    /// additional information like token consumption. The input is a set of variables passed
+    /// as a `PromptArgs` hashmap.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// # use crate::my_crate::{Chain, ConversationalChainBuilder, OpenAI, OpenAIModel, SimpleMemory, PromptArgs, prompt_args};
+    /// # async {
+    /// let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
+    /// let memory = SimpleMemory::new();
+    ///
+    /// let chain = ConversationalChainBuilder::new()
+    ///     .llm(llm)
+    ///     .memory(memory.into())
+    ///     .build().expect("Error building ConversationalChain");
+    ///
+    /// let input_variables = prompt_args! {
+    ///     "input" => "Im from Peru",
+    /// };
+    ///
+    /// match chain.call(input_variables).await {
+    ///     Ok(result) => {
+    ///         println!("Result: {:?}", result);
+    ///     },
+    ///     Err(e) => panic!("Error calling Chain: {:?}", e),
+    /// };
+    /// # };
+    /// ```
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>>;
 
-    //invoke its an eazy way to just return the string
+    /// Invoke the `Chain` and receive just the generation result as a String.
+    /// The input is a set of variables passed as a `PromptArgs` hashmap.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// # use crate::my_crate::{Chain, ConversationalChainBuilder, OpenAI, OpenAIModel, SimpleMemory, PromptArgs, prompt_args};
+    /// # async {
+    /// let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
+    /// let memory = SimpleMemory::new();
+    ///
+    /// let chain = ConversationalChainBuilder::new()
+    ///     .llm(llm)
+    ///     .memory(memory.into())
+    ///     .build().expect("Error building ConversationalChain");
+    ///
+    /// let input_variables = prompt_args! {
+    ///     "input" => "Im from Peru",
+    /// };
+    ///
+    /// match chain.invoke(input_variables).await {
+    ///     Ok(result) => {
+    ///         println!("Result: {:?}", result);
+    ///     },
+    ///     Err(e) => panic!("Error invoking Chain: {:?}", e),
+    /// };
+    /// # };
+    /// ```
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>>;
 
-    //Execute will return the ouptut of the llm as a hasmap with a default output key.
-    //Usefull when you need to contatenates chain outputs.
-    //By default the key is output
+    /// Execute the `Chain` and return the result of the generation process
+    /// along with additional information like token consumption formatted as a `HashMap`.
+    /// The input is a set of variables passed as a `PromptArgs` hashmap.
+    /// The key for the generated output is specified by the `get_output_keys`
+    /// method (default key is `output`).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// # use crate::my_crate::{Chain, ConversationalChainBuilder, OpenAI, OpenAIModel, SimpleMemory, PromptArgs, prompt_args};
+    /// # async {
+    /// let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
+    /// let memory = SimpleMemory::new();
+    ///
+    /// let chain = ConversationalChainBuilder::new()
+    ///     .llm(llm)
+    ///     .memory(memory.into())
+    ///     .output_key("name")
+    ///     .build().expect("Error building ConversationalChain");
+    ///
+    /// let input_variables = prompt_args! {
+    ///     "input" => "Im from Peru",
+    /// };
+    ///
+    /// match chain.execute(input_variables).await {
+    ///     Ok(result) => {
+    ///         println!("Result: {:?}", result);
+    ///     },
+    ///     Err(e) => panic!("Error executing Chain: {:?}", e),
+    /// };
+    /// # };
+    /// ```
     async fn execute(
         &self,
         input_variables: PromptArgs,
@@ -36,7 +120,51 @@ pub trait Chain: Sync + Send {
         output.insert(DEFAULT_RESULT_KEY.to_string(), json!(result));
         Ok(output)
     }
-
+    /// Stream the `Chain` and get an asynchronous stream of chain generations.
+    /// The input is a set of variables passed as a `PromptArgs` hashmap.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// # use futures::StreamExt;
+    /// # use crate::my_crate::{Chain, LLMChainBuilder, OpenAI, fmt_message, fmt_template,
+    /// #                      HumanMessagePromptTemplate, prompt_args, Message, template_fstring};
+    /// # async {
+    /// let open_ai = OpenAI::default();
+    ///
+    ///let prompt = message_formatter![
+    ///fmt_message!(Message::new_system_message(
+    ///"You are world class technical documentation writer."
+    ///)),
+    ///fmt_template!(HumanMessagePromptTemplate::new(template_fstring!(
+    ///      "{input}", "input"
+    ///)))
+    ///];
+    ///
+    /// let chain = LLMChainBuilder::new()
+    ///     .prompt(prompt)
+    ///     .llm(open_ai.clone())
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// let mut stream = chain.stream(
+    /// prompt_args! {
+    /// "input" => "Who is the writer of 20,000 Leagues Under the Sea?"
+    /// }).await.unwrap();
+    ///
+    /// while let Some(result) = stream.next().await {
+    ///     match result {
+    ///         Ok(value) => {
+    ///             if let Some(content) = value.pointer("/choices/0/delta/content") {
+    ///                 println!("Content: {}", content.as_str().unwrap_or(""));
+    ///             }
+    ///         },
+    ///         Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+    ///     }
+    /// };
+    /// # };
+    /// ```
+    ///
     async fn stream(
         &self,
         _input_variables: PromptArgs,

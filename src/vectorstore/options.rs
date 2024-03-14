@@ -4,6 +4,18 @@ use serde_json::Value;
 
 use crate::embedding::embedder_trait::Embedder;
 
+/// The `VecStoreOptions` struct is responsible for determining options when
+/// interacting with a Vector Store. The options include `name_space`, `score_threshold`,
+/// `filters`, and `embedder`.
+///
+/// # Usage
+/// ```rust,ignore
+/// let options = VecStoreOptions::new()
+///     .with_name_space("my_custom_namespace")
+///     .with_score_threshold(0.5)
+///     .with_filters(json!({"genre": "Sci-Fi"}))
+///     .with_embedder(my_embedder);
+/// ```
 pub struct VecStoreOptions {
     pub name_space: Option<String>,
     pub score_threshold: Option<f32>,

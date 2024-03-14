@@ -4,6 +4,15 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 
+/// Enum `MessageType` represents the type of a message.
+/// It can be a `SystemMessage`, `AIMessage`, or `HumanMessage`.
+///
+/// # Usage
+/// ```rust,ignore
+/// let system_message_type = MessageType::SystemMessage;
+/// let ai_message_type = MessageType::AIMessage;
+/// let human_message_type = MessageType::HumanMessage;
+/// ```
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MessageType {
     #[serde(rename = "system")]
@@ -30,8 +39,14 @@ impl MessageType {
     }
 }
 
-/// A Message for priming AI behavior, usually passed in as the first of a sequence
-/// of input messages.
+/// Struct `Message` represents a message with its content and type.
+///
+/// # Usage
+/// ```rust,ignore
+/// let human_message = Message::new_human_message("Hello");
+/// let system_message = Message::new_system_message("System Alert");
+/// let ai_message = Message::new_ai_message("AI Response");
+/// ```
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Message {
     pub content: String,

@@ -74,6 +74,27 @@ impl PromptFromatter for PromptTemplate {
     }
 }
 
+/// `prompt_args!` is a utility macro used for creating a `std::collections::HashMap<String, serde_json::Value>`.
+/// This HashMap can then be passed as arguments to a function or method.
+///
+/// # Usage
+/// In this macro, the keys are `&str` and values are arbitrary types that get serialized into `serde_json::Value`:
+/// ```rust,ignore
+/// prompt_args! {
+///     "input" => "Who is the writer of 20,000 Leagues Under the Sea, and what is my name?",
+///     "history" => vec![
+///         Message::new_human_message("My name is: Luis"),
+///         Message::new_ai_message("Hi Luis"),
+///     ],
+/// }
+/// ```
+///
+/// # Arguments
+/// * `key` - A `&str` that will be used as the key in the resulting HashMap.<br>
+/// * `value` - An arbitrary type that will be serialized into `serde_json::Value` and associated with the corresponding key.
+///
+/// The precise keys and values are dependent on your specific use case. In this example, "input" and "history" are keys,
+/// and
 #[macro_export]
 macro_rules! prompt_args {
     ( $($key:expr => $value:expr),* $(,)? ) => {
@@ -89,6 +110,17 @@ macro_rules! prompt_args {
     };
 }
 
+/// `template_fstring` is a utility macro that creates a new `PromptTemplate` with FString as the template format.
+///
+/// # Usage
+/// The macro is called with a template string and a list of variables that exist in the template. For example:
+/// ```rust,ignore
+/// template_fstring!(
+///     "Hello {name}",
+///     "name"
+/// )
+/// ```
+/// This returns a `PromptTemplate` object that contains the string "Hello {name}" as the template and ["name"] as the variables, with TemplateFormat set to FString.
 #[macro_export]
 macro_rules! template_fstring {
     ($template:expr, $($var:expr),* $(,)?) => {
@@ -100,6 +132,17 @@ macro_rules! template_fstring {
     };
 }
 
+/// `template_jinja2` is a utility macro that creates a new `PromptTemplate` with Jinja2 as the template format.
+///
+/// # Usage
+/// The macro is called with a template string and a list of variables that exist in the template. For example:
+/// ```rust,ignore
+/// template_jinja2!(
+///     "Hello {{ name }}",
+///     "name"
+/// )
+/// ```
+/// This returns a `PromptTemplate` object that contains the string "Hello {{ name }}" as the template and ["name"] as the variables, with TemplateFormat set to Jinja2.
 #[macro_export]
 macro_rules! template_jinja2 {
     ($template:expr, $($var:expr),* $(,)?) => {
