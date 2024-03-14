@@ -1,6 +1,7 @@
-use std::{error::Error, sync::Arc};
+use std::{error::Error, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
+use futures::Stream;
 use tokio::sync::Mutex;
 
 use crate::{
@@ -122,6 +123,18 @@ impl Chain for LLMChain {
             memory.add_message(Message::new_ai_message(&output));
         };
         Ok(output)
+    }
+
+    async fn stream(
+        &self,
+        input_variables: PromptArgs,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
+        Box<dyn Error>,
+    > {
+        let prompt = self.prompt.format_prompt(input_variables.clone())?;
+        log::debug!("Prompt: {:?}", prompt);
+        self.llm.stream(&prompt.to_chat_messages()).await
     }
 }
 
