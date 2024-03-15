@@ -1,11 +1,13 @@
-use std::collections::HashMap;
-use std::error::Error;
-use std::io::{Cursor, Read};
-
 use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
 use async_trait::async_trait;
 use csv;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::error::Error;
+use std::io::{Cursor, Read};
+use std::path::Path;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 
 #[derive(Debug, Clone)]
 pub struct CsvLoader<R> {
@@ -27,6 +29,19 @@ impl CsvLoader<Cursor<Vec<u8>>> {
     }
 }
 
+impl CsvLoader<Cursor<Vec<u8>>> {
+    pub async fn from_path<P: AsRef<Path>>(
+        path: P,
+        columns: Vec<String>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let mut file = File::open(path).await?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer).await?;
+        let reader = Cursor::new(buffer);
+        Ok(Self::new(reader, columns))
+    }
+}
+
 #[async_trait]
 impl<R: Read + Send + Sync + 'static> Loader for CsvLoader<R> {
     async fn load(mut self) -> Result<Vec<Document>, Box<dyn Error>> {
@@ -35,7 +50,7 @@ impl<R: Read + Send + Sync + 'static> Loader for CsvLoader<R> {
         let headers = reader.headers()?.clone();
 
         // Initialize rown to track row number
-        let mut rown: i32 = 0;
+        let mut row_number: i64 = 0;
 
         for result in reader.records() {
             let record = result?;
@@ -52,12 +67,12 @@ impl<R: Read + Send + Sync + 'static> Loader for CsvLoader<R> {
                 content.push('\n');
             }
 
-            rown += 1; // Increment the row number by 1 for each row
+            row_number += 1; // Increment the row number by 1 for each row
 
             // Generate document with the content and metadata
             let mut document = Document::new(content);
             let mut metadata = HashMap::new();
-            metadata.insert("row".to_string(), Value::from(rown));
+            metadata.insert("row".to_string(), Value::from(row_number));
 
             // Attach the metadata to the document
             document.metadata = metadata;
@@ -100,6 +115,32 @@ Jane Smith,32,London,United Kingdom";
         let documents = csv_loader.load().await.expect("Failed to load documents");
 
         assert_eq!(documents.len(), 2);
+
+        let expected1 = "name: John Doe\nage: 25\ncity: New York\ncountry: United States\n";
+        assert_eq!(documents[0].metadata.get("row").unwrap(), &Value::from(1));
+        assert_eq!(documents[0].page_content, expected1);
+
+        let expected2 = "name: Jane Smith\nage: 32\ncity: London\ncountry: United Kingdom\n";
+        assert_eq!(documents[1].metadata.get("row").unwrap(), &Value::from(2));
+        assert_eq!(documents[1].page_content, expected2);
+    }
+
+    #[tokio::test]
+    async fn test_csv_load_from_path() {
+        let path = "./src/document_loaders/test_data/test.csv";
+        let columns = vec![
+            "name".to_string(),
+            "age".to_string(),
+            "city".to_string(),
+            "country".to_string(),
+        ];
+        let csv_loader = CsvLoader::from_path(path, columns)
+            .await
+            .expect("Failed to create csv loader");
+
+        let documents = csv_loader.load().await.expect("Failed to load documents");
+
+        assert_eq!(documents.len(), 20);
 
         let expected1 = "name: John Doe\nage: 25\ncity: New York\ncountry: United States\n";
         assert_eq!(documents[0].metadata.get("row").unwrap(), &Value::from(1));
