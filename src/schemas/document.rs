@@ -27,9 +27,9 @@ pub struct Document {
 
 impl Document {
     /// Constructs a new `Document` with provided `page_content`, an empty `metadata` map and a `score` of 0.
-    pub fn new(page_content: String) -> Self {
+    pub fn new<S: Into<String>>(page_content: S) -> Self {
         Document {
-            page_content,
+            page_content: page_content.into(),
             metadata: HashMap::new(),
             score: 0.0,
         }
