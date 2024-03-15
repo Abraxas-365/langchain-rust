@@ -3,7 +3,6 @@ use futures::StreamExt;
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
     fmt_message, fmt_template,
-    language_models::options::CallOptions,
     llm::openai::OpenAI,
     message_formatter,
     prompt::HumanMessagePromptTemplate,
@@ -14,7 +13,7 @@ use langchain_rust::{
 
 #[tokio::main]
 async fn main() {
-    let open_ai = OpenAI::new(OpenAIConfig::default(), CallOptions::default());
+    let open_ai = OpenAI::new(OpenAIConfig::default());
 
     let prompt = message_formatter![
         fmt_message!(Message::new_system_message(

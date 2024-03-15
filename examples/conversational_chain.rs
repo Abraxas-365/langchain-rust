@@ -1,7 +1,6 @@
 use async_openai::config::OpenAIConfig;
 use langchain_rust::{
     chain::{builder::ConversationalChainBuilder, Chain},
-    language_models::options::CallOptions,
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     prompt_args,
@@ -9,8 +8,7 @@ use langchain_rust::{
 
 #[tokio::main]
 async fn main() {
-    let llm =
-        OpenAI::new(OpenAIConfig::default(), CallOptions::default()).with_model(OpenAIModel::Gpt35);
+    let llm = OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt35);
     //We initialise a simple memroy,by default conveational chain have thsi memory, but we
     //initiliase it as an example, if you dont want to have memory use DummyMemory
     let memory = SimpleMemory::new();

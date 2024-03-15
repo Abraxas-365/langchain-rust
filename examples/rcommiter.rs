@@ -4,7 +4,6 @@ use std::process::{Command, Stdio};
 use async_openai::config::OpenAIConfig;
 use langchain_rust::chain::chain_trait::Chain;
 use langchain_rust::chain::llm_chain::LLMChainBuilder;
-use langchain_rust::language_models::options::CallOptions;
 use langchain_rust::llm::openai::OpenAI;
 use langchain_rust::prompt::HumanMessagePromptTemplate;
 use langchain_rust::{prompt_args, template_jinja2};
@@ -12,7 +11,7 @@ use langchain_rust::{prompt_args, template_jinja2};
 //to try this in action , add something to this file stage it an run it
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let llm = OpenAI::new(OpenAIConfig::default(), CallOptions::default());
+    let llm = OpenAI::new(OpenAIConfig::default());
     let chain = LLMChainBuilder::new()
         .prompt(HumanMessagePromptTemplate::new(template_jinja2!(
             r#"

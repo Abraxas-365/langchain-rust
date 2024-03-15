@@ -120,7 +120,6 @@ mod tests {
             executor::AgentExecutor,
         },
         chain::chain_trait::Chain,
-        language_models::options::CallOptions,
         llm::openai::{OpenAI, OpenAIModel},
         memory::SimpleMemory,
         prompt_args,
@@ -144,8 +143,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invoke_agent() {
-        let llm = OpenAI::new(OpenAIConfig::default(), CallOptions::default())
-            .with_model(OpenAIModel::Gpt4.to_string());
+        let llm = OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt4.to_string());
         let memory = SimpleMemory::new();
         let tool_calc = Calc {};
         let agent = ConversationalAgentBuilder::new()
