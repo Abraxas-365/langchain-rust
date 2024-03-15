@@ -142,7 +142,6 @@ impl Chain for LLMChain {
 mod tests {
     use crate::{
         chain::options::ChainCallOptions,
-        language_models::options::CallOptions,
         llm::openai::{OpenAI, OpenAIModel},
         message_formatter,
         prompt::{HumanMessagePromptTemplate, MessageOrTemplate},
@@ -187,8 +186,7 @@ mod tests {
             message_formatter![MessageOrTemplate::Template(human_message_prompt.into()),];
 
         let options = ChainCallOptions::default().with_streaming_func(streaming_func);
-        let llm = OpenAI::new(OpenAIConfig::default(), CallOptions::default())
-            .with_model(OpenAIModel::Gpt35.to_string());
+        let llm = OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt35.to_string());
         let chain = LLMChainBuilder::new()
             .prompt(formatter)
             .llm(llm)
