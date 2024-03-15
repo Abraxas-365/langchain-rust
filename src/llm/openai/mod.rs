@@ -1,7 +1,7 @@
 use std::{error::Error, pin::Pin, sync::Arc};
 
+pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
-    config::OpenAIConfig,
     types::{
         ChatChoiceStream, ChatCompletionFunctionsArgs, ChatCompletionRequestAssistantMessageArgs,
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
@@ -47,8 +47,8 @@ impl Into<String> for OpenAIModel {
 }
 
 #[derive(Clone)]
-pub struct OpenAI {
-    config: OpenAIConfig,
+pub struct OpenAI<C: Config> {
+    config: C,
     model: String,
     stop_words: Option<Vec<String>>,
     max_tokens: u16,
@@ -65,34 +65,16 @@ pub struct OpenAI {
     >,
 }
 
-impl Into<Box<dyn LLM>> for OpenAI {
+impl<C: Config + Send + Sync + 'static> Into<Box<dyn LLM>> for OpenAI<C> {
     fn into(self) -> Box<dyn LLM> {
         Box::new(self)
     }
 }
 
-impl Default for OpenAI {
-    fn default() -> Self {
+impl<C: Config> OpenAI<C> {
+    pub fn new(config: C, opt: CallOptions) -> Self {
         Self {
-            config: OpenAIConfig::default(),
-            model: OpenAIModel::Gpt35.to_string(),
-            stop_words: None,
-            max_tokens: 256,
-            temperature: 0.0,
-            top_p: 1.0,
-            frequency_penalty: 0.0,
-            presence_penalty: 0.0,
-            function_call_behavior: None,
-            functions: None,
-            streaming_func: None,
-        }
-    }
-}
-
-impl OpenAI {
-    pub fn new(opt: CallOptions) -> Self {
-        Self {
-            config: OpenAIConfig::default(),
+            config,
             model: OpenAIModel::Gpt35.to_string(),
             stop_words: opt.stop_words,
             max_tokens: opt.max_tokens.unwrap_or(256),
@@ -111,24 +93,14 @@ impl OpenAI {
         self
     }
 
-    pub fn with_api_key<S: Into<String>>(mut self, api_key: S) -> Self {
-        self.config = self.config.with_api_key(api_key);
-        self
-    }
-
-    pub fn with_api_base<S: Into<String>>(mut self, api_base: S) -> Self {
-        self.config = self.config.with_api_base(api_base);
-        self
-    }
-
-    pub fn with_org_id<S: Into<String>>(mut self, org_id: S) -> Self {
-        self.config = self.config.with_org_id(org_id);
+    pub fn with_config(mut self, config: C) -> Self {
+        self.config = config;
         self
     }
 }
 
 #[async_trait]
-impl LLM for OpenAI {
+impl<C: Config + Send + Sync> LLM for OpenAI<C> {
     async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, Box<dyn Error>> {
         let client = Client::with_config(self.config.clone());
         let request = self.generate_request(prompt)?;
@@ -226,7 +198,7 @@ impl LLM for OpenAI {
     }
 }
 
-impl OpenAI {
+impl<C: Config> OpenAI<C> {
     fn to_openai_messages(
         &self,
         messages: &[Message],
@@ -317,7 +289,8 @@ mod tests {
         };
         let options = CallOptions::new().with_streaming_func(streaming_func);
         // Setup the OpenAI client with the necessary options
-        let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35.to_string()); // You can change the model as needed
+        let open_ai = OpenAI::new(OpenAIConfig::default(), options)
+            .with_model(OpenAIModel::Gpt35.to_string()); // You can change the model as needed
 
         // Define a set of messages to send to the generate function
 
@@ -360,7 +333,8 @@ mod tests {
         // Define the streaming function as an async block without capturing external references directly
         let options = CallOptions::new().with_streaming_func(streaming_func);
         // Setup the OpenAI client with the necessary options
-        let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35.to_string()); // You can change the model as needed
+        let open_ai = OpenAI::new(OpenAIConfig::default(), options)
+            .with_model(OpenAIModel::Gpt35.to_string()); // You can change the model as needed
 
         // Define a set of messages to send to the generate function
         let messages = vec![Message::new_human_message("Hello, how are you?")];
@@ -383,7 +357,8 @@ mod tests {
     async fn test_openai_stream() {
         let options = CallOptions::new();
         // Setup the OpenAI client with the necessary options
-        let open_ai = OpenAI::new(options).with_model(OpenAIModel::Gpt35.to_string());
+        let open_ai = OpenAI::new(OpenAIConfig::default(), options)
+            .with_model(OpenAIModel::Gpt35.to_string());
 
         // Define a set of messages to send to the generate function
         let messages = vec![Message::new_human_message("Hello, how are you?")];

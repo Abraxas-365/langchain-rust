@@ -1,9 +1,11 @@
 use std::{error::Error, sync::Arc};
 
+use async_openai::config::OpenAIConfig;
 use async_trait::async_trait;
 use langchain_rust::{
     agent::{AgentExecutor, ChatOutputParser, ConversationalAgentBuilder},
     chain::Chain,
+    language_models::options::CallOptions,
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     prompt_args,
@@ -27,7 +29,8 @@ impl Tool for Calc {
 }
 #[tokio::main]
 async fn main() {
-    let llm = OpenAI::default().with_model(OpenAIModel::Gpt4);
+    let llm =
+        OpenAI::new(OpenAIConfig::default(), CallOptions::default()).with_model(OpenAIModel::Gpt4);
     let memory = SimpleMemory::new();
     let tool_calc = Calc {};
     let agent = ConversationalAgentBuilder::new()
