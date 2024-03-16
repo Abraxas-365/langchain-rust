@@ -92,13 +92,13 @@ impl Chain for SequentialChain {
 mod tests {
     use crate::{
         chain::{Chain, LLMChainBuilder},
-        llm::openai::{OpenAI, OpenAIConfig},
+        llm::openai::OpenAI,
         prompt_args, sequential_chain, template_fstring,
     };
 
     #[tokio::test]
     async fn test_sequential() {
-        let llm = OpenAI::new(OpenAIConfig::default());
+        let llm = OpenAI::default();
         let chain1 = LLMChainBuilder::new()
             .prompt(template_fstring!(
                 "dame un nombre para una tienda de {input}",

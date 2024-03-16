@@ -1,7 +1,4 @@
-use langchain_rust::{
-    language_models::llm::LLM,
-    llm::openai::{OpenAI, OpenAIConfig},
-};
+use langchain_rust::{language_models::llm::LLM, llm::openai::OpenAI};
 
 #[tokio::main]
 async fn main() {
@@ -11,7 +8,7 @@ async fn main() {
     //     .with_api_key("ollama")
     //     .with_model("llama2");
 
-    let open_ai = OpenAI::new(OpenAIConfig::default());
+    let open_ai = OpenAI::default();
     let response = open_ai.invoke("hola").await.unwrap();
     println!("{}", response);
 }

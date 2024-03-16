@@ -1,6 +1,6 @@
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
-    llm::openai::{OpenAI, OpenAIConfig, OpenAIModel},
+    llm::openai::{OpenAI, OpenAIModel},
     prompt::HumanMessagePromptTemplate,
     prompt_args, template_jinja2,
 };
@@ -13,7 +13,7 @@ async fn main() {
         "producto"
     ));
 
-    let llm = OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt35);
+    let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
     let chain = LLMChainBuilder::new()
         .prompt(prompt)
         .llm(llm)
