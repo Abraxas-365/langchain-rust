@@ -270,8 +270,8 @@ mod tests {
         let options = CallOptions::new().with_streaming_func(streaming_func);
         // Setup the OpenAI client with the necessary options
         let open_ai = OpenAI::new(OpenAIConfig::default())
-            .with_model(OpenAIModel::Gpt35.to_string())
-            .with_options(options); // You can change the model as needed
+            .with_model(OpenAIModel::Gpt35.to_string()) // You can change the model as needed
+            .with_options(options);
 
         // Define a set of messages to send to the generate function
 
@@ -315,8 +315,8 @@ mod tests {
         let options = CallOptions::new().with_streaming_func(streaming_func);
         // Setup the OpenAI client with the necessary options
         let open_ai = OpenAI::new(OpenAIConfig::default())
-            .with_model(OpenAIModel::Gpt35.to_string())
-            .with_options(options); // You can change the model as needed
+            .with_model(OpenAIModel::Gpt35.to_string()) // You can change the model as needed
+            .with_options(options);
 
         // Define a set of messages to send to the generate function
         let messages = vec![Message::new_human_message("Hello, how are you?")];
