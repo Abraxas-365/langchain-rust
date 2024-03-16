@@ -111,7 +111,6 @@ impl Agent for ConversationalAgent {
 mod tests {
     use std::{error::Error, sync::Arc};
 
-    use async_openai::config::OpenAIConfig;
     use async_trait::async_trait;
 
     use crate::{
@@ -120,7 +119,7 @@ mod tests {
             executor::AgentExecutor,
         },
         chain::chain_trait::Chain,
-        llm::openai::{OpenAI, OpenAIModel},
+        llm::openai::{OpenAI, OpenAIConfig, OpenAIModel},
         memory::SimpleMemory,
         prompt_args,
         tools::Tool,

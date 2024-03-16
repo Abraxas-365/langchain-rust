@@ -87,11 +87,9 @@ impl Chain for ConversationalChain {
 
 #[cfg(test)]
 mod tests {
-    use async_openai::config::OpenAIConfig;
-
     use crate::{
         chain::conversational::builder::ConversationalChainBuilder,
-        llm::openai::{OpenAI, OpenAIModel},
+        llm::openai::{OpenAI, OpenAIConfig, OpenAIModel},
         prompt_args,
     };
 

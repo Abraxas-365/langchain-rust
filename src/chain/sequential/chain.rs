@@ -90,11 +90,9 @@ impl Chain for SequentialChain {
 
 #[cfg(test)]
 mod tests {
-    use async_openai::config::OpenAIConfig;
-
     use crate::{
         chain::{Chain, LLMChainBuilder},
-        llm::openai::OpenAI,
+        llm::openai::{OpenAI, OpenAIConfig},
         prompt_args, sequential_chain, template_fstring,
     };
 

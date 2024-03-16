@@ -1,7 +1,6 @@
-use async_openai::config::OpenAIConfig;
 use langchain_rust::{
     chain::{builder::ConversationalChainBuilder, Chain},
-    llm::openai::{OpenAI, OpenAIModel},
+    llm::openai::{OpenAI, OpenAIConfig, OpenAIModel},
     memory::SimpleMemory,
     prompt_args,
 };
