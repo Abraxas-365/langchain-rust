@@ -59,10 +59,10 @@ mod tests {
         let ouput = chain
             .invoke(prompt_args! {
                 "input_documents"=>vec![
-                Document::new("Luis fernando is a programmer"),
-                Document::new("Luis love nvim"),
+Document::new(format!("\nQuestion: {}\nAnswer: {}\n", "Which is the favorite text editor of luis", "Nvim")),
+Document::new(format!("\nQuestion: {}\nAnswer: {}\n", "How old is Luis", "24")),
                 ],
-                "question"=>"What text editor love luis?"
+                "question"=>"How old is luis and whats his favorite text editor"
             })
             .await
             .unwrap();

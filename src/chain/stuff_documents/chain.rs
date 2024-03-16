@@ -34,15 +34,10 @@ impl StuffDocument {
     }
 
     fn join_documents(&self, docs: Vec<Document>) -> String {
-        let mut text = String::new();
-        let doc_len = docs.len();
-        for (k, doc) in docs.iter().enumerate() {
-            text += &doc.page_content;
-            if k != doc_len - 1 {
-                text += &self.separator;
-            }
-        }
-        text
+        docs.iter()
+            .map(|doc| doc.page_content.clone())
+            .collect::<Vec<_>>()
+            .join(&self.separator)
     }
 }
 
