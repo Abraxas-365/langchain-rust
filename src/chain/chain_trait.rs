@@ -70,7 +70,11 @@ pub trait Chain: Sync + Send {
     /// };
     /// # };
     /// ```
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>>;
+    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
+        self.call(input_variables)
+            .await
+            .map(|result| result.generation)
+    }
 
     /// Execute the `Chain` and return the result of the generation process
     /// along with additional information like token consumption formatted as a `HashMap`.
