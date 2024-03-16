@@ -83,6 +83,12 @@ impl<C: Config> OpenAI<C> {
     }
 }
 
+impl Default for OpenAI<OpenAIConfig> {
+    fn default() -> Self {
+        Self::new(OpenAIConfig::default())
+    }
+}
+
 #[async_trait]
 impl<C: Config + Send + Sync> LLM for OpenAI<C> {
     async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, Box<dyn Error>> {
@@ -338,8 +344,7 @@ mod tests {
     #[test]
     async fn test_openai_stream() {
         // Setup the OpenAI client with the necessary options
-        let open_ai =
-            OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt35.to_string());
+        let open_ai = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
 
         // Define a set of messages to send to the generate function
         let messages = vec![Message::new_human_message("Hello, how are you?")];

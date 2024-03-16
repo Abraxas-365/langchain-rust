@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use langchain_rust::{
     agent::{AgentExecutor, ChatOutputParser, ConversationalAgentBuilder},
     chain::Chain,
-    llm::openai::{OpenAI, OpenAIConfig, OpenAIModel},
+    llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     prompt_args,
     tools::Tool,
@@ -27,7 +27,7 @@ impl Tool for Calc {
 }
 #[tokio::main]
 async fn main() {
-    let llm = OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt4);
+    let llm = OpenAI::default().with_model(OpenAIModel::Gpt4);
     let memory = SimpleMemory::new();
     let tool_calc = Calc {};
     let agent = ConversationalAgentBuilder::new()

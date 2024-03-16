@@ -1,13 +1,13 @@
 use langchain_rust::{
     chain::{builder::ConversationalChainBuilder, Chain},
-    llm::openai::{OpenAI, OpenAIConfig, OpenAIModel},
+    llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     prompt_args,
 };
 
 #[tokio::main]
 async fn main() {
-    let llm = OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt35);
+    let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
     //We initialise a simple memroy,by default conveational chain have thsi memory, but we
     //initiliase it as an example, if you dont want to have memory use DummyMemory
     let memory = SimpleMemory::new();

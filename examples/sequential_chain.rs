@@ -1,6 +1,6 @@
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
-    llm::openai::{OpenAI, OpenAIConfig, OpenAIModel},
+    llm::openai::{OpenAI, OpenAIModel},
     prompt::HumanMessagePromptTemplate,
     prompt_args, sequential_chain, template_jinja2,
 };
@@ -8,7 +8,7 @@ use std::io::{self, Write}; // Include io Library for terminal input
 
 #[tokio::main]
 async fn main() {
-    let llm = OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt35);
+    let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
     let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
         "Dame un nombre creativo para una tienda que vende: {{producto}}",
         "producto"
