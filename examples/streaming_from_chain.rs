@@ -1,9 +1,8 @@
-use async_openai::config::OpenAIConfig;
 use futures::StreamExt;
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
     fmt_message, fmt_template,
-    llm::openai::OpenAI,
+    llm::openai::{OpenAI, OpenAIConfig},
     message_formatter,
     prompt::HumanMessagePromptTemplate,
     prompt_args,

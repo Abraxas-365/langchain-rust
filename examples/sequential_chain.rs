@@ -1,7 +1,6 @@
-use async_openai::config::OpenAIConfig;
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
-    llm::openai::{OpenAI, OpenAIModel},
+    llm::openai::{OpenAI, OpenAIConfig, OpenAIModel},
     prompt::HumanMessagePromptTemplate,
     prompt_args, sequential_chain, template_jinja2,
 };

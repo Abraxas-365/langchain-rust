@@ -1,9 +1,8 @@
-use async_openai::config::OpenAIConfig;
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
     fmt_message, fmt_placeholder, fmt_template,
     language_models::llm::LLM,
-    llm::openai::OpenAI,
+    llm::openai::{OpenAI, OpenAIConfig},
     message_formatter,
     prompt::HumanMessagePromptTemplate,
     prompt_args,

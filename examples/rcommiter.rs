@@ -1,10 +1,9 @@
 use std::io::{self, BufRead};
 use std::process::{Command, Stdio};
 
-use async_openai::config::OpenAIConfig;
 use langchain_rust::chain::chain_trait::Chain;
 use langchain_rust::chain::llm_chain::LLMChainBuilder;
-use langchain_rust::llm::openai::OpenAI;
+use langchain_rust::llm::openai::{OpenAI, OpenAIConfig};
 use langchain_rust::prompt::HumanMessagePromptTemplate;
 use langchain_rust::{prompt_args, template_jinja2};
 

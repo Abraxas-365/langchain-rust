@@ -1,11 +1,10 @@
 use std::{error::Error, sync::Arc};
 
-use async_openai::config::OpenAIConfig;
 use async_trait::async_trait;
 use langchain_rust::{
     agent::{AgentExecutor, ChatOutputParser, ConversationalAgentBuilder},
     chain::Chain,
-    llm::openai::{OpenAI, OpenAIModel},
+    llm::openai::{OpenAI, OpenAIConfig, OpenAIModel},
     memory::SimpleMemory,
     prompt_args,
     tools::Tool,

@@ -142,14 +142,14 @@ impl Chain for LLMChain {
 mod tests {
     use crate::{
         chain::options::ChainCallOptions,
-        llm::openai::{OpenAI, OpenAIModel},
+        llm::openai::{OpenAI, OpenAIConfig, OpenAIModel},
         message_formatter,
         prompt::{HumanMessagePromptTemplate, MessageOrTemplate},
         prompt_args, template_fstring,
     };
 
     use super::*;
-    use async_openai::{config::OpenAIConfig, types::ChatChoiceStream};
+    use async_openai::types::ChatChoiceStream;
     use futures::lock::Mutex;
 
     #[tokio::test]
