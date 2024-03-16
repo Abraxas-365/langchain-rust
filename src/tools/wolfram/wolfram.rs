@@ -3,6 +3,19 @@ use async_trait::async_trait;
 use crate::tools::Tool;
 use std::error::Error;
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct WolframError {
+    code: String,
+    msg: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+enum WolframErrorStatus {
+    Error(WolframError),
+    NoError(bool),
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct WolframResponse {
     queryresult: WolframResponseContent,
@@ -11,6 +24,7 @@ struct WolframResponse {
 #[derive(serde::Serialize, serde::Deserialize)]
 struct WolframResponseContent {
     pods: Vec<Pod>,
+    error: WolframErrorStatus,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -78,8 +92,8 @@ impl Wolfram {
         }
     }
 
-    pub fn with_excludes(mut self, exclude_pods: Vec<String>) -> Self {
-        self.exclude_pods = exclude_pods;
+    pub fn with_excludes<S: AsRef<str>>(mut self, exclude_pods: &[S]) -> Self {
+        self.exclude_pods = exclude_pods.iter().map(|s| s.as_ref().to_owned()).collect();
         self
     }
 }
@@ -121,6 +135,13 @@ impl Tool for Wolfram {
         let response_text = reqwest::get(&url).await?.text().await?;
         let response: WolframResponse = serde_json::from_str(&response_text)?;
 
+        if let WolframErrorStatus::Error(error) = response.queryresult.error {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Wolfram Error {}: {}", error.code, error.msg),
+            )));
+        }
+
         let pods_str: Vec<String> = response
             .queryresult
             .pods
@@ -145,7 +166,7 @@ mod tests {
 
     #[async_test]
     async fn test_wolfram() {
-        let wolfram = Wolfram::default().with_excludes(vec!["Plot".to_string()]);
+        let wolfram = Wolfram::default().with_excludes(&vec!["Plot"]);
         let input = "solve x^2 = 4";
         let result = wolfram.call(input).await;
 
