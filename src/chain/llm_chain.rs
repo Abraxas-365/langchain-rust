@@ -130,6 +130,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     async fn test_invoke_chain() {
         // Create an AI message prompt template
         let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(

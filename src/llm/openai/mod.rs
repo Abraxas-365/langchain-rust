@@ -256,6 +256,7 @@ mod tests {
     use tokio::test;
 
     #[test]
+    #[ignore]
     async fn test_ivoke() {
         let message_complete = Arc::new(Mutex::new(String::new()));
 
@@ -296,6 +297,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     async fn test_generate_function() {
         let message_complete = Arc::new(Mutex::new(String::new()));
 
@@ -342,6 +344,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     async fn test_openai_stream() {
         // Setup the OpenAI client with the necessary options
         let open_ai = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
