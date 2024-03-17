@@ -1,13 +1,11 @@
-use std::{error::Error, pin::Pin, sync::Arc};
+use std::{error::Error, pin::Pin};
 
 use async_trait::async_trait;
 use futures::Stream;
-use tokio::sync::Mutex;
 
 use crate::{
     language_models::{llm::LLM, GenerateResult},
     prompt::{FormatPrompter, PromptArgs},
-    schemas::{memory::BaseMemory, messages::Message},
 };
 
 use super::{chain_trait::Chain, options::ChainCallOptions};
@@ -15,7 +13,6 @@ use super::{chain_trait::Chain, options::ChainCallOptions};
 pub struct LLMChainBuilder {
     prompt: Option<Box<dyn FormatPrompter>>,
     llm: Option<Box<dyn LLM>>,
-    memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     output_key: Option<String>,
     options: Option<ChainCallOptions>,
 }
@@ -25,7 +22,6 @@ impl LLMChainBuilder {
         Self {
             prompt: None,
             llm: None,
-            memory: None,
             options: None,
             output_key: None,
         }
@@ -51,11 +47,6 @@ impl LLMChainBuilder {
         self
     }
 
-    pub fn memory(mut self, memory: Arc<Mutex<dyn BaseMemory>>) -> Self {
-        self.memory = Some(memory);
-        self
-    }
-
     pub fn output_key<S: Into<String>>(mut self, output_key: S) -> Self {
         self.output_key = Some(output_key.into());
         self
@@ -72,7 +63,6 @@ impl LLMChainBuilder {
         let chain = LLMChain {
             prompt,
             llm,
-            memory: self.memory,
             output_key: self.output_key.unwrap_or("output".to_string()),
         };
 
@@ -83,7 +73,6 @@ impl LLMChainBuilder {
 pub struct LLMChain {
     prompt: Box<dyn FormatPrompter>,
     llm: Box<dyn LLM>,
-    memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     output_key: String,
 }
 
@@ -101,11 +90,6 @@ impl Chain for LLMChain {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
         log::debug!("Prompt: {:?}", prompt);
         let output = self.llm.generate(&prompt.to_chat_messages()).await?;
-        if let Some(memory) = &self.memory {
-            let mut memory = memory.lock().await;
-            memory.add_message(Message::new_human_message(&input_variables["input"]));
-            memory.add_message(Message::new_ai_message(&output.generation));
-        };
         Ok(output)
     }
 
@@ -117,11 +101,6 @@ impl Chain for LLMChain {
             .generate(&prompt.to_chat_messages())
             .await?
             .generation;
-        if let Some(memory) = &self.memory {
-            let mut memory = memory.lock().await;
-            memory.add_message(Message::new_human_message(&input_variables["input"]));
-            memory.add_message(Message::new_ai_message(&output));
-        };
         Ok(output)
     }
 
@@ -149,8 +128,6 @@ mod tests {
     };
 
     use super::*;
-    use async_openai::types::ChatChoiceStream;
-    use futures::lock::Mutex;
 
     #[tokio::test]
     async fn test_invoke_chain() {
@@ -160,32 +137,11 @@ mod tests {
             "nombre",
         ));
 
-        let message_complete = Arc::new(Mutex::new(String::new()));
-
-        // Define the streaming function
-        // This function will append the content received from the stream to `message_complete`
-        let streaming_func = {
-            let message_complete = message_complete.clone();
-            move |content: String| {
-                let message_complete = message_complete.clone();
-                async move {
-                    let content = serde_json::from_str::<ChatChoiceStream>(&content).unwrap();
-
-                    if content.finish_reason.is_some() {
-                        return Ok(());
-                    }
-                    let mut message_complete_lock = message_complete.lock().await;
-                    println!("Content: {:?}", content);
-                    message_complete_lock.push_str(&content.delta.content.unwrap());
-                    Ok(())
-                }
-            }
-        };
         // Use the `message_formatter` macro to construct the formatter
         let formatter =
             message_formatter![MessageOrTemplate::Template(human_message_prompt.into()),];
 
-        let options = ChainCallOptions::default().with_streaming_func(streaming_func);
+        let options = ChainCallOptions::default();
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
         let chain = LLMChainBuilder::new()
             .prompt(formatter)
@@ -205,9 +161,6 @@ mod tests {
             "Error invoking LLMChain: {:?}",
             result.err()
         );
-
-        if let Ok(_) = result {
-            println!("Complete message: {:?}", message_complete.lock().await);
-        }
     }
 }
+
