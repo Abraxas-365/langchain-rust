@@ -97,6 +97,7 @@ mod tests {
     };
 
     #[tokio::test]
+    #[ignore]
     async fn test_sequential() {
         let llm = OpenAI::default();
         let chain1 = LLMChainBuilder::new()
