@@ -160,7 +160,6 @@ mod tests {
             result.is_ok(),
             "Error invoking LLMChain: {:?}",
             result.err()
-        );
+        )
     }
 }
-
