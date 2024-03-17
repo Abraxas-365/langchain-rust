@@ -49,16 +49,21 @@ impl<C: Connection> StoreBuilder<C> {
 
     /// Use surrealdb
     /// ```no_run
-    /// let surrealdb_config = surrealdb::opt::Config::new()
-    ///     .set_strict(true)
-    ///     .capabilities(Capabilities::all())
-    ///     .user(surrealdb::opt::auth::Root {
-    ///         username: "username".into(),
-    ///         password: "password".into()
-    ///     });
-    /// let db = surrealdb::engine::any::connect(("ws://127.0.0.1:8000", surrealdb_config)).await?;
-    /// let store = StoreBuilder::new().db(db).vector_dimensions(1000).build()?;
-    /// store.initialize().await?;
+    /// use langchain_rust::vectorstore::surrealdb::StoreBuilder;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let surrealdb_config = surrealdb::opt::Config::new()
+    ///         .set_strict(true)
+    ///         .capabilities(surrealdb::dbs::Capabilities::all())
+    ///         .user(surrealdb::opt::auth::Root {
+    ///             username: "username".into(),
+    ///             password: "password".into()
+    ///         });
+    ///     let db = surrealdb::engine::any::connect(("ws://127.0.0.1:8000", surrealdb_config)).await.unwrap();
+    ///     let store = StoreBuilder::new().db(db).vector_dimensions(1000).build().await.unwrap();
+    ///     store.initialize().await.unwrap();
+    /// }
     /// ```
     pub fn db(mut self, db: Surreal<C>) -> Self {
         self.db = Some(db);
