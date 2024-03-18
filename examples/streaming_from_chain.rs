@@ -1,3 +1,5 @@
+use std::io::{stdout, Write};
+
 use futures::StreamExt;
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
@@ -35,11 +37,13 @@ async fn main() {
            })
         .await
         .unwrap();
+
     while let Some(result) = stream.next().await {
         match result {
             Ok(value) => {
                 if let Some(content) = value.pointer("/choices/0/delta/content") {
-                    println!("Content: {}", content.as_str().unwrap_or(""));
+                    print!("{}", content.as_str().unwrap_or(""));
+                    stdout().flush().unwrap();
                 }
             }
             Err(e) => panic!("Error invoking LLMChain: {:?}", e),
