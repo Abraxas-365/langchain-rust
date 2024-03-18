@@ -75,6 +75,7 @@ impl From<Subpod> for String {
     }
 }
 
+/// When being used within agents GPT4 is recommended
 pub struct Wolfram {
     app_id: String,
     exclude_pods: Vec<String>,
