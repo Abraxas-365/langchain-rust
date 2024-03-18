@@ -24,6 +24,7 @@ where
 {
     agent: A,
     max_iterations: Option<i32>,
+    break_if_error: bool,
     pub memory: Option<Arc<Mutex<dyn BaseMemory>>>,
 }
 
@@ -35,6 +36,7 @@ where
         Self {
             agent,
             max_iterations: Some(10),
+            break_if_error: false,
             memory: None,
         }
     }
@@ -46,6 +48,11 @@ where
 
     pub fn with_memory(mut self, memory: Arc<Mutex<dyn BaseMemory>>) -> Self {
         self.memory = Some(memory);
+        self
+    }
+
+    pub fn with_break_if_error(mut self, break_if_error: bool) -> Self {
+        self.break_if_error = break_if_error;
         self
     }
 
@@ -86,9 +93,23 @@ where
                     log::debug!("Action: {:?}", action.tool_input);
                     let tool = name_to_tools.get(&action.tool).ok_or("Tool not found")?; //TODO:Check
                                                                                          //what to do with the error
-                    let observarion = tool.call(&action.tool_input).await?; //TODO:Check
-                                                                            //what to do with the error
-                    steps.push((action, observarion));
+
+                    let observation_result = tool.call(&action.tool_input).await;
+
+                    let observation = match observation_result {
+                        Ok(result) => result,
+                        Err(err) => {
+                            log::info!("The tool return the following error: {}", err.to_string());
+                            if self.break_if_error {
+                                return Err(err); // return the error immediately
+                            } else {
+                                format!("The tool return the following error: {}", err.to_string())
+                                // convert the error to a string and continue
+                            }
+                        }
+                    };
+
+                    steps.push((action, observation));
                 }
                 AgentEvent::Finish(finish) => {
                     if let Some(memory) = &self.memory {
