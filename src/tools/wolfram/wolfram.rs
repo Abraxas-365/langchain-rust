@@ -167,9 +167,9 @@ impl Tool for Wolfram {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::test as async_test;
 
-    #[async_test]
+    #[tokio::test]
+    #[ignore]
     async fn test_wolfram() {
         let wolfram = Wolfram::default().with_excludes(&vec!["Plot"]);
         let input = "Solve x^2 - 2x + 1 = 0";
