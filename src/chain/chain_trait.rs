@@ -126,7 +126,9 @@ pub trait Chain: Sync + Send {
     }
     /// Stream the `Chain` and get an asynchronous stream of chain generations.
     /// The input is a set of variables passed as a `PromptArgs` hashmap.
-    ///
+    /// If the chain have memroy, the tream method will not be able to automaticaly
+    /// set the memroy, bocause it will not know if the how to extract the output message
+    /// out of the stram
     /// # Example
     ///
     /// ```rust,ignore

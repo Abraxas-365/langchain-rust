@@ -77,6 +77,9 @@ impl Chain for ConversationalChain {
         Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
         Box<dyn Error>,
     > {
+        let memory = self.memory.lock().await;
+        let mut input_variables = input_variables;
+        input_variables.insert("history".to_string(), memory.to_string().into());
         self.llm.stream(input_variables).await
     }
 
