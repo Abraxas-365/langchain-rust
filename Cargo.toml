@@ -23,7 +23,7 @@ log = "0.4.19"
 html-escape = "0.2.13"
 reqwest-eventsource = "0.5.0"
 async-openai = "0.19.1"
-mockito = "1.3.0"
+mockito = "1.4.0"
 tiktoken-rs = "0.5.8"
 sqlx = { version = "0.7.4", features = ["postgres", "runtime-tokio-native-tls", "json", "uuid" ], optional = true }
 uuid = {version = "1.7.0", features = ["v4"], optional = true }
