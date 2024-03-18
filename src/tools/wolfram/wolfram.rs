@@ -16,18 +16,19 @@ enum WolframErrorStatus {
     NoError(bool),
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct WolframResponse {
     queryresult: WolframResponseContent,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct WolframResponseContent {
-    pods: Vec<Pod>,
+    success: bool,
     error: WolframErrorStatus,
+    pods: Option<Vec<Pod>>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct Pod {
     title: String,
     subpods: Vec<Subpod>,
@@ -38,13 +39,8 @@ impl From<Pod> for String {
         let subpods_str: Vec<String> = pod
             .subpods
             .into_iter()
-            .filter_map(|subpod| {
-                let subpod_str = String::from(subpod);
-                if subpod_str.is_empty() {
-                    return None;
-                }
-                Some(subpod_str)
-            })
+            .map(|subpod| String::from(subpod))
+            .filter(|s| !s.is_empty())
             .collect();
 
         if subpods_str.is_empty() {
@@ -59,7 +55,7 @@ impl From<Pod> for String {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct Subpod {
     title: String,
     plaintext: String,
@@ -82,6 +78,7 @@ impl From<Subpod> for String {
 pub struct Wolfram {
     app_id: String,
     exclude_pods: Vec<String>,
+    client: reqwest::Client,
 }
 
 impl Wolfram {
@@ -89,6 +86,7 @@ impl Wolfram {
         Self {
             app_id,
             exclude_pods: Vec::new(),
+            client: reqwest::Client::new(),
         }
     }
 
@@ -96,13 +94,19 @@ impl Wolfram {
         self.exclude_pods = exclude_pods.iter().map(|s| s.as_ref().to_owned()).collect();
         self
     }
+
+    pub fn with_app_id<S: AsRef<str>>(mut self, app_id: S) -> Self {
+        self.app_id = app_id.as_ref().to_owned();
+        self
+    }
 }
 
 impl Default for Wolfram {
     fn default() -> Wolfram {
         Wolfram {
-            app_id: std::env::var("WOLFRAM_APP_ID").unwrap_or(String::new()),
+            app_id: std::env::var("WOLFRAM_APP_ID").unwrap_or_default(),
             exclude_pods: Vec::new(),
+            client: reqwest::Client::new(),
         }
     }
 }
@@ -124,7 +128,7 @@ impl Tool for Wolfram {
     async fn call(&self, input: &str) -> Result<String, Box<dyn Error>> {
         let mut url = format!(
             "https://api.wolframalpha.com/v2/query?appid={}&input={}&output=JSON&format=plaintext&podstate=Result__Step-by-step+solution",
-            self.app_id,
+            &self.app_id,
             urlencoding::encode(input)
         );
 
@@ -132,27 +136,27 @@ impl Tool for Wolfram {
             url += &format!("&excludepodid={}", self.exclude_pods.join(","));
         }
 
-        let response_text = reqwest::get(&url).await?.text().await?;
-        let response: WolframResponse = serde_json::from_str(&response_text)?;
+        let response: WolframResponse = self.client.get(&url).send().await?.json().await?;
 
         if let WolframErrorStatus::Error(error) = response.queryresult.error {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Wolfram Error {}: {}", error.code, error.msg),
             )));
+        } else if !response.queryresult.success {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Wolfram Error invalid query input: The query requested can not be processed by Wolfram"),
+            )));
         }
 
         let pods_str: Vec<String> = response
             .queryresult
             .pods
+            .unwrap_or_default()
             .into_iter()
-            .filter_map(|pod| {
-                let pod_str = String::from(pod);
-                if pod_str.is_empty() {
-                    return None;
-                }
-                Some(pod_str)
-            })
+            .map(|s| String::from(s))
+            .filter(|s| !s.is_empty())
             .collect();
 
         Ok(format!("{{\"pods\": [{}]}}", pods_str.join(",")))
@@ -167,7 +171,7 @@ mod tests {
     #[async_test]
     async fn test_wolfram() {
         let wolfram = Wolfram::default().with_excludes(&vec!["Plot"]);
-        let input = "solve x^2 = 4";
+        let input = "Solve x^2 - 2x + 1 = 0";
         let result = wolfram.call(input).await;
 
         assert!(result.is_ok());

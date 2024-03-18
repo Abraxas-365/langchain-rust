@@ -1,43 +1,29 @@
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
-use async_trait::async_trait;
 use langchain_rust::{
     agent::{AgentExecutor, ChatOutputParser, ConversationalAgentBuilder},
     chain::Chain,
+    language_models::{llm::LLM, options::CallOptions},
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     prompt_args,
-    tools::Tool,
+    tools::Wolfram,
 };
 
-//First whe sould create a tool, i will create a mock tool
-struct Calc {}
-
-#[async_trait]
-impl Tool for Calc {
-    fn name(&self) -> String {
-        "Calculator".to_string()
-    }
-    fn description(&self) -> String {
-        "Usefull to make calculations".to_string()
-    }
-    async fn call(&self, _input: &str) -> Result<String, Box<dyn Error>> {
-        Ok("25".to_string())
-    }
-}
 #[tokio::main]
 async fn main() {
-    let llm = OpenAI::default().with_model(OpenAIModel::Gpt4);
+    let mut llm = OpenAI::default().with_model(OpenAIModel::Gpt4);
+    llm.with_options(CallOptions::default().with_max_tokens(1000));
     let memory = SimpleMemory::new();
-    let tool_calc = Calc {};
+    let wolfram_tool = Wolfram::default();
     let agent = ConversationalAgentBuilder::new()
-        .tools(vec![Arc::new(tool_calc)])
+        .tools(vec![Arc::new(wolfram_tool)])
         .output_parser(ChatOutputParser::new().into())
         .build(llm)
         .unwrap();
 
     let input_variables = prompt_args! {
-        "input" => "Hello, my name is Luis, I am 10 years old, and I study Computer Science.",
+        "input" => "Hello",
     };
 
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
@@ -49,7 +35,7 @@ async fn main() {
     }
 
     let input_variables = prompt_args! {
-        "input" => "What is the age of Luis +10 and what does he study?",
+        "input" => "What is the area under the curve e^{-x^2}?",
     };
 
     match executor.invoke(input_variables).await {
