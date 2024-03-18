@@ -39,5 +39,5 @@ postgres = ["pgvector", "sqlx", "uuid"]
 surrealdb = ["dep:surrealdb"]
 
 [dev-dependencies]
-tokio-test = "0.4.0"
+tokio-test = "0.4.4"
 testcontainers = "0.11"
