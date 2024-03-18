@@ -23,22 +23,28 @@ impl SerpApi {
             google_domain: None,
         }
     }
-    pub fn with_location(mut self, location: String) -> Self {
-        self.location = Some(location);
+    pub fn with_location<S: Into<String>>(mut self, location: S) -> Self {
+        self.location = Some(location.into());
         self
     }
-    pub fn with_hl(mut self, hl: String) -> Self {
-        self.hl = Some(hl);
+    pub fn with_hl<S: Into<String>>(mut self, hl: S) -> Self {
+        self.hl = Some(hl.into());
         self
     }
     pub fn with_gl(mut self, gl: String) -> Self {
         self.gl = Some(gl);
         self
     }
-    pub fn with_google_domain(mut self, google_domain: String) -> Self {
-        self.google_domain = Some(google_domain);
+    pub fn with_google_domain<S: Into<String>>(mut self, google_domain: S) -> Self {
+        self.google_domain = Some(google_domain.into());
         self
     }
+
+    pub fn with_api_key<S: Into<String>>(mut self, api_key: S) -> Self {
+        self.api_key = api_key.into();
+        self
+    }
+
     pub async fn simple_search(&self, query: &str) -> Result<String, Box<dyn Error>> {
         let mut url = format!(
             "https://serpapi.com/search.json?q={}&api_key={}",
@@ -181,7 +187,7 @@ mod tests {
     async fn serpapi_tool() {
         let serpapi = SerpApi::default();
         let s = serpapi
-            .simple_search("Cual es el ultimo iphone?")
+            .simple_search("Who is the President of Peru")
             .await
             .unwrap();
         println!("{}", s);
