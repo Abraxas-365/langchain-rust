@@ -1,7 +1,9 @@
 use std::{error::Error, sync::Arc};
 
 use crate::{
-    agent::agent::AgentOutputParser, chain::llm_chain::LLMChainBuilder, language_models::llm::LLM,
+    agent::agent::AgentOutputParser,
+    chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions},
+    language_models::llm::LLM,
     tools::Tool,
 };
 
@@ -15,6 +17,7 @@ pub struct ConversationalAgentBuilder {
     output_parser: Option<Box<dyn AgentOutputParser>>,
     prefix: Option<String>,
     suffix: Option<String>,
+    options: Option<ChainCallOptions>,
 }
 
 impl ConversationalAgentBuilder {
@@ -24,6 +27,7 @@ impl ConversationalAgentBuilder {
             output_parser: None,
             prefix: None,
             suffix: None,
+            options: None,
         }
     }
 
@@ -47,6 +51,11 @@ impl ConversationalAgentBuilder {
         self
     }
 
+    pub fn options(mut self, options: ChainCallOptions) -> Self {
+        self.options = Some(options);
+        self
+    }
+
     pub fn build<L: LLM + 'static>(self, llm: L) -> Result<ConversationalAgent, Box<dyn Error>> {
         let tools = self.tools.unwrap_or_else(Vec::new);
         let output_parser = self.output_parser.ok_or("Output parser must be set")?;
@@ -54,7 +63,14 @@ impl ConversationalAgentBuilder {
         let suffix = self.suffix.unwrap_or_else(|| SUFFIX.to_string());
 
         let prompt = ConversationalAgent::create_prompt(&tools, &suffix, &prefix)?;
-        let chain = Box::new(LLMChainBuilder::new().prompt(prompt).llm(llm).build()?);
+        let default_options = ChainCallOptions::default().with_max_tokens(1000);
+        let chain = Box::new(
+            LLMChainBuilder::new()
+                .prompt(prompt)
+                .llm(llm)
+                .options(self.options.unwrap_or(default_options))
+                .build()?,
+        );
 
         Ok(ConversationalAgent {
             chain,
