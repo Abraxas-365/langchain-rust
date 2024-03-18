@@ -44,7 +44,7 @@ jobs:
           profile: minimal
           components: rustfmt, clippy
       - uses: swatinem/rust-cache@v2.7.3
-      - name: rust fmt
+      - name: Rust fmt
         uses: actions-rs/cargo@v1
         with:
           command: fmt
@@ -54,11 +54,11 @@ jobs:
         with:
           command: build
           args: --verbose --all --release --all-features
-      - name: Build Test
+      - name: Run Test
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --no-run --release --all-features
+          args: --release --all-features
 
   publish_crate:
     if: startsWith(github.ref, 'refs/tags/')

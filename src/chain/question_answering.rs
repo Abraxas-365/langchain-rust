@@ -52,6 +52,7 @@ mod tests {
     };
 
     #[tokio::test]
+    #[ignore]
     async fn test_qa() {
         let llm = OpenAI::default();
         let chain = load_stuff_qa(llm);
