@@ -23,7 +23,7 @@ pub mod builder;
 mod prompt;
 pub struct ConversationalChain {
     llm: LLMChain,
-    memory: Arc<Mutex<dyn BaseMemory>>,
+    pub memory: Arc<Mutex<dyn BaseMemory>>,
 }
 
 //Conversational Chain is a simple chain to interact with ai as a string of messages
