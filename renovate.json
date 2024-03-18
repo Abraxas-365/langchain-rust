@@ -2,5 +2,8 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
-  ]
+  ],
+  "stabilityDays": "3",
+  "timezone": "America/Los_Angeles",
+  "schedule": "after 1am every 3 weeks on Saturday"
 }
