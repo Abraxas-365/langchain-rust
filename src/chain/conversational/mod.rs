@@ -96,6 +96,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     async fn test_invoke_conversational() {
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
         let chain = ConversationalChainBuilder::new()

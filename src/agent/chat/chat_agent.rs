@@ -141,6 +141,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_invoke_agent() {
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt4.to_string());
         let memory = SimpleMemory::new();
