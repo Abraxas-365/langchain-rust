@@ -16,10 +16,37 @@ use super::{
     STOP_WORD,
 };
 
+pub struct SqlChainPromptBuilder {
+    input: String,
+}
+impl SqlChainPromptBuilder {
+    pub fn new() -> Self {
+        Self {
+            input: "".to_string(),
+        }
+    }
+
+    pub fn input<S: Into<String>>(mut self, input: S) -> Self {
+        self.input = input.into();
+        self
+    }
+
+    pub fn build(self) -> PromptArgs {
+        prompt_args! {
+          SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY  => self.input,
+        }
+    }
+}
+
 pub struct SQLDatabaseChain {
     pub(crate) llmchain: LLMChain,
     pub(crate) top_k: usize,
     pub(crate) database: SQLDatabase,
+}
+impl SQLDatabaseChain {
+    pub fn promp_builder() -> SqlChainPromptBuilder {
+        SqlChainPromptBuilder::new()
+    }
 }
 
 #[async_trait]
