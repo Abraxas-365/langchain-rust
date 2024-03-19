@@ -5,8 +5,8 @@ use futures::Stream;
 use serde_json::Value;
 
 use crate::{
-    chain::{Chain, LLMChain, StuffQAPromptBuilder},
-    language_models::GenerateResult,
+    chain::{load_stuff_qa, Chain, LLMChain, StuffQAPromptBuilder},
+    language_models::{llm::LLM, GenerateResult},
     prompt::PromptArgs,
     schemas::Document,
 };
@@ -42,6 +42,10 @@ impl StuffDocument {
 
     pub fn qa_prompt_builder<'a>(&self) -> StuffQAPromptBuilder<'a> {
         StuffQAPromptBuilder::new()
+    }
+
+    pub fn load_stuff_qa<L: LLM + 'static>(llm: L) -> Self {
+        load_stuff_qa(llm)
     }
 }
 

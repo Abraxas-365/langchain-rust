@@ -81,4 +81,12 @@ impl Message {
     pub fn messages_from_value(value: &Value) -> Result<Vec<Message>, Box<dyn Error>> {
         serde_json::from_value(value.clone()).map_err(|e| e.into())
     }
+
+    pub fn messages_to_string(messages: &[Message]) -> String {
+        messages
+            .iter()
+            .map(|m| format!("{:?}: {}", m.message_type, m.content))
+            .collect::<Vec<String>>()
+            .join("\n")
+    }
 }
