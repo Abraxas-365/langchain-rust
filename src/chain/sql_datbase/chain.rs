@@ -43,6 +43,43 @@ pub struct SQLDatabaseChain {
     pub(crate) top_k: usize,
     pub(crate) database: SQLDatabase,
 }
+
+/// SQLChain let you interact with a db in human lenguage
+///
+/// The input variable name is `query`.
+/// Example
+/// ```rust,ignore
+/// # async {
+/// let options = ChainCallOptions::default();
+/// let llm = OpenAI::default();
+///
+/// let db = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+/// let engine = PostgreSQLEngine::new(&db).await.unwrap();
+/// let db = SQLDatabaseBuilder::new(engine).build().await.unwrap();
+/// let chain = SQLDatabaseChainBuilder::new()
+///     .llm(llm)
+///     .top_k(4)
+///     .database(db)
+///     .options(options)
+///     .build()
+///     .expect("Failed to build LLMChain");
+///
+/// let input_variables = prompt_args! {
+///     "query" => "Whats the phone number of luis"
+///   };
+///   //OR
+/// let input_variables = chain.prompt_builder()
+///     .query("Whats the phone number of luis")
+///     .build();
+/// match chain.invoke(input_variables).await {
+///    Ok(result) => {
+///     println!("Result: {:?}", result);
+/// }
+/// Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+/// }
+///
+/// }
+/// ```
 impl SQLDatabaseChain {
     pub fn prompt_builder(&self) -> SqlChainPromptBuilder {
         SqlChainPromptBuilder::new()
