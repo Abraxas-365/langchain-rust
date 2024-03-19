@@ -1,10 +1,4 @@
-use std::{
-    collections::HashMap,
-    error::Error,
-    fs::File,
-    io::{Cursor, Read},
-    path::Path,
-};
+use std::{collections::HashMap, error::Error, io::Read, path::Path};
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -17,24 +11,32 @@ pub struct PdfLoader {
 }
 
 impl PdfLoader {
+    /// Creates a new PdfLoader from anything that implements the Read trait.
+    /// This is a generic constructor which can be used with any type of reader.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use std::io::Cursor;
+    /// let data = Cursor::new(vec![...] /* some PDF data */);
+    /// let loader = PdfLoader::new(data)?;
+    /// ```
+    ///
     pub fn new<R: Read>(reader: R) -> Result<Self, Box<dyn Error>> {
         let document = lopdf::Document::load_from(reader)?;
         Ok(Self { document })
     }
-
+    /// Creates a new PdfLoader from a path to a PDF file.
+    /// This loads the PDF document and creates a PdfLoader from it.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let loader = PdfLoader::from_path("/path/to/my.pdf")?;
+    /// ```
+    ///
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
-        let mut file = File::open(path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        let reader = Cursor::new(buffer);
-        let document = lopdf::Document::load_from(reader.clone())?;
-        Ok(Self { document })
-    }
-
-    pub fn from_string<S: Into<String>>(input: S) -> Result<Self, Box<dyn Error>> {
-        let input = input.into();
-        let reader = Cursor::new(input.into_bytes());
-        let document = lopdf::Document::load_from(reader.clone())?;
+        let document = lopdf::Document::load(path)?;
         Ok(Self { document })
     }
 }
@@ -67,6 +69,8 @@ impl Loader for PdfLoader {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs::File, io::Cursor};
+
     use super::*;
 
     #[tokio::test]
@@ -74,6 +78,25 @@ mod tests {
         let path = "./src/document_loaders/test_data/sample.pdf";
 
         let loader = PdfLoader::from_path(path).expect("Failed to create PdfLoader");
+
+        let docs = loader.load().await.expect("Failed to load content");
+
+        assert_eq!(
+            docs[0].page_content,
+            "Sample PDF Document Robert Maron Grzegorz Grudzi · nski February 20, 1999 \n"
+        );
+        assert_eq!(docs.len(), 10);
+    }
+
+    #[tokio::test]
+    async fn test_pdf_loader_reader() {
+        let path = "./src/document_loaders/test_data/sample.pdf";
+        let mut file = File::open(path).unwrap();
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer).unwrap();
+        let reader = Cursor::new(buffer);
+
+        let loader = PdfLoader::new(reader).expect("Failed to create PdfLoader");
 
         let docs = loader.load().await.expect("Failed to load content");
 
