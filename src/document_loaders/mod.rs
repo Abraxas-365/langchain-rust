@@ -6,3 +6,6 @@ pub use text_loader::*;
 
 mod csv_loader;
 pub use csv_loader::*;
+
+mod pdf_loader;
+pub use pdf_loader::*;
