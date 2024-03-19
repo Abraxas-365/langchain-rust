@@ -5,7 +5,7 @@ use futures::Stream;
 use serde_json::Value;
 
 use crate::{
-    chain::{Chain, LLMChain},
+    chain::{Chain, LLMChain, StuffQAPromptBuilder},
     language_models::GenerateResult,
     prompt::PromptArgs,
     schemas::Document,
@@ -38,6 +38,10 @@ impl StuffDocument {
             .map(|doc| doc.page_content.clone())
             .collect::<Vec<_>>()
             .join(&self.separator)
+    }
+
+    pub fn qa_prompt_builder<'a>(&self) -> StuffQAPromptBuilder<'a> {
+        StuffQAPromptBuilder::new()
     }
 }
 

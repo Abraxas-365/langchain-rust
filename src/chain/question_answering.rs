@@ -1,4 +1,6 @@
-use crate::{language_models::llm::LLM, template_jinja2};
+use crate::{
+    language_models::llm::LLM, prompt::PromptArgs, prompt_args, schemas::Document, template_jinja2,
+};
 
 use super::{LLMChain, LLMChainBuilder, StuffDocument};
 
@@ -29,6 +31,37 @@ pub fn load_condense_question_generator<L: LLM + 'static>(llm: L) -> LLMChain {
                   //set.
 }
 
+pub struct StuffQAPromptBuilder<'a> {
+    input_documents: Vec<&'a Document>,
+    question: String,
+}
+
+impl<'a> StuffQAPromptBuilder<'a> {
+    pub fn new() -> Self {
+        Self {
+            input_documents: vec![],
+            question: "".to_string(),
+        }
+    }
+
+    pub fn documents(mut self, documents: &'a [Document]) -> Self {
+        self.input_documents = documents.iter().collect();
+        self
+    }
+
+    pub fn question<S: Into<String>>(mut self, question: S) -> Self {
+        self.question = question.into();
+        self
+    }
+
+    pub fn build(self) -> PromptArgs {
+        prompt_args! {
+            "input_documents" => self.input_documents,
+            "question" => self.question
+        }
+    }
+}
+
 pub fn load_stuff_qa<L: LLM + 'static>(llm: L) -> StuffDocument {
     let default_qa_prompt_template =
         template_jinja2!(DEFAULT_STUFF_QA_TEMPLATE, "context", "question");
@@ -47,7 +80,6 @@ mod tests {
     use crate::{
         chain::{load_stuff_qa, Chain},
         llm::openai::OpenAI,
-        prompt_args,
         schemas::Document,
     };
 
@@ -56,17 +88,22 @@ mod tests {
     async fn test_qa() {
         let llm = OpenAI::default();
         let chain = load_stuff_qa(llm);
+        let input = chain
+            .qa_prompt_builder()
+            .documents(&[
+                Document::new(format!(
+                    "\nQuestion: {}\nAnswer: {}\n",
+                    "Which is the favorite text editor of luis", "Nvim"
+                )),
+                Document::new(format!(
+                    "\nQuestion: {}\nAnswer: {}\n",
+                    "How old is Luis", "24"
+                )),
+            ])
+            .question("How old is luis and whats his favorite text editor")
+            .build();
 
-        let ouput = chain
-            .invoke(prompt_args! {
-                "input_documents"=>vec![
-Document::new(format!("\nQuestion: {}\nAnswer: {}\n", "Which is the favorite text editor of luis", "Nvim")),
-Document::new(format!("\nQuestion: {}\nAnswer: {}\n", "How old is Luis", "24")),
-                ],
-                "question"=>"How old is luis and whats his favorite text editor"
-            })
-            .await
-            .unwrap();
+        let ouput = chain.invoke(input).await.unwrap();
 
         println!("{}", ouput);
     }
