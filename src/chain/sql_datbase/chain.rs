@@ -44,7 +44,7 @@ pub struct SQLDatabaseChain {
     pub(crate) database: SQLDatabase,
 }
 impl SQLDatabaseChain {
-    pub fn promp_builder() -> SqlChainPromptBuilder {
+    pub fn prompt_builder(&self) -> SqlChainPromptBuilder {
         SqlChainPromptBuilder::new()
     }
 }
