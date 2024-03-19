@@ -30,7 +30,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 - [Streaming from a Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/streaming_from_chain.rs) : Streming example
 
-- [Q&A chian](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/qa_chain.rs.rs) : Streming example
+- [Q&A chian](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/qa_chain.rs) : Question answer Chain
 
 ## Installation
 
