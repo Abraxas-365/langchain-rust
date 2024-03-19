@@ -17,23 +17,23 @@ use super::{
 };
 
 pub struct SqlChainPromptBuilder {
-    input: String,
+    query: String,
 }
 impl SqlChainPromptBuilder {
     pub fn new() -> Self {
         Self {
-            input: "".to_string(),
+            query: "".to_string(),
         }
     }
 
-    pub fn input<S: Into<String>>(mut self, input: S) -> Self {
-        self.input = input.into();
+    pub fn query<S: Into<String>>(mut self, input: S) -> Self {
+        self.query = input.into();
         self
     }
 
     pub fn build(self) -> PromptArgs {
         prompt_args! {
-          SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY  => self.input,
+          SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY  => self.query,
         }
     }
 }
