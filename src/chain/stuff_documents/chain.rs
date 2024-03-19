@@ -5,8 +5,8 @@ use futures::Stream;
 use serde_json::Value;
 
 use crate::{
-    chain::{Chain, LLMChain, StuffQAPromptBuilder},
-    language_models::GenerateResult,
+    chain::{load_stuff_qa, Chain, LLMChain, StuffQAPromptBuilder},
+    language_models::{llm::LLM, GenerateResult},
     prompt::PromptArgs,
     schemas::Document,
 };
@@ -42,6 +42,39 @@ impl StuffDocument {
 
     pub fn qa_prompt_builder<'a>(&self) -> StuffQAPromptBuilder<'a> {
         StuffQAPromptBuilder::new()
+    }
+
+    /// load_stuff_qa return an instance of StuffDocument
+    /// with a prompt desiged for question ansering
+    ///
+    /// # Example
+    /// ```rust,ignore
+    ///
+    /// let llm = OpenAI::default();
+    /// let chain = StuffDocument::load_stuff_qa(llm);
+    ///
+    /// let input = chain
+    /// .qa_prompt_builder()
+    /// .documents(&[
+    /// Document::new(format!(
+    /// "\nQuestion: {}\nAnswer: {}\n",
+    /// "Which is the favorite text editor of luis", "Nvim"
+    /// )),
+    /// Document::new(format!(
+    /// "\nQuestion: {}\nAnswer: {}\n",
+    /// "How old is Luis", "24"
+    /// )),
+    /// ])
+    /// .question("How old is luis and whats his favorite text editor")
+    /// .build();
+    ///
+    /// let ouput = chain.invoke(input).await.unwrap();
+    ///
+    /// println!("{}", ouput);
+    /// ```
+    ///
+    pub fn load_stuff_qa<L: LLM + 'static>(llm: L) -> Self {
+        load_stuff_qa(llm)
     }
 }
 
