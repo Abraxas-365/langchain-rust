@@ -4,7 +4,6 @@
 use langchain_rust::{
     chain::{options::ChainCallOptions, Chain, SQLDatabaseChainBuilder},
     llm::openai::OpenAI,
-    prompt_args,
     tools::{postgres::PostgreSQLEngine, SQLDatabaseBuilder},
 };
 
@@ -35,9 +34,7 @@ async fn main() {
     io::stdin().read_line(&mut input).unwrap();
 
     let input = input.trim();
-    let input_variables = prompt_args! {
-        "query" => input
-    };
+    let input_variables = chain.prompt_builder().query(input).build();
     match chain.invoke(input_variables).await {
         Ok(result) => {
             println!("Result: {:?}", result);

@@ -2,7 +2,6 @@ use langchain_rust::{
     chain::{builder::ConversationalChainBuilder, Chain},
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
-    prompt_args,
 };
 
 #[tokio::main]
@@ -18,9 +17,7 @@ async fn main() {
         .build()
         .expect("Error building ConversationalChain");
 
-    let input_variables = prompt_args! {
-        "input" => "Im from Peru",
-    };
+    let input_variables = chain.pompt_builder().input("Im from Peru").build();
 
     match chain.invoke(input_variables).await {
         Ok(result) => {
@@ -29,9 +26,10 @@ async fn main() {
         Err(e) => panic!("Error invoking LLMChain: {:?}", e),
     }
 
-    let input_variables = prompt_args! {
-        "input" => "Which are the typical dish",
-    };
+    let input_variables = chain
+        .pompt_builder()
+        .input("Which are the typical dish")
+        .build();
 
     match chain.invoke(input_variables).await {
         Ok(result) => {
