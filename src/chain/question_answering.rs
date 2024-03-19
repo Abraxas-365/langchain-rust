@@ -67,6 +67,10 @@ impl CondenseQuetionGeneratorChain {
                        //set.
         Self { chain }
     }
+
+    pub fn prompt_builder(&self) -> CondenseQuestionPromptBuilder {
+        CondenseQuestionPromptBuilder::new()
+    }
 }
 
 #[async_trait]
