@@ -5,8 +5,8 @@ pub enum TextSplitterError {
     #[error("Empty input text")]
     EmptyInputText,
 
-    #[error("Mismatch metadatas and text")]
-    MetaDataTextMismatch,
+    #[error("Mismatch metadata and text")]
+    MetadataTextMismatch,
 
     #[error("Tokenizer not found")]
     TokenizerNotFound,

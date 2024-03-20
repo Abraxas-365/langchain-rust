@@ -31,7 +31,7 @@ pub trait TextSplitter: Send + Sync {
         }
 
         if text.len() != metadatas.len() {
-            return Err(TextSplitterError::MetaDataTextMismatch);
+            return Err(TextSplitterError::MetadataTextMismatch);
         }
 
         let mut documents: Vec<Document> = Vec::new();
