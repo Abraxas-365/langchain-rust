@@ -1,8 +1,10 @@
-use std::error::Error;
-
 use async_trait::async_trait;
 
-use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
+use crate::{
+    document_loaders::{Loader, LoaderError},
+    schemas::Document,
+    text_splitter::TextSplitter,
+};
 
 #[derive(Debug, Clone)]
 pub struct TextLoader {
@@ -19,14 +21,14 @@ impl TextLoader {
 
 #[async_trait]
 impl Loader for TextLoader {
-    async fn load(mut self) -> Result<Vec<Document>, Box<dyn Error>> {
+    async fn load(mut self) -> Result<Vec<Document>, LoaderError> {
         Ok(vec![Document::new(self.content.clone())])
     }
 
     async fn load_and_split<TS: TextSplitter + 'static>(
         mut self,
         splitter: TS,
-    ) -> Result<Vec<Document>, Box<dyn Error>> {
+    ) -> Result<Vec<Document>, LoaderError> {
         let documents = self.load().await?;
         let result = splitter.split_documents(&documents)?;
         Ok(result)

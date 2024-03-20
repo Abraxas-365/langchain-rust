@@ -1,9 +1,9 @@
+use crate::document_loaders::LoaderError;
 use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
 use async_trait::async_trait;
 use csv;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::error::Error;
 use std::io::{Cursor, Read};
 use std::path::Path;
 use tokio::fs::File;
@@ -33,7 +33,7 @@ impl CsvLoader<Cursor<Vec<u8>>> {
     pub async fn from_path<P: AsRef<Path>>(
         path: P,
         columns: Vec<String>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self, LoaderError> {
         let mut file = File::open(path).await?;
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer).await?;
@@ -44,7 +44,7 @@ impl CsvLoader<Cursor<Vec<u8>>> {
 
 #[async_trait]
 impl<R: Read + Send + Sync + 'static> Loader for CsvLoader<R> {
-    async fn load(mut self) -> Result<Vec<Document>, Box<dyn Error>> {
+    async fn load(mut self) -> Result<Vec<Document>, LoaderError> {
         let mut reader = csv::Reader::from_reader(self.reader);
         let mut documents = vec![];
         let headers = reader.headers()?.clone();
@@ -86,7 +86,7 @@ impl<R: Read + Send + Sync + 'static> Loader for CsvLoader<R> {
     async fn load_and_split<TS: TextSplitter + 'static>(
         mut self,
         splitter: TS,
-    ) -> Result<Vec<Document>, Box<dyn Error>> {
+    ) -> Result<Vec<Document>, LoaderError> {
         let documents = self.load().await?;
         let result = splitter.split_documents(&documents)?;
         Ok(result)
