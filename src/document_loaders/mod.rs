@@ -9,3 +9,6 @@ pub use csv_loader::*;
 
 mod pdf_loader;
 pub use pdf_loader::*;
+
+mod error;
+pub use error::*;

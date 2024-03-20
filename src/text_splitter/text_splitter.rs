@@ -1,13 +1,15 @@
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
 use serde_json::Value;
 
 use crate::schemas::Document;
 
-pub trait TextSplitter: Send + Sync {
-    fn split_text(&self, text: &str) -> Result<Vec<String>, Box<dyn Error>>;
+use super::TextSplitterError;
 
-    fn split_documents(&self, documents: &[Document]) -> Result<Vec<Document>, Box<dyn Error>> {
+pub trait TextSplitter: Send + Sync {
+    fn split_text(&self, text: &str) -> Result<Vec<String>, TextSplitterError>;
+
+    fn split_documents(&self, documents: &[Document]) -> Result<Vec<Document>, TextSplitterError> {
         let mut texts: Vec<String> = Vec::new();
         let mut metadatas: Vec<HashMap<String, Value>> = Vec::new();
         documents.iter().for_each(|d| {
@@ -22,14 +24,14 @@ pub trait TextSplitter: Send + Sync {
         &self,
         text: &[String],
         metadatas: &[HashMap<String, Value>],
-    ) -> Result<Vec<Document>, Box<dyn Error>> {
+    ) -> Result<Vec<Document>, TextSplitterError> {
         let mut metadatas = metadatas.to_vec();
         if metadatas.is_empty() {
             metadatas = vec![HashMap::new(); text.len()];
         }
 
         if text.len() != metadatas.len() {
-            return Err(Box::from("Mismatch metadatas and text"));
+            return Err(TextSplitterError::MetaDataTextMismatch);
         }
 
         let mut documents: Vec<Document> = Vec::new();

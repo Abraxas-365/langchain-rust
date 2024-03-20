@@ -1,9 +1,13 @@
-use std::{collections::HashMap, error::Error, io::Read, path::Path};
+use std::{collections::HashMap, io::Read, path::Path};
 
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
+use crate::{
+    document_loaders::{Loader, LoaderError},
+    schemas::Document,
+    text_splitter::TextSplitter,
+};
 
 #[derive(Debug, Clone)]
 pub struct LoPdfLoader {
@@ -22,7 +26,7 @@ impl LoPdfLoader {
     /// let loader = PdfLoader::new(data)?;
     /// ```
     ///
-    pub fn new<R: Read>(reader: R) -> Result<Self, Box<dyn Error>> {
+    pub fn new<R: Read>(reader: R) -> Result<Self, LoaderError> {
         let document = lopdf::Document::load_from(reader)?;
         Ok(Self { document })
     }
@@ -35,7 +39,7 @@ impl LoPdfLoader {
     /// let loader = PdfLoader::from_path("/path/to/my.pdf")?;
     /// ```
     ///
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, LoaderError> {
         let document = lopdf::Document::load(path)?;
         Ok(Self { document })
     }
@@ -43,7 +47,7 @@ impl LoPdfLoader {
 
 #[async_trait]
 impl Loader for LoPdfLoader {
-    async fn load(mut self) -> Result<Vec<Document>, Box<dyn Error>> {
+    async fn load(mut self) -> Result<Vec<Document>, LoaderError> {
         let mut documents: Vec<Document> = Vec::new();
         let pages = self.document.get_pages();
         for (i, _) in pages.iter().enumerate() {
@@ -60,7 +64,7 @@ impl Loader for LoPdfLoader {
     async fn load_and_split<TS: TextSplitter + 'static>(
         mut self,
         splitter: TS,
-    ) -> Result<Vec<Document>, Box<dyn Error>> {
+    ) -> Result<Vec<Document>, LoaderError> {
         let documents = self.load().await?;
         let result = splitter.split_documents(&documents)?;
         Ok(result)
