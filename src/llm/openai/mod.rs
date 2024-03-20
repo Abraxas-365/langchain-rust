@@ -3,10 +3,10 @@ use std::{error::Error, pin::Pin};
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
     types::{
-        ChatChoiceStream, ChatCompletionFunctionsArgs, ChatCompletionRequestAssistantMessageArgs,
-        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
-        ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequest,
-        CreateChatCompletionRequestArgs,
+        ChatChoiceStream, ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
+        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+        ChatCompletionToolArgs, ChatCompletionToolType, CreateChatCompletionRequest,
+        CreateChatCompletionRequestArgs, FunctionObjectArgs,
     },
     Client,
 };
@@ -136,8 +136,12 @@ impl<C: Config + Send + Sync> LLM for OpenAI<C> {
                     });
                 }
 
-                if let Some(choice) = response.choices.first() {
+                if let Some(choice) = &response.choices.first() {
                     generate_result.generation = choice.message.content.clone().unwrap_or_default();
+                    if let Some(function) = &choice.message.tool_calls {
+                        generate_result.generation =
+                            serde_json::to_string(&function).unwrap_or_default();
+                    }
                 } else {
                     generate_result.generation = "".to_string();
                 }
@@ -226,16 +230,22 @@ impl<C: Config> OpenAI<C> {
         }
 
         if let Some(behavior) = &self.options.functions {
+            println!("Behavior: {:?}", behavior[0].name);
             let mut functions = Vec::new();
             for f in behavior.iter() {
-                let tool = ChatCompletionFunctionsArgs::default()
+                let tool = FunctionObjectArgs::default()
                     .name(f.name.clone())
                     .description(f.description.clone())
                     .parameters(f.parameters.clone())
                     .build()?;
-                functions.push(tool);
+                functions.push(
+                    ChatCompletionToolArgs::default()
+                        .r#type(ChatCompletionToolType::Function)
+                        .function(tool)
+                        .build()?,
+                )
             }
-            request_builder.functions(functions);
+            request_builder.tools(functions);
         }
 
         if let Some(behavior) = self.options.function_call_behavior {
@@ -250,7 +260,10 @@ impl<C: Config> OpenAI<C> {
 }
 #[cfg(test)]
 mod tests {
+    use crate::language_models::options::FunctionDefinition;
+
     use super::*;
+    use serde_json::json;
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tokio::test;
@@ -369,5 +382,35 @@ mod tests {
                 }
             })
             .await;
+    }
+
+    #[test]
+    #[ignore]
+    async fn test_function() {
+        let mut functions = Vec::new();
+        functions.push(FunctionDefinition {
+            name: "cli".to_string(),
+            description: "Use the Ubuntu command line to preform any action you wish.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The raw command you want executed"
+                    }
+                },
+                "required": ["command"]
+            }),
+        });
+
+        let llm = OpenAI::default()
+            .with_model(OpenAIModel::Gpt35)
+            .with_config(OpenAIConfig::new())
+            .with_options(CallOptions::new().with_functions(functions));
+        let response = llm
+            .invoke("Use the command line to create a new rust project. Execute the first command.")
+            .await
+            .unwrap();
+        println!("{}", response)
     }
 }
