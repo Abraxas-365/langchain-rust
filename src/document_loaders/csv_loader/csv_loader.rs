@@ -4,10 +4,9 @@ use async_trait::async_trait;
 use csv;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::io::{Cursor, Read};
+use std::fs::File;
+use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
 
 #[derive(Debug, Clone)]
 pub struct CsvLoader<R> {
@@ -29,15 +28,10 @@ impl CsvLoader<Cursor<Vec<u8>>> {
     }
 }
 
-impl CsvLoader<Cursor<Vec<u8>>> {
-    pub async fn from_path<P: AsRef<Path>>(
-        path: P,
-        columns: Vec<String>,
-    ) -> Result<Self, LoaderError> {
-        let mut file = File::open(path).await?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer).await?;
-        let reader = Cursor::new(buffer);
+impl CsvLoader<BufReader<File>> {
+    pub fn from_path<P: AsRef<Path>>(path: P, columns: Vec<String>) -> Result<Self, LoaderError> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
         Ok(Self::new(reader, columns))
     }
 }
@@ -134,9 +128,7 @@ Jane Smith,32,London,United Kingdom";
             "city".to_string(),
             "country".to_string(),
         ];
-        let csv_loader = CsvLoader::from_path(path, columns)
-            .await
-            .expect("Failed to create csv loader");
+        let csv_loader = CsvLoader::from_path(path, columns).expect("Failed to create csv loader");
 
         let documents = csv_loader.load().await.expect("Failed to load documents");
 
