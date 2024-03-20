@@ -11,6 +11,9 @@ pub enum TextSplitterError {
     #[error("Tokenizer not found")]
     TokenizerNotFound,
 
-    #[error("Tokenizer creation failed: {0}")]
-    TokenizerCreationFailed(#[from] anyhow::Error),
+    #[error("Tokenizer creation failed due to invalid tokenizer")]
+    InvalidTokenizer,
+
+    #[error("Tokenizer creation failed due to invalid model")]
+    InvalidModel,
 }

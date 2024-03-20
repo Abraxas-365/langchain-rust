@@ -53,11 +53,9 @@ impl TextSplitter for MarkdownSplitter {
                 .get_tokenizer_from_str(&self.encoding_name)
                 .ok_or(TextSplitterError::TokenizerNotFound)?;
 
-            let tokenizer = get_bpe_from_tokenizer(tokenizer)?;
-            tokenizer
+            get_bpe_from_tokenizer(tokenizer).map_err(|_| TextSplitterError::InvalidTokenizer)?
         } else {
-            let tokenizer = get_bpe_from_model(&self.model_name)?;
-            tokenizer
+            get_bpe_from_model(&self.model_name).map_err(|_| TextSplitterError::InvalidModel)?
         };
         let text = self.split(text, tk);
         Ok(text)

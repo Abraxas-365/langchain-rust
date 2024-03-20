@@ -34,7 +34,6 @@ csv = "1.3.0"
 urlencoding = "2.1.3"
 lopdf = { version = "0.32.0", features = ["pom", "pom_parser"] }
 thiserror = "1.0.58"
-anyhow = "1.0.81"
 
 [features]
 default = []
