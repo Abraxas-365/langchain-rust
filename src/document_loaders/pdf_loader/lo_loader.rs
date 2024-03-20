@@ -6,11 +6,11 @@ use serde_json::Value;
 use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
 
 #[derive(Debug, Clone)]
-pub struct PdfLoader {
+pub struct LoPdfLoader {
     document: lopdf::Document,
 }
 
-impl PdfLoader {
+impl LoPdfLoader {
     /// Creates a new PdfLoader from anything that implements the Read trait.
     /// This is a generic constructor which can be used with any type of reader.
     ///
@@ -42,7 +42,7 @@ impl PdfLoader {
 }
 
 #[async_trait]
-impl Loader for PdfLoader {
+impl Loader for LoPdfLoader {
     async fn load(mut self) -> Result<Vec<Document>, Box<dyn Error>> {
         let mut documents: Vec<Document> = Vec::new();
         let pages = self.document.get_pages();
@@ -77,7 +77,7 @@ mod tests {
     async fn test_pdf_loader() {
         let path = "./src/document_loaders/test_data/sample.pdf";
 
-        let loader = PdfLoader::from_path(path).expect("Failed to create PdfLoader");
+        let loader = LoPdfLoader::from_path(path).expect("Failed to create PdfLoader");
 
         let docs = loader.load().await.expect("Failed to load content");
 
@@ -89,14 +89,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_pdf_loader_reader() {
+    async fn test_lo_pdf_loader_reader() {
         let path = "./src/document_loaders/test_data/sample.pdf";
         let mut file = File::open(path).unwrap();
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer).unwrap();
         let reader = Cursor::new(buffer);
 
-        let loader = PdfLoader::new(reader).expect("Failed to create PdfLoader");
+        let loader = LoPdfLoader::new(reader).expect("Failed to create PdfLoader");
 
         let docs = loader.load().await.expect("Failed to load content");
 
