@@ -28,13 +28,31 @@ pub trait Tool: Send + Sync {
         json!({
             "type": "object",
                 "properties": {
-                "command": {
+                "input": {
                     "type": "string",
                     "description":self.description()
                 }
             },
-            "required": ["command"]
+            "required": ["input"]
         })
     }
-    async fn call(&self, input: &str) -> Result<String, Box<dyn Error>>;
+    async fn call(&self, input: &str) -> Result<String, Box<dyn Error>> {
+        let input = self.parse_input(input).await;
+        self.run(input).await
+    }
+
+    async fn run(&self, input: Value) -> Result<String, Box<dyn Error>>;
+
+    async fn parse_input(&self, input: &str) -> Value {
+        match serde_json::from_str::<Value>(input) {
+            Ok(input) => {
+                if input["input"].is_string() {
+                    Value::String(input["input"].as_str().unwrap().to_string())
+                } else {
+                    Value::String(input.to_string())
+                }
+            }
+            Err(_) => Value::String(input.to_string()),
+        }
+    }
 }

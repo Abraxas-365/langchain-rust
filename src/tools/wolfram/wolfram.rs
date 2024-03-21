@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use serde_json::Value;
 
 use crate::tools::Tool;
 use std::error::Error;
@@ -126,7 +127,8 @@ impl Tool for Wolfram {
             interpret.",
         )
     }
-    async fn call(&self, input: &str) -> Result<String, Box<dyn Error>> {
+    async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
+        let input = input.as_str().ok_or("Invalid input")?;
         let mut url = format!(
             "https://api.wolframalpha.com/v2/query?appid={}&input={}&output=JSON&format=plaintext&podstate=Result__Step-by-step+solution",
             &self.app_id,

@@ -1,44 +1,8 @@
 use futures::Future;
-use serde_json::Value;
-use std::{ops::Deref, pin::Pin, sync::Arc};
+use std::{pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
-use crate::tools::Tool;
-
-#[derive(Clone, Copy, Debug)]
-pub enum FunctionCallBehavior {
-    None,
-    Auto,
-}
-
-#[derive(Clone, Debug)]
-pub struct FunctionDefinition {
-    pub name: String,
-    pub description: String,
-    pub parameters: Value,
-}
-
-impl FunctionDefinition {
-    pub fn new(name: &str, description: &str, parameters: Value) -> Self {
-        FunctionDefinition {
-            name: name.to_string(),
-            description: description.to_string(),
-            parameters,
-        }
-    }
-
-    /// Generic function that can be used with both Arc<Tool>, Box<Tool>, and direct references
-    pub fn from_langchain_tool<T>(tool: &T) -> FunctionDefinition
-    where
-        T: Deref<Target = dyn Tool + Send + Sync> + ?Sized,
-    {
-        FunctionDefinition {
-            name: tool.name(),
-            description: tool.description(),
-            parameters: tool.parameters(),
-        }
-    }
-}
+use crate::schemas::{FunctionCallBehavior, FunctionDefinition};
 
 #[derive(Clone)]
 pub struct CallOptions {
@@ -181,5 +145,52 @@ impl CallOptions {
     pub fn with_function_call_behavior(mut self, behavior: FunctionCallBehavior) -> Self {
         self.function_call_behavior = Some(behavior);
         self
+    }
+
+    pub fn merge_options(&mut self, incoming_options: CallOptions) {
+        // For simple scalar types wrapped in Option, prefer incoming option if it is Some
+        self.candidate_count = incoming_options.candidate_count.or(self.candidate_count);
+        self.max_tokens = incoming_options.max_tokens.or(self.max_tokens);
+        self.temperature = incoming_options.temperature.or(self.temperature);
+        self.top_k = incoming_options.top_k.or(self.top_k);
+        self.top_p = incoming_options.top_p.or(self.top_p);
+        self.seed = incoming_options.seed.or(self.seed);
+        self.min_length = incoming_options.min_length.or(self.min_length);
+        self.max_length = incoming_options.max_length.or(self.max_length);
+        self.n = incoming_options.n.or(self.n);
+        self.repetition_penalty = incoming_options
+            .repetition_penalty
+            .or(self.repetition_penalty);
+        self.frequency_penalty = incoming_options
+            .frequency_penalty
+            .or(self.frequency_penalty);
+        self.presence_penalty = incoming_options.presence_penalty.or(self.presence_penalty);
+        self.function_call_behavior = incoming_options
+            .function_call_behavior
+            .or(self.function_call_behavior);
+
+        // For `Vec<String>`, merge if both are Some; prefer incoming if only incoming is Some
+        if let Some(mut new_stop_words) = incoming_options.stop_words {
+            if let Some(existing_stop_words) = &mut self.stop_words {
+                existing_stop_words.append(&mut new_stop_words);
+            } else {
+                self.stop_words = Some(new_stop_words);
+            }
+        }
+
+        // For `Vec<FunctionDefinition>`, similar logic to `Vec<String>`
+        if let Some(mut incoming_functions) = incoming_options.functions {
+            if let Some(existing_functions) = &mut self.functions {
+                existing_functions.append(&mut incoming_functions);
+            } else {
+                self.functions = Some(incoming_functions);
+            }
+        }
+
+        // `streaming_func` requires a judgment call on how you want to handle merging.
+        // Here, the incoming option simply replaces the existing one if it's Some.
+        self.streaming_func = incoming_options
+            .streaming_func
+            .or_else(|| self.streaming_func.clone());
     }
 }

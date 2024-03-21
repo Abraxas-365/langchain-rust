@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
+use serde_json::Value;
 use std::{error::Error, sync::Arc};
 
 use crate::tools::Tool;
@@ -24,7 +25,8 @@ impl Tool for WebScrapper {
 		Input should be a working url.",
         )
     }
-    async fn call(&self, input: &str) -> Result<String, Box<dyn Error>> {
+    async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
+        let input = input.as_str().ok_or("Invalid input")?;
         match scrape_url(input).await {
             Ok(content) => Ok(content),
             Err(e) => Ok(format!("Error scraping {}: {}\n", input, e)),

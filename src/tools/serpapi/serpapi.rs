@@ -161,7 +161,8 @@ impl Tool for SerpApi {
         )
     }
 
-    async fn call(&self, input: &str) -> Result<String, Box<dyn Error>> {
+    async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
+        let input = input.as_str().ok_or("Input should be a string")?;
         self.simple_search(input).await
     }
 }
