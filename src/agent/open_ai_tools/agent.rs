@@ -43,7 +43,10 @@ impl OpenAiToolAgent {
     ) -> Result<Vec<Message>, Box<dyn Error>> {
         let mut thoughts: Vec<Message> = Vec::new();
         for (action, observation) in intermediate_steps.into_iter() {
+            //Deserialisse the string from agent plan into LogTools
             let tool_calls: LogTools = serde_json::from_str(&action.log)?;
+
+            //Extract the tools
             let tools: Vec<FunctionCallResponse> = serde_json::from_str(&tool_calls.tools)?;
             thoughts.push(Message::new_ai_message("").with_tool_calls(json!(tools)));
             thoughts.push(Message::new_tool_message(observation, tool_calls.tool_id));
@@ -66,14 +69,17 @@ impl Agent for OpenAiToolAgent {
         match serde_json::from_str::<Vec<FunctionCallResponse>>(&output) {
             Ok(tools) => {
                 let tool_to_call = tools.first().ok_or("No tool to call")?;
+
+                //Log tools will be send as log
                 let log: LogTools = LogTools {
                     tool_id: tool_to_call.id.clone(),
-                    tools: output.clone(),
+                    tools: output.clone(), //We send the complete tools ouput, we will need it in
+                                           //the open ai call
                 };
                 return Ok(AgentEvent::Action(AgentAction {
                     tool: tool_to_call.function.name.clone(),
                     tool_input: tool_to_call.function.arguments.clone(),
-                    log: serde_json::to_string(&log)?,
+                    log: serde_json::to_string(&log)?, //We send this as string to minimise changes
                 }));
             }
             Err(_) => return Ok(AgentEvent::Finish(AgentFinish { output })),

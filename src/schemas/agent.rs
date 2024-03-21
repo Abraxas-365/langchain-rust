@@ -13,9 +13,10 @@ pub enum ToolInput {
 pub struct AgentAction {
     pub tool: String,
     pub tool_input: String, //this should be ToolInput in the future
-    pub log: String, //esto es el proceso de la ia antes de la respuesta del tool Osea 'debo usar esra herramiensta para saber xxx {tool:xxx,input:yyy}'
+    pub log: String,
 }
 
+///Log tools is a struct used by the openai-like agents
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LogTools {
     pub tool_id: String,

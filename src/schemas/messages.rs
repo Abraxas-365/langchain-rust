@@ -104,6 +104,15 @@ impl Message {
         self
     }
 
+    /// Sets the tool calls for the OpenAI-like API call.
+    ///
+    /// Use this method when you need to specify tool calls in the configuration.
+    /// This is particularly useful in scenarios where interactions with specific
+    /// tools are required for operation.
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_calls` - A `serde_json::Value` representing the tool call configurations.
     pub fn with_tool_calls(mut self, tool_calls: Value) -> Self {
         self.tool_calls = Some(tool_calls);
         self
