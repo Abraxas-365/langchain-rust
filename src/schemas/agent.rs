@@ -29,7 +29,7 @@ pub struct AgentFinish {
 }
 
 pub enum AgentEvent {
-    Action(AgentAction),
+    Action(Vec<AgentAction>),
     Finish(AgentFinish),
 }
 
