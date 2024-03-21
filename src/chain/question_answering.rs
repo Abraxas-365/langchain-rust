@@ -11,7 +11,7 @@ use crate::{
     template_jinja2,
 };
 
-use super::{Chain, LLMChain, LLMChainBuilder, StuffDocument};
+use super::{options::ChainCallOptions, Chain, LLMChain, LLMChainBuilder, StuffDocument};
 
 const DEFAULTCONDENSEQUESTIONTEMPLATE: &str = r#"Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
 
@@ -129,15 +129,21 @@ impl<'a> StuffQAPromptBuilder<'a> {
     }
 }
 
-pub(crate) fn load_stuff_qa<L: LLM + 'static>(llm: L) -> StuffDocument {
+pub(crate) fn load_stuff_qa<L: LLM + 'static>(
+    llm: L,
+    options: Option<ChainCallOptions>,
+) -> StuffDocument {
     let default_qa_prompt_template =
         template_jinja2!(DEFAULT_STUFF_QA_TEMPLATE, "context", "question");
 
-    let llm_chain = LLMChainBuilder::new()
+    let llm_chain_builder = LLMChainBuilder::new()
         .prompt(default_qa_prompt_template)
+        .options(options.unwrap_or_default())
         .llm(llm)
         .build()
-        .unwrap(); //Its safe to unwrap here because we are sure that the prompt and the LLM are set.
+        .unwrap();
+
+    let llm_chain = llm_chain_builder;
 
     StuffDocument::new(llm_chain)
 }
