@@ -136,15 +136,14 @@ pub(crate) fn load_stuff_qa<L: LLM + 'static>(
     let default_qa_prompt_template =
         template_jinja2!(DEFAULT_STUFF_QA_TEMPLATE, "context", "question");
 
-    let mut llm_chain_builder = LLMChainBuilder::new()
+    let llm_chain_builder = LLMChainBuilder::new()
         .prompt(default_qa_prompt_template)
-        .llm(llm);
+        .options(options.unwrap_or_default())
+        .llm(llm)
+        .build()
+        .unwrap();
 
-    if let Some(options) = options {
-        llm_chain_builder.options(options);
-    }
-
-    let llm_chain = llm_chain_builder.build().unwrap();
+    let llm_chain = llm_chain_builder;
 
     StuffDocument::new(llm_chain)
 }
