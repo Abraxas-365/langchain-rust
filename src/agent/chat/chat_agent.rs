@@ -148,7 +148,7 @@ mod tests {
         let memory = SimpleMemory::new();
         let tool_calc = Calc {};
         let agent = ConversationalAgentBuilder::new()
-            .tools(vec![Arc::new(tool_calc)])
+            .tools(&[Arc::new(tool_calc)])
             .output_parser(ChatOutputParser::new().into())
             .build(llm)
             .unwrap();
