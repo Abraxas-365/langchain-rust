@@ -1,8 +1,9 @@
+use async_stream::stream;
 use std::pin::Pin;
 
 use async_trait::async_trait;
 use futures::{stream, Stream, StreamExt};
-use tokio_stream::wrappers::UnboundedReceiverStream;
+use futures_util::pin_mut;
 
 use crate::{
     document_loaders::{Loader, LoaderError},
@@ -27,37 +28,47 @@ impl TextLoader {
 impl Loader for TextLoader {
     async fn load(
         mut self,
-    ) -> Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + Sync + 'static>> {
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
+        LoaderError,
+    > {
         let doc = Document::new(self.content);
         let stream = stream::iter(vec![Ok(doc)]);
-        Box::pin(stream)
+        Ok(Box::pin(stream))
     }
 
     async fn load_and_split<TS: TextSplitter + 'static>(
         mut self,
         splitter: TS,
-    ) -> Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + Sync + 'static>> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        tokio::spawn(async move {
-            let mut doc_stream = self.load().await;
-            while let Some(doc) = doc_stream.next().await {
-                if let Ok(doc) = doc {
-                    let doc_splitted = splitter.split_documents(&[doc]);
-                    match doc_splitted {
-                        Ok(docs) => {
-                            for doc in docs {
-                                let _ = tx.send(Ok(doc));
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(Err(LoaderError::TextSplitterError(e)));
-                        }
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
+        LoaderError,
+    > {
+        let stream = stream! {
+            let doc_stream = self.load().await?;
+            pin_mut!(doc_stream);
+
+            while let Some(doc_result) = doc_stream.next().await {
+                let docs = match doc_result {
+                    Ok(doc) => splitter.split_documents(&[doc]),
+                    Err(e) => {
+                        yield Err(e);
+                        continue;
                     }
+                };
+
+                match docs {
+                    Ok(docs) => {
+                        for doc in docs {
+                            yield Ok(doc);
+                        }
+                    },
+                    Err(e) => yield Err(LoaderError::TextSplitterError(e)),
                 }
             }
-        });
-        let stream = UnboundedReceiverStream::new(rx);
-        Box::pin(stream)
+        };
+
+        Ok(Box::pin(stream))
     }
 }
 
@@ -85,7 +96,7 @@ El oeste de Texas divide la frontera entre Mexico y Nuevo México. Es muy bella 
         let loader = TextLoader::new(mocked_file_content.to_string());
 
         // Use the loader to load the content, which should be wrapped in a Document
-        let mut documents = loader.load().await;
+        let mut documents = loader.load().await.unwrap();
         while let Some(doc) = documents.next().await {
             assert_eq!(doc.unwrap().page_content, mocked_file_content); // Ensure the Document contains the mocked content
         }
@@ -93,7 +104,7 @@ El oeste de Texas divide la frontera entre Mexico y Nuevo México. Es muy bella 
         let loader = TextLoader::new(mocked_file_content.to_string());
         let splitter = TokenSplitter::default();
 
-        let mut documents = loader.load_and_split(splitter).await;
+        let mut documents = loader.load_and_split(splitter).await.unwrap();
 
         while let Some(doc) = documents.next().await {
             println!("{:?}", doc.unwrap());

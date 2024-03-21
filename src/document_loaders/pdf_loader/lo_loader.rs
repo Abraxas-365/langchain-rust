@@ -1,6 +1,9 @@
-use std::{collections::HashMap, io::Read, path::Path};
+use std::{collections::HashMap, io::Read, path::Path, pin::Pin};
 
+use async_stream::stream;
 use async_trait::async_trait;
+use futures::{Stream, StreamExt};
+use futures_util::pin_mut;
 use serde_json::Value;
 
 use crate::{
@@ -47,27 +50,57 @@ impl LoPdfLoader {
 
 #[async_trait]
 impl Loader for LoPdfLoader {
-    async fn load(mut self) -> Result<Vec<Document>, LoaderError> {
-        let mut documents: Vec<Document> = Vec::new();
-        let pages = self.document.get_pages();
-        for (i, _) in pages.iter().enumerate() {
-            let page_number = (i + 1) as u32;
-            let text = self.document.extract_text(&[page_number])?;
-            let mut metadata = HashMap::new();
-            metadata.insert("page_number".to_string(), Value::from(page_number));
-            documents.push(Document::new(text).with_metadata(metadata))
-        }
+    async fn load(
+        mut self,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
+        LoaderError,
+    > {
+        let stream = stream! {
+            let pages = self.document.get_pages();
+            for (i, _) in pages.iter().enumerate() {
+                let page_number = (i + 1) as u32;
+                let text = self.document.extract_text(&[page_number])?;
+                let mut metadata = HashMap::new();
+                metadata.insert("page_number".to_string(), Value::from(page_number));
+                let doc=Document::new(text).with_metadata(metadata);
+                yield Ok(doc);
 
-        Ok(documents)
+            }
+        };
+
+        Ok(Box::pin(stream))
     }
 
     async fn load_and_split<TS: TextSplitter + 'static>(
         mut self,
         splitter: TS,
-    ) -> Result<Vec<Document>, LoaderError> {
-        let documents = self.load().await?;
-        let result = splitter.split_documents(&documents)?;
-        Ok(result)
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
+        LoaderError,
+    > {
+        let stream = stream! {
+            let doc_stream = self.load().await?;
+            pin_mut!(doc_stream);
+            while let Some(doc_result) = doc_stream.next().await {
+                let docs = match doc_result {
+                    Ok(doc) => splitter.split_documents(&[doc]),
+                    Err(e) => {
+                        yield Err(e);
+                        continue;
+                    }
+                };
+                match docs {
+                    Ok(docs) => {
+                        for doc in docs {
+                            yield Ok(doc);
+                        }
+                    }
+                    Err(e) => yield Err(LoaderError::TextSplitterError(e)),
+                }
+            }
+        };
+        Ok(Box::pin(stream))
     }
 }
 
@@ -78,12 +111,18 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_pdf_loader() {
+    async fn test_lo_pdf_loader() {
         let path = "./src/document_loaders/test_data/sample.pdf";
 
         let loader = LoPdfLoader::from_path(path).expect("Failed to create PdfLoader");
 
-        let docs = loader.load().await.expect("Failed to load content");
+        let docs = loader
+            .load()
+            .await
+            .unwrap()
+            .map(|d| d.unwrap())
+            .collect::<Vec<_>>()
+            .await;
 
         assert_eq!(
             docs[0].page_content,
@@ -102,7 +141,13 @@ mod tests {
 
         let loader = LoPdfLoader::new(reader).expect("Failed to create PdfLoader");
 
-        let docs = loader.load().await.expect("Failed to load content");
+        let docs = loader
+            .load()
+            .await
+            .unwrap()
+            .map(|d| d.unwrap())
+            .collect::<Vec<_>>()
+            .await;
 
         assert_eq!(
             docs[0].page_content,
