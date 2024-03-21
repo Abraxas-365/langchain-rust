@@ -60,7 +60,7 @@ where
         let mut name_to_tool = HashMap::new();
         for tool in self.agent.get_tools().iter() {
             log::debug!("Loading Tool:{}", tool.name());
-            name_to_tool.insert(tool.name(), tool.clone());
+            name_to_tool.insert(tool.name().trim().replace(" ", "_"), tool.clone());
         }
         name_to_tool
     }

@@ -21,7 +21,7 @@ pub struct FunctionDefinition {
 impl FunctionDefinition {
     pub fn new(name: &str, description: &str, parameters: Value) -> Self {
         FunctionDefinition {
-            name: name.to_string(),
+            name: name.trim().replace(" ", "_"),
             description: description.to_string(),
             parameters,
         }
@@ -33,7 +33,7 @@ impl FunctionDefinition {
         T: Deref<Target = dyn Tool> + ?Sized,
     {
         FunctionDefinition {
-            name: tool.name(),
+            name: tool.name().trim().replace(" ", "_"),
             description: tool.description(),
             parameters: tool.parameters(),
         }
