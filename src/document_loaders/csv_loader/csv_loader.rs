@@ -1,11 +1,11 @@
-use crate::document_loaders::LoaderError;
+use crate::document_loaders::{process_doc_stream, LoaderError};
 use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
 use async_stream::stream;
 use async_trait::async_trait;
 use csv;
-use futures::{Stream, StreamExt};
-use futures_util::pin_mut;
+use futures::Stream;
 use serde_json::Value;
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read};
@@ -95,33 +95,16 @@ impl<R: Read + Send + Sync + 'static> Loader for CsvLoader<R> {
         Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
         LoaderError,
     > {
-        let stream = stream! {
-            let doc_stream = self.load().await?;
-            pin_mut!(doc_stream);
-            while let Some(doc_result) = doc_stream.next().await {
-                let docs = match doc_result {
-                    Ok(doc) => splitter.split_documents(&[doc]),
-                    Err(e) => {
-                        yield Err(e);
-                        continue;
-                    }
-                };
-                match docs {
-                    Ok(docs) => {
-                        for doc in docs {
-                            yield Ok(doc);
-                        }
-                    }
-                    Err(e) => yield Err(LoaderError::TextSplitterError(e)),
-                }
-            }
-        };
+        let doc_stream = self.load().await?;
+        let stream = process_doc_stream(doc_stream, splitter);
         Ok(Box::pin(stream))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use futures_util::StreamExt;
+
     use super::*;
 
     #[tokio::test]

@@ -1,12 +1,10 @@
-use async_stream::stream;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use futures::{stream, Stream, StreamExt};
-use futures_util::pin_mut;
+use futures::{stream, Stream};
 
 use crate::{
-    document_loaders::{Loader, LoaderError},
+    document_loaders::{process_doc_stream, Loader, LoaderError},
     schemas::Document,
     text_splitter::TextSplitter,
 };
@@ -44,36 +42,16 @@ impl Loader for TextLoader {
         Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
         LoaderError,
     > {
-        let stream = stream! {
-            let doc_stream = self.load().await?;
-            pin_mut!(doc_stream);
-
-            while let Some(doc_result) = doc_stream.next().await {
-                let docs = match doc_result {
-                    Ok(doc) => splitter.split_documents(&[doc]),
-                    Err(e) => {
-                        yield Err(e);
-                        continue;
-                    }
-                };
-
-                match docs {
-                    Ok(docs) => {
-                        for doc in docs {
-                            yield Ok(doc);
-                        }
-                    },
-                    Err(e) => yield Err(LoaderError::TextSplitterError(e)),
-                }
-            }
-        };
-
+        let doc_stream = self.load().await?;
+        let stream = process_doc_stream(doc_stream, splitter);
         Ok(Box::pin(stream))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use futures_util::StreamExt;
+
     use crate::text_splitter::TokenSplitter;
 
     use super::*;
