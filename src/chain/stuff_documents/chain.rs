@@ -5,7 +5,7 @@ use futures::Stream;
 use serde_json::Value;
 
 use crate::{
-    chain::{load_stuff_qa, Chain, LLMChain, StuffQAPromptBuilder},
+    chain::{load_stuff_qa, options::ChainCallOptions, Chain, LLMChain, StuffQAPromptBuilder},
     language_models::{llm::LLM, GenerateResult},
     prompt::PromptArgs,
     schemas::Document,
@@ -74,7 +74,40 @@ impl StuffDocument {
     /// ```
     ///
     pub fn load_stuff_qa<L: LLM + 'static>(llm: L) -> Self {
-        load_stuff_qa(llm)
+        load_stuff_qa(llm, None)
+    }
+
+    /// load_stuff_qa_with_options return an instance of StuffDocument
+    /// with a prompt desiged for question ansering
+    ///
+    /// # Example
+    /// ```rust,ignore
+    ///
+    /// let llm = OpenAI::default();
+    /// let chain = StuffDocument::load_stuff_qa_with_options(llm,ChainCallOptions::default());
+    ///
+    /// let input = chain
+    /// .qa_prompt_builder()
+    /// .documents(&[
+    /// Document::new(format!(
+    /// "\nQuestion: {}\nAnswer: {}\n",
+    /// "Which is the favorite text editor of luis", "Nvim"
+    /// )),
+    /// Document::new(format!(
+    /// "\nQuestion: {}\nAnswer: {}\n",
+    /// "How old is Luis", "24"
+    /// )),
+    /// ])
+    /// .question("How old is luis and whats his favorite text editor")
+    /// .build();
+    ///
+    /// let ouput = chain.invoke(input).await.unwrap();
+    ///
+    /// println!("{}", ouput);
+    /// ```
+    ///
+    pub fn load_stuff_qa_with_options<L: LLM + 'static>(llm: L, opt: ChainCallOptions) -> Self {
+        load_stuff_qa(llm, Some(opt))
     }
 }
 
