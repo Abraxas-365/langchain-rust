@@ -248,6 +248,7 @@ impl<C: Config> OpenAI<C> {
         }
 
         if let Some(behavior) = &self.options.functions {
+            println!("Behavior: {:?}", behavior[0].name);
             let mut functions = Vec::new();
             for f in behavior.iter() {
                 let tool = FunctionObjectArgs::default()
