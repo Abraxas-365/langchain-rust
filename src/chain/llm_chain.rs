@@ -57,7 +57,7 @@ impl LLMChainBuilder {
         let mut llm = self.llm.ok_or("LLM must be set")?;
         if let Some(options) = self.options {
             let llm_options = ChainCallOptions::to_llm_options(options);
-            llm.with_options(llm_options);
+            llm.add_options(llm_options);
         }
 
         let chain = LLMChain {
