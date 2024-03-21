@@ -21,7 +21,10 @@ pub trait LLM: Sync + Send {
         log::warn!("stream not implemented for this model");
         unimplemented!()
     }
-    fn with_options(&mut self, _options: CallOptions) {
+
+    /// This is usefull when you want to create a chain and override
+    /// LLM options
+    fn add_options(&mut self, _options: CallOptions) {
         // No action taken
     }
     //This is usefull when using non chat models
