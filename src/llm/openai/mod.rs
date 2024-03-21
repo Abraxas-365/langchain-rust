@@ -175,7 +175,7 @@ impl<C: Config + Send + Sync> LLM for OpenAI<C> {
         Ok(Box::pin(new_stream))
     }
 
-    fn with_options(&mut self, options: CallOptions) {
+    fn add_options(&mut self, options: CallOptions) {
         self.options = options;
     }
 }
