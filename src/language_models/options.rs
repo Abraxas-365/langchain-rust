@@ -1,7 +1,9 @@
 use futures::Future;
 use serde_json::Value;
-use std::{pin::Pin, sync::Arc};
+use std::{ops::Deref, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
+
+use crate::tools::Tool;
 
 #[derive(Clone, Copy, Debug)]
 pub enum FunctionCallBehavior {
@@ -22,6 +24,18 @@ impl FunctionDefinition {
             name: name.to_string(),
             description: description.to_string(),
             parameters,
+        }
+    }
+
+    /// Generic function that can be used with both Arc<Tool>, Box<Tool>, and direct references
+    pub fn from_langchain_tool<T>(tool: &T) -> FunctionDefinition
+    where
+        T: Deref<Target = dyn Tool + Send + Sync> + ?Sized,
+    {
+        FunctionDefinition {
+            name: tool.name(),
+            description: tool.description(),
+            parameters: tool.parameters(),
         }
     }
 }
