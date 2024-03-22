@@ -59,14 +59,12 @@ mod tests {
     #[tokio::test]
     async fn test_reading_mocked_file_content() {
         let mocked_file_content = r#"
-Doña Uzeada de Ribera Maldonado de Bracamonte y Anaya era baja, rechoncha, abigotada. Ya no existia razon para llamar talle al suyo. Sus colores vivos, sanos, podian mas que el albayalde y el soliman del afeite, con que se blanqueaba por simular melancolias. Gastaba dos parches oscuros, adheridos a las sienes y que fingian medicamentos. Tenia los ojitos ratoniles, maliciosos. Sabia dilatarlos duramente o desmayarlos con recato o levantarlos con disimulo. Caminaba contoneando las imposibles caderas y era dificil, al verla, no asociar su estampa achaparrada con la de ciertos palmipedos domesticos. Sortijas celestes y azules le ahorcaban las falanges
-
-Manuel Mujica Lainez, Don Galaz de Buenos Aires
-
-El texto descriptivo, en este caso un retrato de una persona, provoca en el receptor una imagen tal que la realidad descripta cobra forma, se materializa en su mente. En este caso el texto habla de un personaje real: Doña Uzeada de Ribera Maldonado de Bracamonte y Anaya. Como se trata de una descripcion literaria, la actitud del emisor es subjetiva, dado que pretende transmitir su propia vision personal al describir y la funcion del lenguaje es predominantemente poetica, ya que persigue una estetica en particular.
-
-Ejemplo de texto descriptivo no literario
-El oeste de Texas divide la frontera entre Mexico y Nuevo México. Es muy bella pero aspera, llena de cactus, en esta region se encuentran las Davis Mountains. Todo el terreno esta lleno de piedra caliza, torcidos arboles de mezquite y espinosos nopales. Para admirar la verdadera belleza desertica, visite el Parque Nacional de Big Bend, cerca de Brownsville. Es el lugar favorito para los excurcionistas, acampadores y entusiastas de las rocas. Pequeños pueblos y ranchos se encuentran a lo largo de las planicies y cañones de esta region. El area solo tiene dos estaciones, tibia y realmente caliente. La mejor epoca para visitarla es de Diciembre a Marzo cuando los dias son tibios, las noches son frescas y florecen las plantas del desierto con la humedad en el aire.
+iterary Descriptive Text
+Doña Uzeada de Ribera Maldonado de Bracamonte y Anaya was short, plump, and mustachioed. There was no longer any reason to call hers a figure. Her vibrant, healthy colors could overcome the lead white and ceruse she used for makeup to feign melancholies. She wore two dark patches adhered to her temples, pretending to be medicines. She had small, mischievous, mouse-like eyes. She knew how to dilate them sternly, dim them modestly, or raise them subtly. She walked swaying her impossible hips, and it was difficult, upon seeing her, not to associate her squat image with that of certain domestic waterfowl. Blue and azure rings choked her phalanges.
+	•	Manuel Mujica Lainez, Don Galaz de Buenos Aires
+The descriptive text, in this case, a portrait of a person, evokes such an image in the receiver that the described reality takes shape, materializes in their mind. In this case, the text talks about a real character: Doña Uzeada de Ribera Maldonado de Bracamonte y Anaya. As it is a literary description, the attitude of the emitter is subjective, as it aims to transmit their own personal vision in the description, and the language function is predominantly poetic, as it seeks a particular aesthetic.
+Non-Literary Descriptive Text
+The west of Texas divides the border between Mexico and New Mexico. It is very beautiful but rugged, filled with cacti; in this region are found the Davis Mountains. The entire terrain is filled with limestone, twisted mesquite trees, and prickly pear cactuses. To admire the true desert beauty, visit Big Bend National Park, near Brownsville. It is a favorite location for hikers, campers, and rock enthusiasts. Small towns and ranches lie along the plains and canyons of this region. The area only has two seasons, mild and really hot. The best time to visit is from December to March when the days are warm, the nights are cool, and the desert plants bloom with moisture in the air.
 
 "#;
 
