@@ -101,12 +101,16 @@ fn parse_partial_json(s: &str, strict: bool) -> Option<Value> {
 }
 
 fn parse_json_markdown(json_markdown: &str) -> Option<Value> {
-    let re = Regex::new(r"```(?:json)?\s*([\s\S]+?)\s*```").unwrap();
-    if let Some(caps) = re.captures(json_markdown) {
-        if let Some(json_str) = caps.get(1) {
-            return parse_partial_json(json_str.as_str(), false);
-        }
-    }
+    // Initialize the regex and handle initialization errors gracefully
+    let re = match Regex::new(r"```(?:json)?\s*([\s\S]+?)\s*```") {
+        Ok(regex) => regex,
+        Err(_) => return None,
+    };
 
-    None
+    re.captures(json_markdown).and_then(|caps| {
+        caps.get(1).and_then(|json_str| {
+            // Directly attempt to parse the JSON string and return the result
+            serde_json::from_str::<Value>(json_str.as_str()).ok()
+        })
+    })
 }
