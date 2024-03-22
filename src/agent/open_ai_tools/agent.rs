@@ -54,7 +54,8 @@ impl OpenAiToolAgent {
                 thoughts.push(Message::new_ai_message("").with_tool_calls(json!(tools)));
             }
 
-            // Add a tool message for each observation.
+            // Add a tool message for each observation. Observation is the ouput of the tool call.
+            // tool_id is the id of the tool.
             thoughts.push(Message::new_tool_message(observation, tool_id));
         }
 
