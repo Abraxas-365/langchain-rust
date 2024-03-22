@@ -1,8 +1,8 @@
-use std::error::Error;
-
 use crate::schemas::{messages::Message, prompt::PromptValue};
 
-use super::{FormatPrompter, MessageFormatter, PromptArgs, PromptFromatter, PromptTemplate};
+use super::{
+    FormatPrompter, MessageFormatter, PromptArgs, PromptError, PromptFromatter, PromptTemplate,
+};
 
 /// Struct `HumanMessagePromptTemplate` defines a template for creating human (user) messages.
 /// `PromptTemplate` is used to generate the message template.
@@ -31,7 +31,7 @@ impl HumanMessagePromptTemplate {
     }
 }
 impl MessageFormatter for HumanMessagePromptTemplate {
-    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
+    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, PromptError> {
         let message = Message::new_human_message(&self.prompt.format(input_variables)?);
         log::debug!("message: {:?}", message);
         Ok(vec![message])
@@ -42,7 +42,7 @@ impl MessageFormatter for HumanMessagePromptTemplate {
 }
 
 impl FormatPrompter for HumanMessagePromptTemplate {
-    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>> {
+    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, PromptError> {
         let messages = self.format_messages(input_variables)?;
         Ok(PromptValue::from_messages(messages))
     }
@@ -80,7 +80,7 @@ impl SystemMessagePromptTemplate {
 }
 
 impl FormatPrompter for SystemMessagePromptTemplate {
-    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>> {
+    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, PromptError> {
         let messages = self.format_messages(input_variables)?;
         Ok(PromptValue::from_messages(messages))
     }
@@ -90,7 +90,7 @@ impl FormatPrompter for SystemMessagePromptTemplate {
 }
 
 impl MessageFormatter for SystemMessagePromptTemplate {
-    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
+    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, PromptError> {
         let message = Message::new_system_message(&self.prompt.format(input_variables)?);
         log::debug!("message: {:?}", message);
         Ok(vec![message])
@@ -122,7 +122,7 @@ impl Into<Box<dyn MessageFormatter>> for AIMessagePromptTemplate {
 }
 
 impl FormatPrompter for AIMessagePromptTemplate {
-    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>> {
+    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, PromptError> {
         let messages = self.format_messages(input_variables)?;
         Ok(PromptValue::from_messages(messages))
     }
@@ -132,7 +132,7 @@ impl FormatPrompter for AIMessagePromptTemplate {
 }
 
 impl MessageFormatter for AIMessagePromptTemplate {
-    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
+    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, PromptError> {
         let message = Message::new_ai_message(&self.prompt.format(input_variables)?);
         log::debug!("message: {:?}", message);
         Ok(vec![message])
@@ -225,7 +225,7 @@ impl MessageFormatterStruct {
         ));
     }
 
-    fn format(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
+    fn format(&self, input_variables: PromptArgs) -> Result<Vec<Message>, PromptError> {
         let mut result: Vec<Message> = Vec::new();
         for item in &self.items {
             match item {
@@ -244,7 +244,7 @@ impl MessageFormatterStruct {
 }
 
 impl MessageFormatter for MessageFormatterStruct {
-    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, Box<dyn Error>> {
+    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, PromptError> {
         self.format(input_variables)
     }
     fn input_variables(&self) -> Vec<String> {
@@ -265,7 +265,7 @@ impl MessageFormatter for MessageFormatterStruct {
 }
 
 impl FormatPrompter for MessageFormatterStruct {
-    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>> {
+    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, PromptError> {
         let messages = self.format(input_variables)?;
         Ok(PromptValue::from_messages(messages))
     }
