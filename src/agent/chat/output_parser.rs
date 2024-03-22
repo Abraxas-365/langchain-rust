@@ -109,4 +109,3 @@ fn parse_json_markdown(json_markdown: &str) -> Option<Value> {
     }
     None
 }
-
