@@ -23,4 +23,7 @@ pub enum LLMError {
 
     #[error("Invalid URL: {0}")]
     InvalidUrl(String),
+
+    #[error("Error: {0}")]
+    GenericError(String),
 }

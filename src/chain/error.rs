@@ -25,7 +25,7 @@ pub enum ChainError {
         expected_type: String,
     },
 
-    #[error("Generic error: {0}")]
+    #[error("Error: {0}")]
     GenericError(String),
 
     #[error("Database error: {0}")]

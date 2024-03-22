@@ -5,6 +5,10 @@ use thiserror::Error;
 pub enum PromptError {
     #[error("Variable {0} is missing from input variables")]
     MissingVariable(String),
+
     #[error("Serialization error: {0}")]
     SerializationError(#[from] SerdeJsonError),
+
+    #[error("Error: {0}")]
+    GenericError(String),
 }

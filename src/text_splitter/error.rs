@@ -16,4 +16,7 @@ pub enum TextSplitterError {
 
     #[error("Tokenizer creation failed due to invalid model")]
     InvalidModel,
+
+    #[error("Error: {0}")]
+    GenericError(String),
 }
