@@ -28,6 +28,8 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 - [Agentes](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/agent.rs) : Agent implementation for complex tasks
 
+- [Open AI Tools Agent](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/open_ai_tools_agent.rs) : Agent using openAi Tools
+
 - [Streaming from a Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/streaming_from_chain.rs) : Streming example
 
 - [Q&A chian](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/qa_chain.rs) : Question answer Chain
