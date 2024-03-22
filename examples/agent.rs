@@ -24,7 +24,7 @@ async fn main() {
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
 
     let input_variables = prompt_args! {
-        "input" => "Who is Leonardo DiCaprio's girlfriend, and how old is she?",
+        "input" => "Who is the creator of vim, and how old is vim",
     };
 
     match executor.invoke(input_variables).await {

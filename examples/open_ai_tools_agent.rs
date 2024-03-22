@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use langchain_rust::{
     agent::{AgentExecutor, OpenAiToolAgentBuilder},
     chain::{options::ChainCallOptions, Chain},
-    llm::openai::{OpenAI, OpenAIModel},
+    llm::openai::OpenAI,
     memory::SimpleMemory,
     prompt_args,
     tools::{SerpApi, Tool},
@@ -22,13 +22,13 @@ impl Tool for Date {
         "Useful when you need to get the date,input is  a query".to_string()
     }
     async fn run(&self, _input: Value) -> Result<String, Box<dyn Error>> {
-        Ok("25 de noviembre de 2025".to_string())
+        Ok("25  of november of 2025".to_string())
     }
 }
 
 #[tokio::main]
 async fn main() {
-    let llm = OpenAI::default().with_model(OpenAIModel::Gpt4Turbo);
+    let llm = OpenAI::default();
     let memory = SimpleMemory::new();
     let serpapi_tool = SerpApi::default();
     let tool_calc = Date {};
@@ -41,7 +41,7 @@ async fn main() {
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
 
     let input_variables = prompt_args! {
-        "input" => "Who is Leonardo DiCaprio's girlfriend, and what day is today",
+        "input" => "Who is the creator of vim, and Whats the current date?",
     };
 
     match executor.invoke(input_variables).await {
