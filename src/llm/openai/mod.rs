@@ -3,8 +3,9 @@ use std::{error::Error, pin::Pin};
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
     types::{
-        ChatChoiceStream, ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+        ChatChoiceStream, ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs,
+        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
         ChatCompletionToolArgs, ChatCompletionToolType, CreateChatCompletionRequest,
         CreateChatCompletionRequestArgs, FunctionObjectArgs,
     },
@@ -14,12 +15,11 @@ use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 
 use crate::{
-    language_models::{
-        llm::LLM,
-        options::{CallOptions, FunctionCallBehavior},
-        GenerateResult, TokenUsage,
+    language_models::{llm::LLM, options::CallOptions, GenerateResult, TokenUsage},
+    schemas::{
+        messages::{Message, MessageType},
+        FunctionCallBehavior,
     },
-    schemas::messages::{Message, MessageType},
 };
 
 #[derive(Clone)]
@@ -180,7 +180,7 @@ impl<C: Config + Send + Sync> LLM for OpenAI<C> {
     }
 
     fn add_options(&mut self, options: CallOptions) {
-        self.options = options;
+        self.options.merge_options(options)
     }
 }
 
@@ -192,12 +192,21 @@ impl<C: Config> OpenAI<C> {
         let mut openai_messages: Vec<ChatCompletionRequestMessage> = Vec::new();
         for m in messages {
             match m.message_type {
-                MessageType::AIMessage => openai_messages.push(
-                    ChatCompletionRequestAssistantMessageArgs::default()
+                MessageType::AIMessage => openai_messages.push(match &m.tool_calls {
+                    Some(value) => {
+                        let function: Vec<ChatCompletionMessageToolCall> =
+                            serde_json::from_value(value.clone())?;
+                        ChatCompletionRequestAssistantMessageArgs::default()
+                            .tool_calls(function)
+                            .content(m.content.clone())
+                            .build()?
+                            .into()
+                    }
+                    None => ChatCompletionRequestAssistantMessageArgs::default()
                         .content(m.content.clone())
                         .build()?
                         .into(),
-                ),
+                }),
                 MessageType::HumanMessage => openai_messages.push(
                     ChatCompletionRequestUserMessageArgs::default()
                         .content(m.content.clone())
@@ -210,6 +219,15 @@ impl<C: Config> OpenAI<C> {
                         .build()?
                         .into(),
                 ),
+                MessageType::ToolMessage => {
+                    openai_messages.push(
+                        ChatCompletionRequestToolMessageArgs::default()
+                            .content(m.content.clone())
+                            .tool_call_id(m.id.clone().unwrap_or_default())
+                            .build()?
+                            .into(),
+                    );
+                }
             }
         }
         Ok(openai_messages)
@@ -230,7 +248,6 @@ impl<C: Config> OpenAI<C> {
         }
 
         if let Some(behavior) = &self.options.functions {
-            println!("Behavior: {:?}", behavior[0].name);
             let mut functions = Vec::new();
             for f in behavior.iter() {
                 let tool = FunctionObjectArgs::default()
@@ -260,7 +277,8 @@ impl<C: Config> OpenAI<C> {
 }
 #[cfg(test)]
 mod tests {
-    use crate::language_models::options::FunctionDefinition;
+
+    use crate::schemas::FunctionDefinition;
 
     use super::*;
     use serde_json::json;

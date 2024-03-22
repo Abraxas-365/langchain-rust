@@ -15,7 +15,7 @@ async fn main() {
     let memory = SimpleMemory::new();
     let serpapi_tool = SerpApi::default();
     let agent = ConversationalAgentBuilder::new()
-        .tools(vec![Arc::new(serpapi_tool)])
+        .tools(&[Arc::new(serpapi_tool)])
         .output_parser(ChatOutputParser::new().into())
         .options(ChainCallOptions::new().with_max_tokens(1000))
         .build(llm)
@@ -24,7 +24,7 @@ async fn main() {
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
 
     let input_variables = prompt_args! {
-        "input" => "Who is Leonardo DiCaprio's girlfriend, and how old is she?",
+        "input" => "Who is the creator of vim, and how old is vim",
     };
 
     match executor.invoke(input_variables).await {

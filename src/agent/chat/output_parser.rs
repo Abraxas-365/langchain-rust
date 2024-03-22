@@ -42,11 +42,11 @@ impl AgentOutputParser for ChatOutputParser {
                         output: agent_output.action_input,
                     }))
                 } else {
-                    Ok(AgentEvent::Action(AgentAction {
+                    Ok(AgentEvent::Action(vec![AgentAction {
                         tool: agent_output.action,
                         tool_input: agent_output.action_input,
                         log: text.to_string(),
-                    }))
+                    }]))
                 }
             }
             None => {

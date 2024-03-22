@@ -60,7 +60,7 @@ where
         let mut name_to_tool = HashMap::new();
         for tool in self.agent.get_tools().iter() {
             log::debug!("Loading Tool:{}", tool.name());
-            name_to_tool.insert(tool.name(), tool.clone());
+            name_to_tool.insert(tool.name().trim().replace(" ", "_"), tool.clone());
         }
         name_to_tool
     }
@@ -89,27 +89,35 @@ where
         loop {
             let agent_event = self.agent.plan(&steps, input_variables.clone()).await?;
             match agent_event {
-                AgentEvent::Action(action) => {
-                    log::debug!("Action: {:?}", action.tool_input);
-                    let tool = name_to_tools.get(&action.tool).ok_or("Tool not found")?; //TODO:Check
-                                                                                         //what to do with the error
+                AgentEvent::Action(actions) => {
+                    for action in actions {
+                        log::debug!("Action: {:?}", action.tool_input);
+                        let tool = name_to_tools.get(&action.tool).ok_or("Tool not found")?; //TODO:Check
+                                                                                             //what to do with the error
 
-                    let observation_result = tool.call(&action.tool_input).await;
+                        let observation_result = tool.call(&action.tool_input).await;
 
-                    let observation = match observation_result {
-                        Ok(result) => result,
-                        Err(err) => {
-                            log::info!("The tool return the following error: {}", err.to_string());
-                            if self.break_if_error {
-                                return Err(err); // return the error immediately
-                            } else {
-                                format!("The tool return the following error: {}", err.to_string())
-                                // convert the error to a string and continue
+                        let observation = match observation_result {
+                            Ok(result) => result,
+                            Err(err) => {
+                                log::info!(
+                                    "The tool return the following error: {}",
+                                    err.to_string()
+                                );
+                                if self.break_if_error {
+                                    return Err(err); // return the error immediately
+                                } else {
+                                    format!(
+                                        "The tool return the following error: {}",
+                                        err.to_string()
+                                    )
+                                    // convert the error to a string and continue
+                                }
                             }
-                        }
-                    };
+                        };
 
-                    steps.push((action, observation));
+                        steps.push((action, observation));
+                    }
                 }
                 AgentEvent::Finish(finish) => {
                     if let Some(memory) = &self.memory {

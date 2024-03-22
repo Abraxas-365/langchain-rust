@@ -9,3 +9,6 @@ mod retrivers;
 
 pub use document::*;
 pub use retrivers::*;
+
+mod tools_openai_like;
+pub use tools_openai_like::*;

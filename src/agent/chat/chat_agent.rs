@@ -112,6 +112,7 @@ mod tests {
     use std::{error::Error, sync::Arc};
 
     use async_trait::async_trait;
+    use serde_json::Value;
 
     use crate::{
         agent::{
@@ -135,7 +136,7 @@ mod tests {
         fn description(&self) -> String {
             "Usefull to make calculations".to_string()
         }
-        async fn call(&self, _input: &str) -> Result<String, Box<dyn Error>> {
+        async fn run(&self, _input: Value) -> Result<String, Box<dyn Error>> {
             Ok("25".to_string())
         }
     }
@@ -147,7 +148,7 @@ mod tests {
         let memory = SimpleMemory::new();
         let tool_calc = Calc {};
         let agent = ConversationalAgentBuilder::new()
-            .tools(vec![Arc::new(tool_calc)])
+            .tools(&[Arc::new(tool_calc)])
             .output_parser(ChatOutputParser::new().into())
             .build(llm)
             .unwrap();

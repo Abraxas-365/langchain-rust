@@ -1,7 +1,11 @@
 mod agent;
-mod chat;
-mod executor;
-
 pub use agent::*;
-pub use chat::*;
+
+mod executor;
 pub use executor::*;
+
+mod chat;
+pub use chat::*;
+
+mod open_ai_tools;
+pub use open_ai_tools::*;

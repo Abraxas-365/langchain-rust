@@ -21,6 +21,8 @@ pub enum MessageType {
     AIMessage,
     #[serde(rename = "human")]
     HumanMessage,
+    #[serde(rename = "tool")]
+    ToolMessage,
 }
 
 impl Default for MessageType {
@@ -35,6 +37,7 @@ impl MessageType {
             MessageType::SystemMessage => "system".to_owned(),
             MessageType::AIMessage => "ai".to_owned(),
             MessageType::HumanMessage => "human".to_owned(),
+            MessageType::ToolMessage => "tool".to_owned(),
         }
     }
 }
@@ -51,6 +54,8 @@ impl MessageType {
 pub struct Message {
     pub content: String,
     pub message_type: MessageType,
+    pub id: Option<String>,
+    pub tool_calls: Option<Value>,
 }
 
 impl Message {
@@ -59,6 +64,8 @@ impl Message {
         Message {
             content: content.to_string(),
             message_type: MessageType::HumanMessage,
+            id: None,
+            tool_calls: None,
         }
     }
 
@@ -67,6 +74,8 @@ impl Message {
         Message {
             content: content.to_string(),
             message_type: MessageType::SystemMessage,
+            id: None,
+            tool_calls: None,
         }
     }
 
@@ -75,7 +84,38 @@ impl Message {
         Message {
             content: content.to_string(),
             message_type: MessageType::AIMessage,
+            id: None,
+            tool_calls: None,
         }
+    }
+
+    // Function to create a new Tool message with a generic type that implements Display
+    pub fn new_tool_message<T: std::fmt::Display, S: Into<String>>(content: T, id: S) -> Self {
+        Message {
+            content: content.to_string(),
+            message_type: MessageType::ToolMessage,
+            id: Some(id.into()),
+            tool_calls: None,
+        }
+    }
+
+    pub fn with_id<S: Into<String>>(mut self, id: S) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Sets the tool calls for the OpenAI-like API call.
+    ///
+    /// Use this method when you need to specify tool calls in the configuration.
+    /// This is particularly useful in scenarios where interactions with specific
+    /// tools are required for operation.
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_calls` - A `serde_json::Value` representing the tool call configurations.
+    pub fn with_tool_calls(mut self, tool_calls: Value) -> Self {
+        self.tool_calls = Some(tool_calls);
+        self
     }
 
     pub fn messages_from_value(value: &Value) -> Result<Vec<Message>, Box<dyn Error>> {

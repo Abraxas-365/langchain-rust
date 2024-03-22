@@ -31,8 +31,8 @@ impl ConversationalAgentBuilder {
         }
     }
 
-    pub fn tools(mut self, tools: Vec<Arc<dyn Tool>>) -> Self {
-        self.tools = Some(tools);
+    pub fn tools(mut self, tools: &[Arc<dyn Tool>]) -> Self {
+        self.tools = Some(tools.to_vec());
         self
     }
 
@@ -41,13 +41,13 @@ impl ConversationalAgentBuilder {
         self
     }
 
-    pub fn prefix(mut self, prefix: String) -> Self {
-        self.prefix = Some(prefix);
+    pub fn prefix<S: Into<String>>(mut self, prefix: S) -> Self {
+        self.prefix = Some(prefix.into());
         self
     }
 
-    pub fn suffix(mut self, suffix: String) -> Self {
-        self.suffix = Some(suffix);
+    pub fn suffix<S: Into<String>>(mut self, suffix: S) -> Self {
+        self.suffix = Some(suffix.into());
         self
     }
 
