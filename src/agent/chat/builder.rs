@@ -1,6 +1,7 @@
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
+    agent::AgentError,
     chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions},
     language_models::llm::LLM,
     tools::Tool,
@@ -49,7 +50,7 @@ impl ConversationalAgentBuilder {
         self
     }
 
-    pub fn build<L: LLM + 'static>(self, llm: L) -> Result<ConversationalAgent, Box<dyn Error>> {
+    pub fn build<L: LLM + 'static>(self, llm: L) -> Result<ConversationalAgent, AgentError> {
         let tools = self.tools.unwrap_or_else(Vec::new);
         let prefix = self.prefix.unwrap_or_else(|| PREFIX.to_string());
         let suffix = self.suffix.unwrap_or_else(|| SUFFIX.to_string());

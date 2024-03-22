@@ -1,6 +1,7 @@
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
+    agent::AgentError,
     chain::{options::ChainCallOptions, LLMChainBuilder},
     language_models::{llm::LLM, options::CallOptions},
     schemas::FunctionDefinition,
@@ -39,7 +40,7 @@ impl OpenAiToolAgentBuilder {
         self
     }
 
-    pub fn build<L: LLM + 'static>(self, llm: L) -> Result<OpenAiToolAgent, Box<dyn Error>> {
+    pub fn build<L: LLM + 'static>(self, llm: L) -> Result<OpenAiToolAgent, AgentError> {
         let tools = self.tools.unwrap_or_else(Vec::new);
         let prefix = self.prefix.unwrap_or_else(|| PREFIX.to_string());
         let mut llm = llm;
