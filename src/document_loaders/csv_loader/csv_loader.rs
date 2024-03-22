@@ -1,13 +1,16 @@
-use crate::document_loaders::LoaderError;
+use crate::document_loaders::{process_doc_stream, LoaderError};
 use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
+use async_stream::stream;
 use async_trait::async_trait;
 use csv;
+use futures::Stream;
 use serde_json::Value;
+
 use std::collections::HashMap;
-use std::io::{Cursor, Read};
+use std::fs::File;
+use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
+use std::pin::Pin;
 
 #[derive(Debug, Clone)]
 pub struct CsvLoader<R> {
@@ -29,72 +32,79 @@ impl CsvLoader<Cursor<Vec<u8>>> {
     }
 }
 
-impl CsvLoader<Cursor<Vec<u8>>> {
-    pub async fn from_path<P: AsRef<Path>>(
-        path: P,
-        columns: Vec<String>,
-    ) -> Result<Self, LoaderError> {
-        let mut file = File::open(path).await?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer).await?;
-        let reader = Cursor::new(buffer);
+impl CsvLoader<BufReader<File>> {
+    pub fn from_path<P: AsRef<Path>>(path: P, columns: Vec<String>) -> Result<Self, LoaderError> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
         Ok(Self::new(reader, columns))
     }
 }
 
 #[async_trait]
 impl<R: Read + Send + Sync + 'static> Loader for CsvLoader<R> {
-    async fn load(mut self) -> Result<Vec<Document>, LoaderError> {
+    async fn load(
+        mut self,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
+        LoaderError,
+    > {
         let mut reader = csv::Reader::from_reader(self.reader);
-        let mut documents = vec![];
         let headers = reader.headers()?.clone();
 
         // Initialize rown to track row number
         let mut row_number: i64 = 0;
+        let columns = self.columns.clone();
 
-        for result in reader.records() {
-            let record = result?;
-            let mut content = String::new();
+        let stream = stream! {
+            for result in reader.records() {
+                let record = result?;
+                let mut content = String::new();
 
-            for (i, field) in record.iter().enumerate() {
-                let header = &headers[i];
-                if !self.columns.contains(&header.to_string()) {
-                    continue;
+                for (i, field) in record.iter().enumerate() {
+                    let header = &headers[i];
+                    if !columns.contains(&header.to_string()) {
+                        continue;
+                    }
+
+                    let line = format!("{}: {}", header, field);
+                    content.push_str(&line);
+                    content.push('\n');
                 }
 
-                let line = format!("{}: {}", header, field);
-                content.push_str(&line);
-                content.push('\n');
+                row_number += 1; // Increment the row number by 1 for each row
+
+                // Generate document with the content and metadata
+                let mut document = Document::new(content);
+                let mut metadata = HashMap::new();
+                metadata.insert("row".to_string(), Value::from(row_number));
+
+                // Attach the metadata to the document
+                document.metadata = metadata;
+
+                yield Ok(document);
             }
+        };
 
-            row_number += 1; // Increment the row number by 1 for each row
-
-            // Generate document with the content and metadata
-            let mut document = Document::new(content);
-            let mut metadata = HashMap::new();
-            metadata.insert("row".to_string(), Value::from(row_number));
-
-            // Attach the metadata to the document
-            document.metadata = metadata;
-
-            documents.push(document);
-        }
-
-        Ok(documents)
+        Ok(Box::pin(stream))
     }
 
     async fn load_and_split<TS: TextSplitter + 'static>(
         mut self,
         splitter: TS,
-    ) -> Result<Vec<Document>, LoaderError> {
-        let documents = self.load().await?;
-        let result = splitter.split_documents(&documents)?;
-        Ok(result)
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
+        LoaderError,
+    > {
+        let doc_stream = self.load().await?;
+        let stream = process_doc_stream(doc_stream, splitter);
+        Ok(Box::pin(stream))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use futures_util::StreamExt;
+
     use super::*;
 
     #[tokio::test]
@@ -112,7 +122,13 @@ Jane Smith,32,London,United Kingdom";
         ];
         let csv_loader = CsvLoader::new(input.as_bytes(), columns);
 
-        let documents = csv_loader.load().await.expect("Failed to load documents");
+        let documents = csv_loader
+            .load()
+            .await
+            .unwrap()
+            .map(|x| x.unwrap())
+            .collect::<Vec<_>>()
+            .await;
 
         assert_eq!(documents.len(), 2);
 
@@ -134,11 +150,15 @@ Jane Smith,32,London,United Kingdom";
             "city".to_string(),
             "country".to_string(),
         ];
-        let csv_loader = CsvLoader::from_path(path, columns)
-            .await
-            .expect("Failed to create csv loader");
+        let csv_loader = CsvLoader::from_path(path, columns).expect("Failed to create csv loader");
 
-        let documents = csv_loader.load().await.expect("Failed to load documents");
+        let documents = csv_loader
+            .load()
+            .await
+            .unwrap()
+            .map(|x| x.unwrap())
+            .collect::<Vec<_>>()
+            .await;
 
         assert_eq!(documents.len(), 20);
 
