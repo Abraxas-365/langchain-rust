@@ -1,8 +1,6 @@
-use std::error::Error;
-
 use crate::schemas::{messages::Message, prompt::PromptValue};
 
-use super::{FormatPrompter, PromptArgs, PromptFromatter};
+use super::{FormatPrompter, PromptArgs, PromptError, PromptFromatter};
 
 #[derive(Clone)]
 pub enum TemplateFormat {
@@ -29,7 +27,7 @@ impl PromptTemplate {
 
 //PromptTemplate will be default transformed to an Human Input when used as FromatPrompter
 impl FormatPrompter for PromptTemplate {
-    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, Box<dyn Error>> {
+    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, PromptError> {
         let messages = vec![Message::new_human_message(self.format(input_variables)?)];
         Ok(PromptValue::from_messages(messages))
     }
@@ -47,13 +45,13 @@ impl PromptFromatter for PromptTemplate {
         self.variables.clone()
     }
 
-    fn format(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
+    fn format(&self, input_variables: PromptArgs) -> Result<String, PromptError> {
         let mut prompt = self.template();
 
         // check if all variables are in the input variables
         for key in self.variables() {
             if !input_variables.contains_key(key.as_str()) {
-                return Err(format!("Variable {} is missing from input variables", key).into());
+                return Err(PromptError::MissingVariable(key));
             }
         }
 

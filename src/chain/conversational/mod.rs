@@ -1,4 +1,4 @@
-use std::{error::Error, pin::Pin, sync::Arc};
+use std::{pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -20,6 +20,7 @@ const DEFAULT_INPUT_VARIABLE: &str = "input";
 use super::{
     chain_trait::Chain,
     llm_chain::{LLMChain, LLMChainBuilder},
+    ChainError,
 };
 
 pub mod builder;
@@ -55,7 +56,7 @@ pub struct ConversationalChain {
 
 //Conversational Chain is a simple chain to interact with ai as a string of messages
 impl ConversationalChain {
-    pub fn new<L: LLM + 'static>(llm: L) -> Result<Self, Box<dyn Error>> {
+    pub fn new<L: LLM + 'static>(llm: L) -> Result<Self, ChainError> {
         let prompt = HumanMessagePromptTemplate::new(template_fstring!(
             DEFAULT_TEMPLATE,
             "history",
@@ -81,7 +82,7 @@ impl ConversationalChain {
 
 #[async_trait]
 impl Chain for ConversationalChain {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let mut memory = self.memory.lock().await;
         let mut input_variables = input_variables;
         input_variables.insert("history".to_string(), memory.to_string().into());
@@ -93,7 +94,7 @@ impl Chain for ConversationalChain {
         Ok(result)
     }
 
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
+    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         let mut memory = self.memory.lock().await;
         let mut input_variables = input_variables;
         input_variables.insert("history".to_string(), memory.to_string().into());
@@ -108,10 +109,8 @@ impl Chain for ConversationalChain {
     async fn stream(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
-        Box<dyn Error>,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    {
         let memory = self.memory.lock().await;
         let mut input_variables = input_variables;
         input_variables.insert("history".to_string(), memory.to_string().into());

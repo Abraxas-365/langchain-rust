@@ -1,13 +1,10 @@
-use std::{
-    collections::{HashMap, HashSet},
-    error::Error,
-};
+use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use crate::{
-    chain::{Chain, DEFAULT_OUTPUT_KEY, DEFAULT_RESULT_KEY},
+    chain::{Chain, ChainError, DEFAULT_OUTPUT_KEY, DEFAULT_RESULT_KEY},
     language_models::{GenerateResult, TokenUsage},
     prompt::PromptArgs,
 };
@@ -21,16 +18,16 @@ pub struct SequentialChain {
 
 #[async_trait]
 impl Chain for SequentialChain {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let output = self.execute(input_variables).await?;
         let result = output
             .get(DEFAULT_RESULT_KEY)
-            .ok_or("No result key")?
+            .ok_or_else(|| ChainError::MissingInputVariable(DEFAULT_RESULT_KEY.to_string()))?
             .clone();
         let result: GenerateResult = serde_json::from_value(result)?;
         Ok(result)
     }
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
+    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         self.call(input_variables.clone())
             .await
             .map(|result| result.generation)
@@ -42,7 +39,7 @@ impl Chain for SequentialChain {
     async fn execute(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<HashMap<String, Value>, Box<dyn Error>> {
+    ) -> Result<HashMap<String, Value>, ChainError> {
         let mut input_variables = input_variables;
         let mut final_token_usage: Option<TokenUsage> = None;
         let mut output_result = HashMap::new();

@@ -1,4 +1,4 @@
-use std::{error::Error, pin::Pin};
+use std::pin::Pin;
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -11,7 +11,9 @@ use crate::{
     template_jinja2,
 };
 
-use super::{options::ChainCallOptions, Chain, LLMChain, LLMChainBuilder, StuffDocument};
+use super::{
+    options::ChainCallOptions, Chain, ChainError, LLMChain, LLMChainBuilder, StuffDocument,
+};
 
 const DEFAULTCONDENSEQUESTIONTEMPLATE: &str = r#"Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
 
@@ -75,17 +77,15 @@ impl CondenseQuetionGeneratorChain {
 
 #[async_trait]
 impl Chain for CondenseQuetionGeneratorChain {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         self.chain.call(input_variables).await
     }
 
     async fn stream(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
-        Box<dyn Error>,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    {
         self.chain.stream(input_variables).await
     }
 }

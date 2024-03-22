@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use langchain_rust::{
-    agent::{AgentExecutor, ChatOutputParser, ConversationalAgentBuilder},
+    agent::{AgentExecutor, ConversationalAgentBuilder},
     chain::{options::ChainCallOptions, Chain},
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
@@ -16,7 +16,6 @@ async fn main() {
     let serpapi_tool = SerpApi::default();
     let agent = ConversationalAgentBuilder::new()
         .tools(&[Arc::new(serpapi_tool)])
-        .output_parser(ChatOutputParser::new().into())
         .options(ChainCallOptions::new().with_max_tokens(1000))
         .build(llm)
         .unwrap();

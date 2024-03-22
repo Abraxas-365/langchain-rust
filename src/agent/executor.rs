@@ -1,11 +1,11 @@
-use std::{collections::HashMap, error::Error, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
-    chain::chain_trait::Chain,
+    chain::{chain_trait::Chain, ChainError},
     language_models::GenerateResult,
     memory::SimpleMemory,
     prompt::PromptArgs,
@@ -16,7 +16,7 @@ use crate::{
     tools::Tool,
 };
 
-use super::agent::Agent;
+use super::{agent::Agent, AgentError};
 
 pub struct AgentExecutor<A>
 where
@@ -71,7 +71,7 @@ impl<A> Chain for AgentExecutor<A>
 where
     A: Agent + Send + Sync,
 {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let mut input_variables = input_variables.clone();
         let name_to_tools = self.get_name_to_tools();
         let mut steps: Vec<(AgentAction, String)> = Vec::new();
@@ -87,13 +87,23 @@ where
         }
 
         loop {
-            let agent_event = self.agent.plan(&steps, input_variables.clone()).await?;
+            let agent_event = self
+                .agent
+                .plan(&steps, input_variables.clone())
+                .await
+                .map_err(|e| {
+                    ChainError::AgentError(format!("Error in agent planning: {}", e.to_string()))
+                })?;
             match agent_event {
                 AgentEvent::Action(actions) => {
                     for action in actions {
                         log::debug!("Action: {:?}", action.tool_input);
-                        let tool = name_to_tools.get(&action.tool).ok_or("Tool not found")?; //TODO:Check
-                                                                                             //what to do with the error
+                        let tool = name_to_tools
+                            .get(&action.tool)
+                            .ok_or_else(|| {
+                                AgentError::ToolError(format!("Tool {} not found", action.tool))
+                            })
+                            .map_err(|e| ChainError::AgentError(e.to_string()))?;
 
                         let observation_result = tool.call(&action.tool_input).await;
 
@@ -105,13 +115,14 @@ where
                                     err.to_string()
                                 );
                                 if self.break_if_error {
-                                    return Err(err); // return the error immediately
+                                    return Err(ChainError::AgentError(
+                                        AgentError::ToolError(err.to_string()).to_string(),
+                                    ));
                                 } else {
                                     format!(
                                         "The tool return the following error: {}",
                                         err.to_string()
                                     )
-                                    // convert the error to a string and continue
                                 }
                             }
                         };
@@ -143,7 +154,7 @@ where
         }
     }
 
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
+    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         let result = self.call(input_variables).await?;
         Ok(result.generation)
     }
