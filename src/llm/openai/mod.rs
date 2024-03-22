@@ -1,4 +1,4 @@
-use std::{error::Error, pin::Pin};
+use std::pin::Pin;
 
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, GenerateResult, TokenUsage},
+    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
     schemas::{
         messages::{Message, MessageType},
         FunctionCallBehavior,
@@ -91,7 +91,7 @@ impl Default for OpenAI<OpenAIConfig> {
 
 #[async_trait]
 impl<C: Config + Send + Sync> LLM for OpenAI<C> {
-    async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, Box<dyn Error>> {
+    async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, LLMError> {
         let client = Client::with_config(self.config.clone());
         let request = self.generate_request(prompt)?;
         match &self.options.streaming_func {
@@ -151,7 +151,7 @@ impl<C: Config + Send + Sync> LLM for OpenAI<C> {
         }
     }
 
-    async fn invoke(&self, prompt: &str) -> Result<String, Box<dyn Error>> {
+    async fn invoke(&self, prompt: &str) -> Result<String, LLMError> {
         self.generate(&[Message::new_human_message(prompt)])
             .await
             .map(|res| res.generation)
@@ -160,20 +160,16 @@ impl<C: Config + Send + Sync> LLM for OpenAI<C> {
     async fn stream(
         &self,
         messages: &[Message],
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
-        Box<dyn Error>,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, LLMError>> + Send>>, LLMError>
+    {
         let client = Client::with_config(self.config.clone());
         let request = self.generate_request(messages)?;
 
         let original_stream = client.chat().create_stream(request).await?;
 
         let new_stream = original_stream.map(|result| match result {
-            Ok(completion) => {
-                serde_json::to_value(completion).map_err(|e| Box::new(e) as Box<dyn Error + Send>)
-            }
-            Err(e) => Err(Box::new(e) as Box<dyn Error + Send>),
+            Ok(completion) => serde_json::to_value(completion).map_err(LLMError::from),
+            Err(e) => Err(LLMError::from(e)),
         });
 
         Ok(Box::pin(new_stream))
@@ -188,7 +184,7 @@ impl<C: Config> OpenAI<C> {
     fn to_openai_messages(
         &self,
         messages: &[Message],
-    ) -> Result<Vec<ChatCompletionRequestMessage>, Box<dyn Error>> {
+    ) -> Result<Vec<ChatCompletionRequestMessage>, LLMError> {
         let mut openai_messages: Vec<ChatCompletionRequestMessage> = Vec::new();
         for m in messages {
             match m.message_type {
@@ -236,7 +232,7 @@ impl<C: Config> OpenAI<C> {
     fn generate_request(
         &self,
         messages: &[Message],
-    ) -> Result<CreateChatCompletionRequest, Box<dyn Error>> {
+    ) -> Result<CreateChatCompletionRequest, LLMError> {
         let messages: Vec<ChatCompletionRequestMessage> = self.to_openai_messages(messages)?;
         let mut request_builder = CreateChatCompletionRequestArgs::default();
         if let Some(max_tokens) = self.options.max_tokens {

@@ -1,10 +1,8 @@
-use std::error::Error;
-
 use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::{
-    chain::{chain_trait::Chain, llm_chain::LLMChain},
+    chain::{chain_trait::Chain, llm_chain::LLMChain, ChainError},
     language_models::{GenerateResult, TokenUsage},
     prompt::PromptArgs,
     prompt_args,
@@ -92,12 +90,14 @@ impl Chain for SQLDatabaseChain {
         self.llmchain.get_input_keys()
     }
 
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let mut token_usage: Option<TokenUsage> = None;
 
         let query = input_variables
             .get(SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY)
-            .ok_or("No query provided")?
+            .ok_or_else(|| {
+                ChainError::MissingInputVariable(SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY.to_string())
+            })?
             .to_string();
 
         let mut tables: Vec<String> = Vec::new();
@@ -111,7 +111,12 @@ impl Chain for SQLDatabaseChain {
             }
         }
 
-        let tables_info = self.database.table_info(&tables).await?;
+        let tables_info = self
+            .database
+            .table_info(&tables)
+            .await
+            .map_err(|e| ChainError::DatabaseError(e.to_string()))?;
+
         let mut llm_inputs = prompt_args! {
             "input"=> query.clone() + QUERY_PREFIX_WITH,
             "top_k"=> self.top_k,
@@ -127,7 +132,11 @@ impl Chain for SQLDatabaseChain {
 
         let sql_query = output.generation.trim();
         log::debug!("output: {:?}", sql_query);
-        let query_result = self.database.query(sql_query).await?;
+        let query_result = self
+            .database
+            .query(sql_query)
+            .await
+            .map_err(|e| ChainError::DatabaseError(e.to_string()))?;
 
         llm_inputs.insert(
             "input".to_string(),
@@ -162,7 +171,7 @@ impl Chain for SQLDatabaseChain {
             tokens: token_usage,
         })
     }
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
+    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         let result = self.call(input_variables).await?;
         Ok(result.generation)
     }

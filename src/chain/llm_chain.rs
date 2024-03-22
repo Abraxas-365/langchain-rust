@@ -1,14 +1,15 @@
-use std::{error::Error, pin::Pin};
+use std::pin::Pin;
 
 use async_trait::async_trait;
 use futures::Stream;
+use futures_util::TryStreamExt;
 
 use crate::{
     language_models::{llm::LLM, GenerateResult},
     prompt::{FormatPrompter, PromptArgs},
 };
 
-use super::{chain_trait::Chain, options::ChainCallOptions};
+use super::{chain_trait::Chain, options::ChainCallOptions, ChainError};
 
 pub struct LLMChainBuilder {
     prompt: Option<Box<dyn FormatPrompter>>,
@@ -52,9 +53,15 @@ impl LLMChainBuilder {
         self
     }
 
-    pub fn build(self) -> Result<LLMChain, Box<dyn Error>> {
-        let prompt = self.prompt.ok_or("Prompt must be set")?;
-        let mut llm = self.llm.ok_or("LLM must be set")?;
+    pub fn build(self) -> Result<LLMChain, ChainError> {
+        let prompt = self
+            .prompt
+            .ok_or_else(|| ChainError::MissingObject("Prompt must be set".into()))?;
+
+        let mut llm = self
+            .llm
+            .ok_or_else(|| ChainError::MissingObject("LLM must be set".into()))?;
+
         if let Some(options) = self.options {
             let llm_options = ChainCallOptions::to_llm_options(options);
             llm.add_options(llm_options);
@@ -86,14 +93,14 @@ impl Chain for LLMChain {
         vec![self.output_key.clone()]
     }
 
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
         log::debug!("Prompt: {:?}", prompt);
         let output = self.llm.generate(&prompt.to_chat_messages()).await?;
         Ok(output)
     }
 
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
+    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
         log::debug!("Prompt: {:?}", prompt);
         let output = self
@@ -107,13 +114,16 @@ impl Chain for LLMChain {
     async fn stream(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
-        Box<dyn Error>,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
         log::debug!("Prompt: {:?}", prompt);
-        self.llm.stream(&prompt.to_chat_messages()).await
+        let llm_stream = self.llm.stream(&prompt.to_chat_messages()).await?;
+
+        // Map the errors from LLMError to ChainError
+        let mapped_stream = llm_stream.map_err(ChainError::from);
+
+        Ok(Box::pin(mapped_stream))
     }
 }
 

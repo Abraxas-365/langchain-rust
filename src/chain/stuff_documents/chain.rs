@@ -1,11 +1,13 @@
-use std::{error::Error, pin::Pin};
+use std::pin::Pin;
 
 use async_trait::async_trait;
 use futures::Stream;
 use serde_json::Value;
 
 use crate::{
-    chain::{load_stuff_qa, options::ChainCallOptions, Chain, LLMChain, StuffQAPromptBuilder},
+    chain::{
+        load_stuff_qa, options::ChainCallOptions, Chain, ChainError, LLMChain, StuffQAPromptBuilder,
+    },
     language_models::{llm::LLM, GenerateResult},
     prompt::PromptArgs,
     schemas::Document,
@@ -113,13 +115,17 @@ impl StuffDocument {
 
 #[async_trait]
 impl Chain for StuffDocument {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>> {
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let docs = input_variables
             .get(&self.input_key)
-            .ok_or("No documents found")?;
+            .ok_or_else(|| ChainError::MissingInputVariable(self.input_key.clone()))?;
 
-        let documents: Vec<Document> =
-            serde_json::from_value(docs.clone()).map_err(|e| e.to_string())?;
+        let documents: Vec<Document> = serde_json::from_value(docs.clone()).map_err(|e| {
+            ChainError::IncorrectInputVariable {
+                source: e,
+                expected_type: "Vec<Document>".to_string(),
+            }
+        })?;
 
         let mut input_values = input_variables.clone();
         input_values.insert(
@@ -132,12 +138,10 @@ impl Chain for StuffDocument {
 
     async fn stream(
         &self,
-        _input_variables: PromptArgs,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
-        Box<dyn Error>,
-    > {
-        self.llm_chain.stream(_input_variables).await
+        input_variables: PromptArgs,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    {
+        self.llm_chain.stream(input_variables).await
     }
 
     fn get_input_keys(&self) -> Vec<String> {

@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    agent::agent::AgentOutputParser,
+    agent::AgentError,
     schemas::agent::{AgentAction, AgentEvent, AgentFinish},
 };
 
@@ -24,13 +24,8 @@ impl ChatOutputParser {
     }
 }
 
-impl Into<Box<dyn AgentOutputParser>> for ChatOutputParser {
-    fn into(self) -> Box<dyn AgentOutputParser> {
-        Box::new(self)
-    }
-}
-impl AgentOutputParser for ChatOutputParser {
-    fn parse(&self, text: &str) -> Result<AgentEvent, Box<dyn std::error::Error>> {
+impl ChatOutputParser {
+    pub fn parse(&self, text: &str) -> Result<AgentEvent, AgentError> {
         log::debug!("Parsing to Agent Action: {}", text);
         match parse_json_markdown(text) {
             Some(value) => {
@@ -58,7 +53,7 @@ impl AgentOutputParser for ChatOutputParser {
         }
     }
 
-    fn get_format_instructions(&self) -> &str {
+    pub fn get_format_instructions(&self) -> &str {
         FORMAT_INSTRUCTIONS
     }
 }
@@ -114,3 +109,4 @@ fn parse_json_markdown(json_markdown: &str) -> Option<Value> {
     }
     None
 }
+

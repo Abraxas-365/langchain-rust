@@ -1,13 +1,10 @@
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::json;
 
 use crate::{
-    agent::{
-        agent::{Agent, AgentOutputParser},
-        chat::prompt::FORMAT_INSTRUCTIONS,
-    },
+    agent::{agent::Agent, chat::prompt::FORMAT_INSTRUCTIONS, AgentError},
     chain::chain_trait::Chain,
     message_formatter,
     prompt::{
@@ -23,12 +20,12 @@ use crate::{
     tools::Tool,
 };
 
-use super::prompt::TEMPLATE_TOOL_RESPONSE;
+use super::{output_parser::ChatOutputParser, prompt::TEMPLATE_TOOL_RESPONSE};
 
 pub struct ConversationalAgent {
     pub(crate) chain: Box<dyn Chain>,
     pub(crate) tools: Vec<Arc<dyn Tool>>,
-    pub(crate) output_parser: Box<dyn AgentOutputParser>,
+    pub(crate) output_parser: ChatOutputParser,
 }
 
 impl ConversationalAgent {
@@ -36,7 +33,7 @@ impl ConversationalAgent {
         tools: &[Arc<dyn Tool>],
         suffix: &str,
         prefix: &str,
-    ) -> Result<MessageFormatterStruct, Box<dyn Error>> {
+    ) -> Result<MessageFormatterStruct, AgentError> {
         let tool_string = tools
             .iter()
             .map(|tool| format!("> {}: {}", tool.name(), tool.description()))
@@ -75,7 +72,7 @@ impl ConversationalAgent {
     fn construct_scratchpad(
         &self,
         intermediate_steps: &[(AgentAction, String)],
-    ) -> Result<Vec<Message>, Box<dyn Error>> {
+    ) -> Result<Vec<Message>, AgentError> {
         let mut thoughts: Vec<Message> = Vec::new();
         for (action, observation) in intermediate_steps.into_iter() {
             thoughts.push(Message::new_ai_message(&action.log));
@@ -93,7 +90,7 @@ impl Agent for ConversationalAgent {
         &self,
         intermediate_steps: &[(AgentAction, String)],
         inputs: PromptArgs,
-    ) -> Result<AgentEvent, Box<dyn Error>> {
+    ) -> Result<AgentEvent, AgentError> {
         let scratchpad = self.construct_scratchpad(&intermediate_steps)?;
         let mut inputs = inputs.clone();
         inputs.insert("agent_scratchpad".to_string(), json!(scratchpad));
@@ -115,10 +112,7 @@ mod tests {
     use serde_json::Value;
 
     use crate::{
-        agent::{
-            chat::{builder::ConversationalAgentBuilder, output_parser::ChatOutputParser},
-            executor::AgentExecutor,
-        },
+        agent::{chat::builder::ConversationalAgentBuilder, executor::AgentExecutor},
         chain::chain_trait::Chain,
         llm::openai::{OpenAI, OpenAIModel},
         memory::SimpleMemory,
@@ -149,7 +143,6 @@ mod tests {
         let tool_calc = Calc {};
         let agent = ConversationalAgentBuilder::new()
             .tools(&[Arc::new(tool_calc)])
-            .output_parser(ChatOutputParser::new().into())
             .build(llm)
             .unwrap();
         let input_variables = prompt_args! {

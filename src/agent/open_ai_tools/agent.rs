@@ -1,10 +1,10 @@
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::json;
 
 use crate::{
-    agent::Agent,
+    agent::{Agent, AgentError},
     chain::Chain,
     fmt_message, fmt_placeholder, fmt_template, message_formatter,
     prompt::{HumanMessagePromptTemplate, MessageFormatterStruct, PromptArgs},
@@ -23,7 +23,7 @@ pub struct OpenAiToolAgent {
 }
 
 impl OpenAiToolAgent {
-    pub fn create_prompt(prefix: &str) -> Result<MessageFormatterStruct, Box<dyn Error>> {
+    pub fn create_prompt(prefix: &str) -> Result<MessageFormatterStruct, AgentError> {
         let prompt = message_formatter![
             fmt_message!(Message::new_system_message(prefix)),
             fmt_placeholder!("chat_history"),
@@ -40,7 +40,7 @@ impl OpenAiToolAgent {
     fn construct_scratchpad(
         &self,
         intermediate_steps: &[(AgentAction, String)],
-    ) -> Result<Vec<Message>, Box<dyn Error>> {
+    ) -> Result<Vec<Message>, AgentError> {
         let mut thoughts: Vec<Message> = Vec::new();
 
         for (action, observation) in intermediate_steps {
@@ -69,7 +69,7 @@ impl Agent for OpenAiToolAgent {
         &self,
         intermediate_steps: &[(AgentAction, String)],
         inputs: PromptArgs,
-    ) -> Result<AgentEvent, Box<dyn Error>> {
+    ) -> Result<AgentEvent, AgentError> {
         let mut inputs = inputs.clone();
         let scratchpad = self.construct_scratchpad(&intermediate_steps)?;
         inputs.insert("agent_scratchpad".to_string(), json!(scratchpad));

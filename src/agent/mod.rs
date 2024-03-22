@@ -9,3 +9,6 @@ pub use chat::*;
 
 mod open_ai_tools;
 pub use open_ai_tools::*;
+
+mod error;
+pub use error::*;

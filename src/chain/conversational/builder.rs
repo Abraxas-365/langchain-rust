@@ -1,9 +1,11 @@
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
 use crate::{
-    chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions, DEFAULT_OUTPUT_KEY},
+    chain::{
+        llm_chain::LLMChainBuilder, options::ChainCallOptions, ChainError, DEFAULT_OUTPUT_KEY,
+    },
     language_models::llm::LLM,
     memory::SimpleMemory,
     prompt::HumanMessagePromptTemplate,
@@ -56,8 +58,10 @@ where
         self
     }
 
-    pub fn build(self) -> Result<ConversationalChain, Box<dyn Error>> {
-        let llm = self.llm.ok_or("LLM must be set")?;
+    pub fn build(self) -> Result<ConversationalChain, ChainError> {
+        let llm = self
+            .llm
+            .ok_or_else(|| ChainError::MissingObject("LLM must be set".into()))?;
         let prompt = HumanMessagePromptTemplate::new(template_fstring!(
             DEFAULT_TEMPLATE,
             "history",

@@ -1,10 +1,12 @@
-use std::{collections::HashMap, error::Error, pin::Pin};
+use std::{collections::HashMap, pin::Pin};
 
 use async_trait::async_trait;
 use futures::Stream;
 use serde_json::{json, Value};
 
 use crate::{language_models::GenerateResult, prompt::PromptArgs};
+
+use super::ChainError;
 
 pub(crate) const DEFAULT_OUTPUT_KEY: &str = "output";
 pub(crate) const DEFAULT_RESULT_KEY: &str = "generate_result";
@@ -40,7 +42,7 @@ pub trait Chain: Sync + Send {
     /// };
     /// # };
     /// ```
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, Box<dyn Error>>;
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError>;
 
     /// Invoke the `Chain` and receive just the generation result as a String.
     /// The input is a set of variables passed as a `PromptArgs` hashmap.
@@ -70,7 +72,7 @@ pub trait Chain: Sync + Send {
     /// };
     /// # };
     /// ```
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, Box<dyn Error>> {
+    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         self.call(input_variables)
             .await
             .map(|result| result.generation)
@@ -111,7 +113,7 @@ pub trait Chain: Sync + Send {
     async fn execute(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<HashMap<String, Value>, Box<dyn Error>> {
+    ) -> Result<HashMap<String, Value>, ChainError> {
         log::info!("Using defualt implementation");
         let result = self.call(input_variables.clone()).await?;
         let mut output = HashMap::new();
@@ -174,10 +176,8 @@ pub trait Chain: Sync + Send {
     async fn stream(
         &self,
         _input_variables: PromptArgs,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<serde_json::Value, Box<dyn Error + Send>>> + Send>>,
-        Box<dyn Error>,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    {
         log::warn!("stream not implemented for this chain");
         unimplemented!()
     }

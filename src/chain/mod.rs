@@ -19,4 +19,7 @@ pub use stuff_documents::*;
 mod question_answering;
 pub use question_answering::*;
 
+mod error;
+pub use error::*;
+
 pub mod options;

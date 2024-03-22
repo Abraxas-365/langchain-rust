@@ -1,7 +1,7 @@
-use std::error::Error;
-
 use crate::{
-    chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions, DEFAULT_OUTPUT_KEY},
+    chain::{
+        llm_chain::LLMChainBuilder, options::ChainCallOptions, ChainError, DEFAULT_OUTPUT_KEY,
+    },
     language_models::llm::LLM,
     prompt::HumanMessagePromptTemplate,
     template_jinja2,
@@ -59,10 +59,16 @@ where
         self
     }
 
-    pub fn build(self) -> Result<SQLDatabaseChain, Box<dyn Error>> {
-        let llm = self.llm.ok_or("LLM must be set")?;
-        let top_k = self.top_k.ok_or("top_k must be set")?;
-        let database = self.database.ok_or("Database must be set")?;
+    pub fn build(self) -> Result<SQLDatabaseChain, ChainError> {
+        let llm = self
+            .llm
+            .ok_or_else(|| ChainError::MissingObject("LLM must be set".into()))?;
+        let top_k = self
+            .top_k
+            .ok_or_else(|| ChainError::MissingObject("Top K must be set".into()))?;
+        let database = self
+            .database
+            .ok_or_else(|| ChainError::MissingObject("Database must be set".into()))?;
 
         let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
             format!("{}{}", DEFAULT_SQLTEMPLATE, DEFAULT_SQLSUFFIX),
