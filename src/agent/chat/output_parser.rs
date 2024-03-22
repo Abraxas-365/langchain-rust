@@ -58,18 +58,6 @@ impl ChatOutputParser {
     }
 }
 
-fn parse_json_markdown(json_markdown: &str) -> Option<Value> {
-    let re = match Regex::new(r"```(?:json)?\s*([\s\S]+?)\s*```") {
-        Ok(regex) => regex,
-        Err(_) => return None,
-    };
-
-    re.captures(json_markdown).and_then(|caps| {
-        caps.get(1)
-            .and_then(|json_str| serde_json::from_str::<Value>(json_str.as_str()).ok())
-    })
-}
-
 fn parse_partial_json(s: &str, strict: bool) -> Option<Value> {
     // First, attempt to parse the string as-is.
     match serde_json::from_str::<Value>(s) {
@@ -110,4 +98,16 @@ fn parse_partial_json(s: &str, strict: bool) -> Option<Value> {
 
     // Attempt to parse again.
     serde_json::from_str(&new_s).ok()
+}
+
+fn parse_json_markdown(json_markdown: &str) -> Option<Value> {
+    let re = match Regex::new(r"```(?:json)?\s*([\s\S]+?)\s*```") {
+        Ok(regex) => regex,
+        Err(_) => return None,
+    };
+
+    re.captures(json_markdown).and_then(|caps| {
+        caps.get(1)
+            .and_then(|json_str| serde_json::from_str::<Value>(json_str.as_str()).ok())
+    })
 }
