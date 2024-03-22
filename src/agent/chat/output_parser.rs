@@ -106,6 +106,7 @@ fn parse_json_markdown(json_markdown: &str) -> Option<Value> {
         if let Some(json_str) = caps.get(1) {
             return parse_partial_json(json_str.as_str(), false);
         }
-    }
+    };
+
     None
 }
