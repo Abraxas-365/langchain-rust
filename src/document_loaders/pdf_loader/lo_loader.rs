@@ -79,7 +79,7 @@ impl Loader for LoPdfLoader {
         LoaderError,
     > {
         let doc_stream = self.load().await?;
-        let stream = process_doc_stream(doc_stream, splitter);
+        let stream = process_doc_stream(doc_stream, splitter).await;
         Ok(Box::pin(stream))
     }
 }

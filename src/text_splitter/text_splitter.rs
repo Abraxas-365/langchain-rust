@@ -1,15 +1,20 @@
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::schemas::Document;
 
 use super::TextSplitterError;
 
+#[async_trait]
 pub trait TextSplitter: Send + Sync {
-    fn split_text(&self, text: &str) -> Result<Vec<String>, TextSplitterError>;
+    async fn split_text(&self, text: &str) -> Result<Vec<String>, TextSplitterError>;
 
-    fn split_documents(&self, documents: &[Document]) -> Result<Vec<Document>, TextSplitterError> {
+    async fn split_documents(
+        &self,
+        documents: &[Document],
+    ) -> Result<Vec<Document>, TextSplitterError> {
         let mut texts: Vec<String> = Vec::new();
         let mut metadatas: Vec<HashMap<String, Value>> = Vec::new();
         documents.iter().for_each(|d| {
@@ -17,10 +22,10 @@ pub trait TextSplitter: Send + Sync {
             metadatas.push(d.metadata.clone());
         });
 
-        self.create_documents(&texts, &metadatas)
+        self.create_documents(&texts, &metadatas).await
     }
 
-    fn create_documents(
+    async fn create_documents(
         &self,
         text: &[String],
         metadatas: &[HashMap<String, Value>],
@@ -36,7 +41,7 @@ pub trait TextSplitter: Send + Sync {
 
         let mut documents: Vec<Document> = Vec::new();
         for i in 0..text.len() {
-            let chunks = self.split_text(&text[i])?;
+            let chunks = self.split_text(&text[i]).await?;
             for chunk in chunks {
                 let document = Document::new(chunk).with_metadata(metadatas[i].clone());
                 documents.push(document);
