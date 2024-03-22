@@ -26,7 +26,7 @@ pub trait Loader: Send + Sync {
     >;
 }
 
-pub(crate) fn process_doc_stream<TS: TextSplitter + 'static>(
+pub(crate) async fn process_doc_stream<TS: TextSplitter + 'static>(
     doc_stream: Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send>>,
     splitter: TS,
 ) -> impl Stream<Item = Result<Document, LoaderError>> {
@@ -35,7 +35,7 @@ pub(crate) fn process_doc_stream<TS: TextSplitter + 'static>(
         while let Some(doc_result) = doc_stream.next().await {
             match doc_result {
                 Ok(doc) => {
-                    match splitter.split_documents(&[doc]) {
+                    match splitter.split_documents(&[doc]).await {
                         Ok(docs) => {
                             for doc in docs {
                                 yield Ok(doc);

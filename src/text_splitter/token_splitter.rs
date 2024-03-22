@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use tiktoken_rs::{get_bpe_from_model, get_bpe_from_tokenizer, tokenizer::Tokenizer, CoreBPE};
 
 use super::{SplitterOptions, TextSplitter, TextSplitterError};
@@ -47,8 +48,9 @@ impl TokenSplitter {
     }
 }
 
+#[async_trait]
 impl TextSplitter for TokenSplitter {
-    fn split_text(&self, text: &str) -> Result<Vec<String>, TextSplitterError> {
+    async fn split_text(&self, text: &str) -> Result<Vec<String>, TextSplitterError> {
         let tk = if !self.encoding_name.is_empty() {
             let tokenizer = self
                 .get_tokenizer_from_str(&self.encoding_name)
