@@ -26,7 +26,7 @@ impl Default for CommandExecutor {
 #[async_trait]
 impl Tool for CommandExecutor {
     fn name(&self) -> String {
-        String::from("GoogleSearch")
+        String::from("Command_Executor")
     }
     fn description(&self) -> String {
         String::from(format!(
