@@ -7,7 +7,7 @@ use langchain_rust::{
     llm::openai::OpenAI,
     memory::SimpleMemory,
     prompt_args,
-    tools::{SerpApi, Tool,CommandExecutor},
+    tools::{CommandExecutor, SerpApi, Tool},
 };
 
 use serde_json::Value;
@@ -32,9 +32,14 @@ async fn main() {
     let memory = SimpleMemory::new();
     let serpapi_tool = SerpApi::default();
     let tool_calc = Date {};
-    let command_executor = CommandExecutor::default().with_disallowed_commands(vec![("rm", vec!["-rf"])]);
+    let command_executor =
+        CommandExecutor::default().with_disallowed_commands(vec![("rm", vec!["-rf"])]);
     let agent = OpenAiToolAgentBuilder::new()
-        .tools(&[Arc::new(serpapi_tool), Arc::new(tool_calc),Arc::new(command_executor)])
+        .tools(&[
+            Arc::new(serpapi_tool),
+            Arc::new(tool_calc),
+            Arc::new(command_executor),
+        ])
         .options(ChainCallOptions::new().with_max_tokens(1000))
         .build(llm)
         .unwrap();
