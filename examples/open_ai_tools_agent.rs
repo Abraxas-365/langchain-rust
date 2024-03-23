@@ -32,8 +32,7 @@ async fn main() {
     let memory = SimpleMemory::new();
     let serpapi_tool = SerpApi::default();
     let tool_calc = Date {};
-    let command_executor =
-        CommandExecutor::default().with_disallowed_commands(vec![("rm", vec!["-rf"])]);
+    let command_executor = CommandExecutor::default();
     let agent = OpenAiToolAgentBuilder::new()
         .tools(&[
             Arc::new(serpapi_tool),

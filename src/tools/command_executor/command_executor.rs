@@ -8,8 +8,6 @@ use crate::tools::Tool;
 
 pub struct CommandExecutor {
     platform: String,
-
-    disallowed_commands: Vec<(String, Vec<String>)>,
 }
 
 impl CommandExecutor {
@@ -21,42 +19,7 @@ impl CommandExecutor {
     pub fn new<S: Into<String>>(platform: S) -> Self {
         Self {
             platform: platform.into(),
-            disallowed_commands: Vec::new(),
         }
-    }
-
-    /// Set disallowed commands for the executor
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// let tool = CommandExecutor::new("linux")
-    ///    .with_disallowed_commands(vec![("rm", vec!["-rf"]),("ls",vec![])]),
-    /// ```
-    ///
-    pub fn with_disallowed_commands<S: Into<String>>(
-        mut self,
-        disallowed_commands: Vec<(S, Vec<S>)>,
-    ) -> Self {
-        self.disallowed_commands = disallowed_commands
-            .into_iter()
-            .map(|(cmd, args)| (cmd.into(), args.into_iter().map(|arg| arg.into()).collect()))
-            .collect();
-        self
-    }
-
-    fn validate_command(&self, command: &CommandInput) -> Result<(), String> {
-        for (cmd, args) in &self.disallowed_commands {
-            if &command.cmd == cmd {
-                // If any disallowed arg pattern fully matches the command's args, disallow it
-                if args.iter().all(|arg| command.args.contains(arg)) {
-                    return Err(format!(
-                        "Command '{}' with arguments '{:?}' is disallowed",
-                        cmd, args
-                    ));
-                }
-            }
-        }
-        Ok(())
     }
 }
 
@@ -169,12 +132,6 @@ impl Tool for CommandExecutor {
         let mut result = String::new();
 
         for command in commands {
-            // Validate each command
-            self.validate_command(&command).map_err(|e| {
-                log::error!("{}", e);
-                std::io::Error::new(std::io::ErrorKind::Other, e)
-            })?;
-
             let mut command_to_execute = std::process::Command::new(&command.cmd);
             command_to_execute.args(&command.args);
 

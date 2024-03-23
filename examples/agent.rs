@@ -13,8 +13,7 @@ use langchain_rust::{
 async fn main() {
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt4Turbo);
     let memory = SimpleMemory::new();
-    let command_executor =
-        CommandExecutor::default().with_disallowed_commands(vec![("rm", vec!["-rf"])]);
+    let command_executor = CommandExecutor::default();
     let agent = ConversationalAgentBuilder::new()
         .tools(&[Arc::new(command_executor)])
         .options(ChainCallOptions::new().with_max_tokens(1000))
