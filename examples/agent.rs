@@ -24,7 +24,7 @@ async fn main() {
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
 
     let input_variables = prompt_args! {
-        "input" => "What do I have in the current dir and what is the name of the current dir",
+        "input" => "What is the name of the current dir",
     };
 
     match executor.invoke(input_variables).await {
