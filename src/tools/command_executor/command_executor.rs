@@ -69,6 +69,7 @@ impl Default for CommandExecutor {
 #[derive(Deserialize, Serialize, Debug)]
 struct CommandInput {
     cmd: String,
+    #[serde(default)]
     args: Vec<String>,
 }
 #[derive(Serialize, Deserialize, Debug)]
@@ -136,6 +137,7 @@ impl Tool for CommandExecutor {
     }
 
     async fn parse_input(&self, input: &str) -> Value {
+        println!("Input: {}", input);
         log::info!("Parsing input: {}", input);
 
         // Attempt to parse input string into CommandsWrapper struct first
@@ -204,13 +206,6 @@ impl Tool for CommandExecutor {
 mod test {
     use super::*;
     use serde_json::json;
-    #[tokio::test]
-    async fn test_with_value_executor() {
-        let tool = CommandExecutor::new("linux");
-        let result = tool.call("ls,pwd").await.unwrap();
-        println!("{}", result);
-    }
-
     #[tokio::test]
     async fn test_with_string_executor() {
         let tool = CommandExecutor::new("linux");
