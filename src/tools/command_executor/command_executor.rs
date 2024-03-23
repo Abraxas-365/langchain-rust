@@ -137,7 +137,6 @@ impl Tool for CommandExecutor {
     }
 
     async fn parse_input(&self, input: &str) -> Value {
-        println!("Input: {}", input);
         log::info!("Parsing input: {}", input);
 
         // Attempt to parse input string into CommandsWrapper struct first
