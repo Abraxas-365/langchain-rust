@@ -47,12 +47,12 @@ async fn main() {
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
 
     let input_variables = prompt_args! {
-        "input" => "What do I have in the current dir, what is the name of the current dir and Whats the current date?",
+        "input" => "What the name of the current dir, And what date is today",
     };
 
     match executor.invoke(input_variables).await {
         Ok(result) => {
-            println!("Result: {:?}", result);
+            println!("Result: {:?}", result.replace("\n", " "));
         }
         Err(e) => panic!("Error invoking LLMChain: {:?}", e),
     }
