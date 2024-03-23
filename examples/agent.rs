@@ -6,16 +6,16 @@ use langchain_rust::{
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     prompt_args,
-    tools::SerpApi,
+    tools::{CommandExecutor},
 };
 
 #[tokio::main]
 async fn main() {
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt4Turbo);
     let memory = SimpleMemory::new();
-    let serpapi_tool = SerpApi::default();
+    let command_executor = CommandExecutor::default().with_disallowed_commands(vec![("rm", vec!["-rf"])]);
     let agent = ConversationalAgentBuilder::new()
-        .tools(&[Arc::new(serpapi_tool)])
+        .tools(&[Arc::new(command_executor)])
         .options(ChainCallOptions::new().with_max_tokens(1000))
         .build(llm)
         .unwrap();
@@ -23,7 +23,7 @@ async fn main() {
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
 
     let input_variables = prompt_args! {
-        "input" => "Who is the creator of vim, and how old is vim",
+        "input" => "What do I have in the current dir and what is the name of the current dir",
     };
 
     match executor.invoke(input_variables).await {
