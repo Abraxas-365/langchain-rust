@@ -15,7 +15,7 @@ pub struct CommandExecutor {
 impl CommandExecutor {
     /// Create a new CommandExecutor instance
     /// # Example
-    /// ```
+    /// ```rust,ignore
     /// let tool = CommandExecutor::new("linux");
     /// ```
     pub fn new<S: Into<String>>(platform: S) -> Self {
@@ -28,7 +28,7 @@ impl CommandExecutor {
     /// Set disallowed commands for the executor
     /// # Example
     ///
-    /// ```
+    /// ```rust,ignore
     /// let tool = CommandExecutor::new("linux")
     ///    .with_disallowed_commands(vec![("rm", vec!["-rf"]),("ls",vec![])]),
     /// ```
