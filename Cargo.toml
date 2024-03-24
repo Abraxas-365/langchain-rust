@@ -1,3 +1,4 @@
+workspace = { members = ["examples/vector_store_surrealdb"] }
 [package]
 name = "langchain-rust"
 version = "3.0.1"
