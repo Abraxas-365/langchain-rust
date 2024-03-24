@@ -1,5 +1,6 @@
 use serde_json::Value;
 
+#[derive(Debug, Clone)]
 pub struct StreamData {
     pub value: Value,
     pub content: String,
