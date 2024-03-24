@@ -24,6 +24,9 @@ pub enum LLMError {
     #[error("Invalid URL: {0}")]
     InvalidUrl(String),
 
+    #[error("Content not found in response: Expected at {0}")]
+    ContentNotFound(String),
+
     #[error("Error: {0}")]
     GenericError(String),
 }
