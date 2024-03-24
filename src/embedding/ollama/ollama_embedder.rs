@@ -9,7 +9,7 @@ use serde_json::json;
 
 #[derive(Debug, Deserialize)]
 struct EmbeddingResponse {
-    embedding: Vec<f32>,
+    embedding: Vec<f64>,
 }
 
 #[derive(Debug)]
@@ -47,7 +47,7 @@ impl Default for OllamaEmbedder {
 
 #[async_trait]
 impl Embedder for OllamaEmbedder {
-    async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f32>>, Box<dyn Error>> {
+    async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
         log::debug!("Embedding documents: {:?}", documents);
         let client = Client::new();
         let url = Url::parse(&format!("{}{}", self.base_url, "/api/embeddings"))?;
@@ -73,7 +73,7 @@ impl Embedder for OllamaEmbedder {
         Ok(embeddings)
     }
 
-    async fn embed_query(&self, text: &str) -> Result<Vec<f32>, Box<dyn Error>> {
+    async fn embed_query(&self, text: &str) -> Result<Vec<f64>, Box<dyn Error>> {
         log::debug!("Embedding query: {:?}", text);
         let client = Client::new();
         let url = Url::parse(&format!("{}{}", self.base_url, "/api/embeddings"))?;

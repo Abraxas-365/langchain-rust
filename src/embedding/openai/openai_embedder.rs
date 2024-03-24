@@ -48,7 +48,7 @@ impl Default for OpenAiEmbedder<OpenAIConfig> {
 
 #[async_trait]
 impl<C: Config + Send + Sync> Embedder for OpenAiEmbedder<C> {
-    async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f32>>, Box<dyn Error>> {
+    async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
         let client = Client::with_config(self.config.clone());
 
         let request = CreateEmbeddingRequestArgs::default()
@@ -62,12 +62,18 @@ impl<C: Config + Send + Sync> Embedder for OpenAiEmbedder<C> {
             .data
             .into_iter()
             .map(|item| item.embedding)
+            .map(|embedding| {
+                embedding
+                    .into_iter()
+                    .map(|x| x as f64)
+                    .collect::<Vec<f64>>()
+            })
             .collect();
 
         Ok(embeddings)
     }
 
-    async fn embed_query(&self, text: &str) -> Result<Vec<f32>, Box<dyn Error>> {
+    async fn embed_query(&self, text: &str) -> Result<Vec<f64>, Box<dyn Error>> {
         let client = Client::with_config(self.config.clone());
 
         let request = CreateEmbeddingRequestArgs::default()
@@ -79,6 +85,10 @@ impl<C: Config + Send + Sync> Embedder for OpenAiEmbedder<C> {
 
         let item = response.data.swap_remove(0);
 
-        Ok(item.embedding)
+        Ok(item
+            .embedding
+            .into_iter()
+            .map(|x| x as f64)
+            .collect::<Vec<f64>>())
     }
 }
