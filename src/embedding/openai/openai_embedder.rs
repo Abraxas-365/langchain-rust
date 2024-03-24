@@ -1,52 +1,31 @@
 #![allow(dead_code)]
-use std::{env, error::Error};
+use std::error::Error;
 
 use crate::embedding::embedder_trait::Embedder;
+pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
+use async_openai::{
+    types::{CreateEmbeddingRequestArgs, EmbeddingInput},
+    Client,
+};
 use async_trait::async_trait;
-use reqwest::{Client, Url};
-use serde::Deserialize;
-use serde_json::json;
 
-#[derive(Debug, Deserialize)]
-struct EmbeddingResponse {
-    object: String,
-    data: Vec<EmbeddingData>,
-    model: String,
-    usage: UsageData,
-}
-impl EmbeddingResponse {
-    fn extract_embedding(&self) -> Vec<f64> {
-        self.data[0].embedding.clone()
-    }
-    fn extract_all_embeddings(&self) -> Vec<Vec<f64>> {
-        self.data.iter().map(|d| d.embedding.clone()).collect()
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct EmbeddingData {
-    object: String,
-    embedding: Vec<f64>,
-    index: usize,
-}
-
-#[derive(Debug, Deserialize)]
-struct UsageData {
-    prompt_tokens: usize,
-    total_tokens: usize,
-}
 #[derive(Debug)]
-pub struct OpenAiEmbedder {
-    pub(crate) model: String,
-    pub(crate) openai_key: String,
-    pub(crate) base_url: String,
+pub struct OpenAiEmbedder<C: Config> {
+    config: C,
+    model: String,
 }
-impl OpenAiEmbedder {
-    pub fn new<S: Into<String>>(openai_key: S, model: S, base_url: S) -> Self {
+
+impl<C: Config + Send + Sync + 'static> Into<Box<dyn Embedder>> for OpenAiEmbedder<C> {
+    fn into(self) -> Box<dyn Embedder> {
+        Box::new(self)
+    }
+}
+
+impl<C: Config> OpenAiEmbedder<C> {
+    pub fn new(config: C) -> Self {
         OpenAiEmbedder {
-            model: model.into(),
-            openai_key: openai_key.into(),
-            base_url: base_url.into(),
+            config,
+            model: String::from("text-embedding-ada-002"),
         }
     }
 
@@ -55,79 +34,61 @@ impl OpenAiEmbedder {
         self
     }
 
-    pub fn with_api_key<S: Into<String>>(mut self, openai_key: S) -> Self {
-        self.openai_key = openai_key.into();
-        self
-    }
-
-    pub fn with_api_base<S: Into<String>>(mut self, base_url: S) -> Self {
-        self.base_url = base_url.into();
+    pub fn with_config(mut self, config: C) -> Self {
+        self.config = config;
         self
     }
 }
 
-impl Default for OpenAiEmbedder {
+impl Default for OpenAiEmbedder<OpenAIConfig> {
     fn default() -> Self {
-        let model = String::from("text-embedding-ada-002");
-        let openai_key = env::var("OPENAI_API_KEY").unwrap_or(String::new());
-        let base_url = String::from("https://api.openai.com/v1/embeddings");
-        OpenAiEmbedder::new(openai_key, model, base_url)
+        OpenAiEmbedder::new(OpenAIConfig::default())
     }
 }
 
 #[async_trait]
-impl Embedder for OpenAiEmbedder {
+impl<C: Config + Send + Sync> Embedder for OpenAiEmbedder<C> {
     async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
-        log::debug!("Embedding documents: {:?}", documents);
-        let client = Client::new();
-        let url = Url::parse(&self.base_url)?;
-        let res = client
-            .post(url)
-            .bearer_auth(&self.openai_key)
-            .json(&json!({
-                "input": documents,
-                "model": &self.model,
-            }))
-            .send()
-            .await?;
+        let client = Client::with_config(self.config.clone());
 
-        if res.status() != 200 {
-            let error_message: String = res
-                .text()
-                .await
-                .unwrap_or_else(|_| "Failed to read error message".into());
-            log::error!("Error from OpenAI: {}", &error_message);
-            return Err(error_message.into());
-        }
+        let request = CreateEmbeddingRequestArgs::default()
+            .model(&self.model)
+            .input(EmbeddingInput::StringArray(documents.into()))
+            .build()?;
 
-        let data: EmbeddingResponse = res.json().await?;
-        Ok(data.extract_all_embeddings())
+        let response = client.embeddings().create(request).await?;
+
+        let embeddings = response
+            .data
+            .into_iter()
+            .map(|item| item.embedding)
+            .map(|embedding| {
+                embedding
+                    .into_iter()
+                    .map(|x| x as f64)
+                    .collect::<Vec<f64>>()
+            })
+            .collect();
+
+        Ok(embeddings)
     }
 
     async fn embed_query(&self, text: &str) -> Result<Vec<f64>, Box<dyn Error>> {
-        log::debug!("Embedding query: {:?}", text);
-        let client = Client::new();
-        let url = Url::parse("https://api.openai.com/v1/embeddings")?;
+        let client = Client::with_config(self.config.clone());
 
-        let res = client
-            .post(url)
-            .bearer_auth(&self.openai_key)
-            .json(&json!({
-                "input": text,
-                "model": &self.model,
-            }))
-            .send()
-            .await?;
+        let request = CreateEmbeddingRequestArgs::default()
+            .model(&self.model)
+            .input(text)
+            .build()?;
 
-        if res.status() != 200 {
-            let error_message: String = res
-                .text()
-                .await
-                .unwrap_or_else(|_| "Failed to read error message".into());
-            log::error!("Error from OpenAI: {}", &error_message);
-            return Err(error_message.into());
-        }
-        let data: EmbeddingResponse = res.json().await?;
-        Ok(data.extract_embedding())
+        let mut response = client.embeddings().create(request).await?;
+
+        let item = response.data.swap_remove(0);
+
+        Ok(item
+            .embedding
+            .into_iter()
+            .map(|x| x as f64)
+            .collect::<Vec<f64>>())
     }
 }
