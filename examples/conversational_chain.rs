@@ -1,3 +1,6 @@
+use std::io::{stdout, Write};
+
+use futures_util::StreamExt;
 use langchain_rust::{
     chain::{builder::ConversationalChainBuilder, Chain},
     llm::openai::{OpenAI, OpenAIModel},
@@ -19,11 +22,17 @@ async fn main() {
 
     let input_variables = chain.pompt_builder().input("Im from Peru").build();
 
-    match chain.invoke(input_variables).await {
-        Ok(result) => {
-            println!("Result: {:?}", result);
+    let mut stream = chain.stream(input_variables).await.unwrap();
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok(data) => {
+                print!("{}", data.content);
+                stdout().flush().unwrap();
+            }
+            Err(e) => {
+                println!("Error: {:?}", e);
+            }
         }
-        Err(e) => panic!("Error invoking LLMChain: {:?}", e),
     }
 
     let input_variables = chain
@@ -33,6 +42,7 @@ async fn main() {
 
     match chain.invoke(input_variables).await {
         Ok(result) => {
+            println!("\n");
             println!("Result: {:?}", result);
         }
         Err(e) => panic!("Error invoking LLMChain: {:?}", e),
