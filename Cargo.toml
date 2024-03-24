@@ -25,7 +25,7 @@ reqwest-eventsource = "0.5.0"
 async-openai = "0.19.1"
 mockito = "1.4.0"
 tiktoken-rs = "0.5.8"
-sqlx = { version = "0.7.4", features = ["postgres", "runtime-tokio-native-tls", "json", "uuid" ], optional = true }
+sqlx = { version = "0.7.4", default-features = false, features = ["postgres", "sqlite", "runtime-tokio-native-tls", "json", "uuid" ], optional = true }
 uuid = {version = "1.8.0", features = ["v4"], optional = true }
 pgvector = {version = "0.3.2", features = ["postgres", "sqlx"], optional = true }
 text-splitter = { version = "0.7", features = ["tiktoken-rs","markdown"] }
@@ -41,6 +41,7 @@ async-stream = "0.3.5"
 default = []
 postgres = ["pgvector", "sqlx", "uuid"]
 surrealdb = ["dep:surrealdb"]
+sqlite = ["sqlx"]
 
 [dev-dependencies]
 tokio-test = "0.4.4"

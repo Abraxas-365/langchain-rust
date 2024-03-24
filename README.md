@@ -55,6 +55,13 @@ Then, you can add `langchain-rust` to your Rust project.
 ```bash
 cargo add langchain-rust
 ```
+#### With Sqlite
+
+```bash
+cargo add langchain-rust --features sqlite
+```
+
+Download additional sqlite_vss libraries from https://github.com/asg017/sqlite-vss
 
 #### With Postgres
 
@@ -68,13 +75,13 @@ cargo add langchain-rust --features postgres
 cargo add langchain-rust --features surrealdb
 ```
 
-Please remember to replace the feature flags `postgres` or `surrealdb` based on your
+Please remember to replace the feature flags `sqlite`, `postgres` or `surrealdb` based on your
 specific use case.
 
 This will add both `serde_json` and `langchain-rust` as dependencies in your `Cargo.toml`
 file. Now, when you build your project, both dependencies will be fetched and compiled, and will be available for use in your project.
 
-Remember, `serde_json` is a necessary dependencies, and `postgres` and `surrealdb`
+Remember, `serde_json` is a necessary dependencies, and `sqlite`, `postgres` and `surrealdb`
 are optional features that may be added according to project needs.
 
 ### Quick Start Conversational Chain

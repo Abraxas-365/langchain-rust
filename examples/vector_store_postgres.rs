@@ -1,4 +1,4 @@
-// To run this example execute: cargo run --example vector_stores --features postgres
+// To run this example execute: cargo run --example vector_store_postgres --features postgres
 
 #[cfg(feature = "postgres")]
 use langchain_rust::{
@@ -72,5 +72,5 @@ async fn main() {
 fn main() {
     println!("This example requires the 'postgres' feature to be enabled.");
     println!("Please run the command as follows:");
-    println!("cargo run --example vector_stores --features postgres");
+    println!("cargo run --example vector_store_postgres --features postgres");
 }
