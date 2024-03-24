@@ -7,6 +7,7 @@ use futures_util::TryStreamExt;
 use crate::{
     language_models::{llm::LLM, GenerateResult},
     prompt::{FormatPrompter, PromptArgs},
+    schemas::StreamData,
 };
 
 use super::{chain_trait::Chain, options::ChainCallOptions, ChainError};
@@ -114,7 +115,7 @@ impl Chain for LLMChain {
     async fn stream(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
         log::debug!("Prompt: {:?}", prompt);

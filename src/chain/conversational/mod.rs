@@ -9,7 +9,7 @@ use crate::{
     memory::SimpleMemory,
     prompt::{HumanMessagePromptTemplate, PromptArgs},
     prompt_args,
-    schemas::{memory::BaseMemory, messages::Message},
+    schemas::{memory::BaseMemory, messages::Message, StreamData},
     template_fstring,
 };
 
@@ -109,7 +109,7 @@ impl Chain for ConversationalChain {
     async fn stream(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let memory = self.memory.lock().await;
         let mut input_variables = input_variables;

@@ -41,10 +41,8 @@ async fn main() {
     while let Some(result) = stream.next().await {
         match result {
             Ok(value) => {
-                if let Some(content) = value.pointer("/choices/0/delta/content") {
-                    print!("{}", content.as_str().unwrap_or(""));
-                    stdout().flush().unwrap();
-                }
+                print!("{}", value.content);
+                stdout().flush().unwrap();
             }
             Err(e) => panic!("Error invoking LLMChain: {:?}", e),
         }

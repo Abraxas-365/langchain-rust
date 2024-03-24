@@ -10,7 +10,7 @@ use crate::{
     },
     language_models::{llm::LLM, GenerateResult},
     prompt::PromptArgs,
-    schemas::Document,
+    schemas::{Document, StreamData},
 };
 
 const COMBINE_DOCUMENTS_DEFAULT_INPUT_KEY: &str = "input_documents";
@@ -139,7 +139,7 @@ impl Chain for StuffDocument {
     async fn stream(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         self.llm_chain.stream(input_variables).await
     }
