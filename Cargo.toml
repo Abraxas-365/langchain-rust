@@ -1,3 +1,4 @@
+workspace = { members = ["examples/vector_store_surrealdb"] }
 [package]
 name = "langchain-rust"
 version = "3.0.1"
@@ -37,6 +38,7 @@ thiserror = "1.0.58"
 futures-util = "0.3.30"
 async-stream = "0.3.5"
 tokio-stream = "0.1.15"
+secrecy = "0.8.0"
 
 [features]
 default = []

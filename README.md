@@ -24,7 +24,11 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 - [Secuential chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sequential_chain.rs): run chain in secuential order, with the ouput of one being the input of the next one
 
-- [Vectore Store with pgvector](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vectore_stores.rs) : And implementation of vector stroe with pgvector
+- [Vectore Store with pgvector](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_postgres.rs) : And implementation of vector stroe with pgvector
+
+- [Vectore Store with sqlite_vss](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_sqlite.rs) : And implementation of vector stroe with sqlite_vss
+
+- [Embedding with Ollama](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_ollama.rs) : Embedding with Ollama
 
 - [Agentes](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/agent.rs) : Agent implementation for complex tasks
 
