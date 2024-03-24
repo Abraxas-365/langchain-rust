@@ -1,0 +1,12 @@
+[package]
+name = "vector_store_surrealdb"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.81"
+langchain-rust = { path = "../..", features = ["surrealdb"] }
+surrealdb = { version = "1.3.1", features = ["kv-mem"] }
+tokio = { version = "1.36.0", features = ["full"] }
