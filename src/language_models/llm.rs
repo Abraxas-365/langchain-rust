@@ -3,7 +3,7 @@ use std::pin::Pin;
 use async_trait::async_trait;
 use futures::Stream;
 
-use crate::schemas::messages::Message;
+use crate::schemas::{Message, StreamData};
 
 use super::{options::CallOptions, GenerateResult, LLMError};
 
@@ -14,7 +14,7 @@ pub trait LLM: Sync + Send {
     async fn stream(
         &self,
         _messages: &[Message],
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, LLMError>> + Send>>, LLMError>;
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError>;
 
     /// This is usefull when you want to create a chain and override
     /// LLM options

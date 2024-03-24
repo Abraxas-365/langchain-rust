@@ -18,7 +18,7 @@ use crate::{
     language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
     schemas::{
         messages::{Message, MessageType},
-        FunctionCallBehavior,
+        FunctionCallBehavior, StreamData,
     },
 };
 
@@ -160,15 +160,27 @@ impl<C: Config + Send + Sync> LLM for OpenAI<C> {
     async fn stream(
         &self,
         messages: &[Message],
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, LLMError>> + Send>>, LLMError>
-    {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
         let client = Client::with_config(self.config.clone());
         let request = self.generate_request(messages)?;
 
         let original_stream = client.chat().create_stream(request).await?;
 
         let new_stream = original_stream.map(|result| match result {
-            Ok(completion) => serde_json::to_value(completion).map_err(LLMError::from),
+            Ok(completion) => {
+                let value_completion = serde_json::to_value(completion).map_err(LLMError::from)?;
+                let content = value_completion
+                    .pointer("/choices/0/delta/content")
+                    .ok_or(LLMError::ContentNotFound(
+                        "/choices/0/delta/content".to_string(),
+                    ))?
+                    .clone();
+
+                Ok(StreamData::new(
+                    value_completion,
+                    content.as_str().unwrap_or(""),
+                ))
+            }
             Err(e) => Err(LLMError::from(e)),
         });
 
@@ -385,13 +397,11 @@ mod tests {
             .unwrap()
             .for_each(|result| async {
                 match result {
-                    Ok(response) => {
-                        if let Some(content) = response.pointer("/choices/0/delta/content") {
-                            println!("Content: {}", content.as_str().unwrap_or(""));
-                        }
+                    Ok(stream_data) => {
+                        println!("Stream Data: {:?}", stream_data.content);
                     }
                     Err(e) => {
-                        eprintln!("Error: {:?}", e);
+                        eprintln!("Error calling generate: {:?}", e);
                     }
                 }
             })
