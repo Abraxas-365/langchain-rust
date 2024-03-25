@@ -1,4 +1,5 @@
 use serde_json::Value;
+use std::io::{self, Write};
 
 #[derive(Debug, Clone)]
 pub struct StreamData {
@@ -11,5 +12,12 @@ impl StreamData {
             value,
             content: content.into(),
         }
+    }
+
+    pub fn to_stdout(&self) -> io::Result<()> {
+        let stdout = io::stdout();
+        let mut handle = stdout.lock();
+        write!(handle, "{}", self.content)?;
+        handle.flush()
     }
 }
