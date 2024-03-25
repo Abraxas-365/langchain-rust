@@ -26,7 +26,7 @@ pub enum ChainError {
     },
 
     #[error("Error: {0}")]
-    GenericError(String),
+    OtherError(String),
 
     #[error("Database error: {0}")]
     DatabaseError(String),

@@ -28,5 +28,5 @@ pub enum LLMError {
     ContentNotFound(String),
 
     #[error("Error: {0}")]
-    GenericError(String),
+    OtherError(String),
 }

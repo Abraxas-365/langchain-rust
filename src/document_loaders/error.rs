@@ -25,5 +25,5 @@ pub enum LoaderError {
     ReadabilityError(#[from] readability::error::Error),
 
     #[error("Error: {0}")]
-    GenericError(String),
+    OtherError(String),
 }

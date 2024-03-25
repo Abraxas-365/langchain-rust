@@ -10,5 +10,5 @@ pub enum PromptError {
     SerializationError(#[from] SerdeJsonError),
 
     #[error("Error: {0}")]
-    GenericError(String),
+    OtherError(String),
 }

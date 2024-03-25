@@ -18,5 +18,5 @@ pub enum TextSplitterError {
     InvalidModel,
 
     #[error("Error: {0}")]
-    GenericError(String),
+    OtherError(String),
 }
