@@ -12,6 +12,9 @@ pub enum RouterBuilderError {
 pub enum RouteLayerBuilderError {
     #[error("All routers must have an embedding if the route layer lacks a global embedder.")]
     MissingEmbedderForRoutes,
+
+    #[error("Route layer error: {0}")]
+    RouteLayerError(#[from] RouteLayerError),
 }
 
 #[derive(Error, Debug)]
