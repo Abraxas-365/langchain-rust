@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures_util::future::try_join_all;
 
-use crate::embedding::Embedder;
+use crate::embedding::{openai::OpenAiEmbedder, Embedder};
 
 use super::{RouteLayerBuilderError, RouteLayerError, Router};
 
@@ -45,6 +45,12 @@ pub struct RouteLayerBuilder {
     routes: Vec<Router>,
     threshold: Option<f64>,
 }
+impl Default for RouteLayerBuilder {
+    fn default() -> Self {
+        Self::new().embedder(OpenAiEmbedder::default())
+    }
+}
+
 impl RouteLayerBuilder {
     pub fn new() -> Self {
         Self {
