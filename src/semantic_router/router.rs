@@ -32,9 +32,9 @@ pub struct RouterBuilder {
     pub embedding: Option<Vec<f64>>,
 }
 impl RouterBuilder {
-    pub fn new(name: String) -> Self {
+    pub fn new<S: Into<String>>(name: S) -> Self {
         RouterBuilder {
-            name,
+            name: name.into(),
             utterances: None,
             embedding: None,
         }
