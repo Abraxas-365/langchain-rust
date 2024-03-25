@@ -1,5 +1,3 @@
-use std::io::{stdout, Write};
-
 use futures::StreamExt;
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
@@ -40,10 +38,7 @@ async fn main() {
 
     while let Some(result) = stream.next().await {
         match result {
-            Ok(value) => {
-                print!("{}", value.content);
-                stdout().flush().unwrap();
-            }
+            Ok(value) => value.to_stdout().unwrap(),
             Err(e) => panic!("Error invoking LLMChain: {:?}", e),
         }
     }

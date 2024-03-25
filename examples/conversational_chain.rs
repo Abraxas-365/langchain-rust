@@ -26,6 +26,7 @@ async fn main() {
     while let Some(result) = stream.next().await {
         match result {
             Ok(data) => {
+                //If you junt want to print to stdout, you can use data.to_stdout().unwrap();
                 print!("{}", data.content);
                 stdout().flush().unwrap();
             }
