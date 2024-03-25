@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use serde_json::{json, Value};
 
-use crate::{language_models::GenerateResult, prompt::PromptArgs};
+use crate::{language_models::GenerateResult, prompt::PromptArgs, schemas::StreamData};
 
 use super::ChainError;
 
@@ -163,9 +163,7 @@ pub trait Chain: Sync + Send {
     /// while let Some(result) = stream.next().await {
     ///     match result {
     ///         Ok(value) => {
-    ///             if let Some(content) = value.pointer("/choices/0/delta/content") {
-    ///                 println!("Content: {}", content.as_str().unwrap_or(""));
-    ///             }
+    ///                 println!("Content: {}", value.content);
     ///         },
     ///         Err(e) => panic!("Error invoking LLMChain: {:?}", e),
     ///     }
@@ -176,7 +174,7 @@ pub trait Chain: Sync + Send {
     async fn stream(
         &self,
         _input_variables: PromptArgs,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         log::warn!("stream not implemented for this chain");
         unimplemented!()

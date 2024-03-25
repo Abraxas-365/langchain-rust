@@ -7,7 +7,7 @@ use crate::{
     language_models::{llm::LLM, GenerateResult},
     prompt::PromptArgs,
     prompt_args,
-    schemas::{messages::Message, Document},
+    schemas::{messages::Message, Document, StreamData},
     template_jinja2,
 };
 
@@ -84,7 +84,7 @@ impl Chain for CondenseQuetionGeneratorChain {
     async fn stream(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         self.chain.stream(input_variables).await
     }

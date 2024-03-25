@@ -1,7 +1,9 @@
 use std::{pin::Pin, sync::Arc};
 
+use async_stream::stream;
 use async_trait::async_trait;
 use futures::Stream;
+use futures_util::{pin_mut, StreamExt};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -9,7 +11,7 @@ use crate::{
     memory::SimpleMemory,
     prompt::{HumanMessagePromptTemplate, PromptArgs},
     prompt_args,
-    schemas::{memory::BaseMemory, messages::Message},
+    schemas::{memory::BaseMemory, messages::Message, StreamData},
     template_fstring,
 };
 
@@ -83,10 +85,15 @@ impl ConversationalChain {
 #[async_trait]
 impl Chain for ConversationalChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
-        let mut memory = self.memory.lock().await;
+        let history = {
+            let memory = self.memory.lock().await;
+            memory.to_string()
+        };
         let mut input_variables = input_variables;
-        input_variables.insert("history".to_string(), memory.to_string().into());
+        input_variables.insert("history".to_string(), history.into());
         let result = self.llm.call(input_variables.clone()).await?;
+
+        let mut memory = self.memory.lock().await;
         memory.add_message(Message::new_ai_message(
             &input_variables[DEFAULT_INPUT_VARIABLE],
         ));
@@ -95,10 +102,15 @@ impl Chain for ConversationalChain {
     }
 
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
-        let mut memory = self.memory.lock().await;
+        let history = {
+            let memory = self.memory.lock().await;
+            memory.to_string()
+        };
         let mut input_variables = input_variables;
-        input_variables.insert("history".to_string(), memory.to_string().into());
+        input_variables.insert("history".to_string(), history.into());
         let result = self.llm.invoke(input_variables.clone()).await?;
+
+        let mut memory = self.memory.lock().await;
         memory.add_message(Message::new_ai_message(
             &input_variables[DEFAULT_INPUT_VARIABLE],
         ));
@@ -109,12 +121,44 @@ impl Chain for ConversationalChain {
     async fn stream(
         &self,
         input_variables: PromptArgs,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<serde_json::Value, ChainError>> + Send>>, ChainError>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
-        let memory = self.memory.lock().await;
+        let history = {
+            let memory = self.memory.lock().await;
+            memory.to_string()
+        };
+
         let mut input_variables = input_variables;
-        input_variables.insert("history".to_string(), memory.to_string().into());
-        self.llm.stream(input_variables).await
+        input_variables.insert("history".to_string(), history.into());
+
+        let complete_ai_message = Arc::new(Mutex::new(String::new()));
+        let complete_ai_message_clone = complete_ai_message.clone();
+
+        let memory = self.memory.clone();
+
+        let stream = self.llm.stream(input_variables).await?;
+        let output_stream = stream! {
+            pin_mut!(stream);
+            while let Some(result) = stream.next().await {
+                match result {
+                    Ok(data) => {
+                        let mut complete_ai_message_clone =
+                            complete_ai_message_clone.lock().await;
+                        complete_ai_message_clone.push_str(&data.content);
+
+                        yield Ok(data);
+                    },
+                    Err(e) => {
+                        yield Err(e.into());
+                    }
+                }
+            }
+
+            let mut memory = memory.lock().await;
+            memory.add_message(Message::new_ai_message(&complete_ai_message.lock().await));
+        };
+
+        Ok(Box::pin(output_stream))
     }
 
     fn get_input_keys(&self) -> Vec<String> {
