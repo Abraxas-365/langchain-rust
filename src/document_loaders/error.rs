@@ -21,6 +21,9 @@ pub enum LoaderError {
     #[error(transparent)]
     LoPdfError(#[from] lopdf::Error),
 
+    #[error(transparent)]
+    ReadabilityError(#[from] readability::error::Error),
+
     #[error("Error: {0}")]
     GenericError(String),
 }
