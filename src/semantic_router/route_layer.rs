@@ -34,7 +34,7 @@ impl RouteLayerBuilder {
         self
     }
 
-    pub async fn build(self) -> Result<RouteLayer, RouteLayerBuilderError> {
+    pub fn build(self) -> Result<RouteLayer, RouteLayerBuilderError> {
         // Check if any routers lack an embedding and there's no global embedder provided.
         if self.embedder.is_none() {
             return Err(RouteLayerBuilderError::MissingEmbedderForRoutes);
