@@ -37,7 +37,7 @@ async fn main() {
         .unwrap();
 
     let most_similar = router_layer
-        .route("isn't politics the best thing ever")
+        .route("Are you from the left or right")
         .await
         .unwrap();
 
