@@ -34,52 +34,23 @@ impl RouteLayerBuilder {
         self
     }
 
-    pub fn build(self) -> Result<RouteLayer, RouteLayerBuilderError> {
+    pub async fn build(self) -> Result<RouteLayer, RouteLayerBuilderError> {
         // Check if any routers lack an embedding and there's no global embedder provided.
         if self.embedder.is_none() {
             return Err(RouteLayerBuilderError::MissingEmbedderForRoutes);
         }
 
-        Ok(RouteLayer {
+        let mut router = RouteLayer {
             embedder: self.embedder.unwrap(), //it's safe to unwrap here because we checked for None above
             routes: self.routes,
             threshold: self.threshold.unwrap_or(0.7),
-        })
+        };
+
+        router.init().await?;
+        Ok(router)
     }
 }
 
-/// `RouteLayer` manages routing based on text embeddings.
-///
-/// Maintains a set of routes and an embedder for generating embedding representations
-/// of textual data. Prior to using `RouteLayer` to route queries based on embeddings,
-/// you must call `init` to compute and assign embeddings to all routes that do not
-/// already have them. This ensures that each route has an embedding representation
-/// based on its associated utterances, enabling effective routing based on
-/// cosine similarity to query embeddings.
-///
-/// # Examples
-///
-/// Basic usage:
-///
-/// ```rust,ignore
-/// let mut route_layer = RouteLayer::new(Arc::new(your_embedder), 0.5);
-/// let route1=RouterBuilder::new("MyRouter1".to_string())
-///     .utterances(&["Hello", "World"])
-///     .build()
-///     .unwrap();
-///
-/// let route2=RouterBuilder::new("MyRouter2".to_string())
-///     .embedding(&[1, 2, 3, 4, 5]);
-///     .build()
-///     .unwrap();
-/// route_layer.add_route(rout1,route2);
-/// route_layer.init().await.unwrap(); // Ensures routes have embeddings
-///
-/// // Now, you can use `route_layer.route(...)` to route queries.
-/// ```
-///
-/// Note: `init` must be called to compute embeddings for routes that require them.
-/// This step is crucial for the proper functioning of the `route` method.
 pub struct RouteLayer {
     embedder: Arc<dyn Embedder>,
     routes: Vec<Router>,
@@ -87,7 +58,7 @@ pub struct RouteLayer {
 }
 
 impl RouteLayer {
-    pub async fn init(&mut self) -> Result<(), RouteLayerError> {
+    async fn init(&mut self) -> Result<(), RouteLayerError> {
         let futures_and_indices: Vec<_> = self
             .routes
             .iter_mut()
