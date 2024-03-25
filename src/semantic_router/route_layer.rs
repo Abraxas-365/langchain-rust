@@ -6,6 +6,40 @@ use crate::embedding::Embedder;
 
 use super::{RouteLayerBuilderError, RouteLayerError, Router};
 
+/// A builder for creating a `RouteLayer`.
+///```rust,ignore
+/// let politics_route = RouterBuilder::new("politics")
+///     .utterances(&[
+///         "isn't politics the best thing ever",
+///         "why don't you tell me about your political opinions",
+///         "don't you just love the president",
+///         "they're going to destroy this country!",
+///         "they will save the country!",
+///     ])
+///     .build()
+///     .unwrap();
+///
+/// let chitchat_route = RouterBuilder::new("chitchat")
+///     .utterances(&[
+///         "how's the weather today?",
+///         "how are things going?",
+///         "lovely weather today",
+///         "the weather is horrendous",
+///         "let's go to the chippy",
+///     ])
+///     .build()
+///     .unwrap();
+///
+/// let router_layer = RouteLayerBuilder::new()
+///     .embedder(OpenAiEmbedder::default())
+///     .add_route(politics_route)
+///     .add_route(chitchat_route)
+///     .threshold(0.7)
+///     .build()
+///     .await
+///     .unwrap();
+/// ```
+///
 pub struct RouteLayerBuilder {
     embedder: Option<Arc<dyn Embedder>>,
     routes: Vec<Router>,
