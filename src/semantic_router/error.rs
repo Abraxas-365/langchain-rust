@@ -10,15 +10,39 @@ pub enum RouterBuilderError {
 
 #[derive(Error, Debug)]
 pub enum RouteLayerBuilderError {
-    #[error("All routers must have an embedding if the route layer lacks a global embedder.")]
-    MissingEmbedderForRoutes,
+    #[error("Route layer should have an embedder")]
+    MissingEmbedder,
+
+    #[error("Route layer should have an LLM")]
+    MissingLLM,
+
+    #[error("Missing Index")]
+    MissingIndex,
 
     #[error("Route layer error: {0}")]
     RouteLayerError(#[from] RouteLayerError),
+
+    #[error("Index error: {0}")]
+    IndexError(#[from] IndexError),
+
+    #[error("Embedding error: {0}")]
+    EmbeddingError(#[from] EmbedderError),
 }
 
 #[derive(Error, Debug)]
 pub enum RouteLayerError {
     #[error("Embedding error: {0}")]
     EmbeddingError(#[from] EmbedderError),
+
+    #[error("Index error: {0}")]
+    IndexError(#[from] IndexError),
+}
+
+#[derive(Error, Debug)]
+pub enum IndexError {
+    #[error("No Emedding on Route: {0}")]
+    MissingEmbedding(String),
+
+    #[error("Error: {0}")]
+    OtherError(String),
 }

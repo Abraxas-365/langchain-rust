@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
-use futures_util::future::try_join_all;
+use crate::{
+    embedding::{openai::OpenAiEmbedder, Embedder},
+    language_models::llm::LLM,
+    llm::openai::OpenAI,
+};
 
-use crate::embedding::{openai::OpenAiEmbedder, Embedder};
-
-use super::{RouteLayerBuilderError, RouteLayerError, Router};
+use super::{
+    utils::combine_embeddings, Index, LocalIndex, RouteLayerBuilderError, RouteLayerError, Router,
+};
 
 /// A builder for creating a `RouteLayer`.
 ///```rust,ignore
@@ -44,10 +48,15 @@ pub struct RouteLayerBuilder {
     embedder: Option<Arc<dyn Embedder>>,
     routes: Vec<Router>,
     threshold: Option<f64>,
+    index: Option<Arc<dyn Index>>,
+    llm: Option<Arc<dyn LLM>>,
 }
 impl Default for RouteLayerBuilder {
     fn default() -> Self {
-        Self::new().embedder(OpenAiEmbedder::default())
+        Self::new()
+            .embedder(OpenAiEmbedder::default())
+            .llm(OpenAI::default())
+            .index(LocalIndex::new())
     }
 }
 
@@ -57,8 +66,21 @@ impl RouteLayerBuilder {
             embedder: None,
             routes: Vec::new(),
             threshold: None,
+            llm: None,
+            index: None,
         }
     }
+
+    pub fn llm<L: LLM + 'static>(mut self, llm: L) -> Self {
+        self.llm = Some(Arc::new(llm));
+        self
+    }
+
+    pub fn index<I: Index + 'static>(mut self, index: I) -> Self {
+        self.index = Some(Arc::new(index));
+        self
+    }
+
     pub fn embedder<E: Embedder + 'static>(mut self, embedder: E) -> Self {
         self.embedder = Some(Arc::new(embedder));
         self
@@ -74,154 +96,126 @@ impl RouteLayerBuilder {
         self
     }
 
-    pub async fn build(self) -> Result<RouteLayer, RouteLayerBuilderError> {
+    pub async fn build(mut self) -> Result<RouteLayer, RouteLayerBuilderError> {
         // Check if any routers lack an embedding and there's no global embedder provided.
         if self.embedder.is_none() {
-            return Err(RouteLayerBuilderError::MissingEmbedderForRoutes);
+            return Err(RouteLayerBuilderError::MissingEmbedder);
         }
 
-        let mut router = RouteLayer {
+        if self.llm.is_none() {
+            return Err(RouteLayerBuilderError::MissingLLM);
+        }
+
+        if self.index.is_none() {
+            return Err(RouteLayerBuilderError::MissingIndex);
+        }
+
+        let router = RouteLayer {
             embedder: self.embedder.unwrap(), //it's safe to unwrap here because we checked for None above
-            routes: self.routes,
+            index: self.index.unwrap(),
+            llm: self.llm.unwrap(),
             threshold: self.threshold.unwrap_or(0.7),
         };
+        for route in self.routes.iter_mut() {
+            if route.embedding.is_none() {
+                let embeddings = router.embedder.embed_documents(&route.utterances).await?;
+                route.embedding = Some(embeddings);
+            }
+        }
+        router.index.add(&self.routes).await?;
 
-        router.init().await?;
         Ok(router)
     }
 }
 
 pub struct RouteLayer {
     embedder: Arc<dyn Embedder>,
-    routes: Vec<Router>,
+    index: Arc<dyn Index>,
     threshold: f64,
+    llm: Arc<dyn LLM>,
 }
 
 impl RouteLayer {
-    async fn init(&mut self) -> Result<(), RouteLayerError> {
-        let futures_and_indices: Vec<_> = self
-            .routes
-            .iter_mut()
-            .enumerate()
-            .filter_map(|(index, route)| {
-                let embedder = Arc::clone(&self.embedder);
-                route.utterances.as_ref().and_then(|utterances| {
-                    if utterances.is_empty() || route.embedding.is_some() {
-                        None
-                    } else {
-                        Some(async move {
-                            let embeddings = embedder.embed_documents(utterances).await?;
-                            let combined_embedding: Vec<f64> = combine_embeddings(&embeddings);
-                            Ok::<_, RouteLayerError>((index, combined_embedding))
-                        })
-                    }
-                })
-            })
-            .collect();
-
-        let results = try_join_all(futures_and_indices).await?;
-        for (index, embedding) in results {
-            if let Some(route) = self.routes.get_mut(index) {
-                route.embedding = Some(embedding);
+    pub async fn add_routes(&mut self, routers: &mut [Router]) -> Result<(), RouteLayerError> {
+        for router in routers.into_iter() {
+            if router.embedding.is_none() {
+                let embeddigns = self.embedder.embed_documents(&router.utterances).await?;
+                router.embedding = Some(embeddigns);
             }
         }
-
+        self.index.add(routers).await?;
         Ok(())
+    }
+
+    pub async fn delete_route<S: Into<String>>(
+        &self,
+        route_name: S,
+    ) -> Result<(), RouteLayerError> {
+        self.index.delete(&route_name.into()).await?;
+        Ok(())
+    }
+
+    pub async fn get_routes(&self) -> Result<Vec<Router>, RouteLayerError> {
+        let routes = self.index.get_routes().await?;
+        Ok(routes)
+    }
+
+    pub async fn get_similar_routes<S: Into<String>>(
+        &self,
+        query: S,
+        top_k: usize,
+    ) -> Result<Vec<Router>, RouteLayerError> {
+        todo!()
     }
 
     pub async fn route<S: Into<String>>(
         &self,
         query: S,
-    ) -> Result<Option<&Router>, RouteLayerError> {
-        let embedding = self.embedder.embed_query(&query.into()).await?;
-        let route = self.route_embedding(&embedding);
-        Ok(route)
+    ) -> Result<Option<Router>, RouteLayerError> {
+        todo!()
     }
 
-    pub fn route_embedding(&self, input_embedding: &[f64]) -> Option<&Router> {
-        self.routes
-            .iter()
-            .filter_map(|route| {
-                route.embedding.as_ref().and_then(|route_embedding| {
-                    let similarity = cosine_similarity(input_embedding, route_embedding);
-                    // Check if the similarity meets or exceeds the threshold
-                    if similarity >= self.threshold {
-                        Some((route, similarity))
-                    } else {
-                        None
-                    }
-                })
-            })
-            // Find the route with the highest similarity
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(route, _)| route) // Return the route, discarding the similarity score
+    pub async fn dynamic_route<S: Into<S>>(&self, _query: S) -> Result<String, RouteLayerError> {
+        todo!()
     }
-}
-
-fn combine_embeddings(embeddings: &[Vec<f64>]) -> Vec<f64> {
-    embeddings
-        .iter()
-        // Initialize a vector with zeros based on the length of the first embedding vector.
-        // It's assumed all embeddings have the same dimensions.
-        .fold(
-            vec![0f64; embeddings[0].len()],
-            |mut accumulator, embedding_vec| {
-                for (i, &value) in embedding_vec.iter().enumerate() {
-                    accumulator[i] += value;
-                }
-                accumulator
-            },
-        )
-        // Calculate the mean for each element across all embeddings.
-        .iter()
-        .map(|&sum| sum / embeddings.len() as f64)
-        .collect()
-}
-
-fn cosine_similarity(vec1: &[f64], vec2: &[f64]) -> f64 {
-    let dot_product: f64 = vec1.iter().zip(vec2.iter()).map(|(a, b)| a * b).sum();
-    let magnitude_vec1: f64 = vec1.iter().map(|x| x.powi(2)).sum::<f64>().sqrt();
-    let magnitude_vec2: f64 = vec2.iter().map(|x| x.powi(2)).sum::<f64>().sqrt();
-    dot_product / (magnitude_vec1 * magnitude_vec2)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::embedding::openai::OpenAiEmbedder;
-
     use super::*;
 
-    #[test]
-    fn test_route_embedding() {
-        let threshold = 0.5;
-        let embedder = Arc::new(OpenAiEmbedder::default());
-        let routes = vec![
-            Router {
-                name: "Route1".to_string(),
-                utterances: None,
-                embedding: Some(vec![0.1, 0.2, 0.3]),
-            },
-            Router {
-                name: "Route2".to_string(),
-                utterances: None,
-                embedding: Some(vec![0.4, 0.5, 0.6]),
-            },
-        ];
-
-        let route_layer = RouteLayer {
-            embedder,
-            routes,
-            threshold,
-        };
-
-        // Input embedding
-        let input_embedding = vec![0.3, 0.4, 0.5];
-
-        // Call the method
-        let selected_route = route_layer.route_embedding(&input_embedding);
-
-        // Check the result
-        assert!(selected_route.is_some());
-        assert_eq!(selected_route.unwrap().name, "Route2");
+    #[tokio::test]
+    async fn test_route_layer_builder() {
+        let politics_route = Router::new(
+            "politics",
+            &[
+                "isn't politics the best thing ever",
+                "why don't you tell me about your political opinions",
+                "don't you just love the president",
+                "they're going to destroy this country!",
+                "they will save the country!",
+            ],
+        );
+        let chitchat_route = Router::new(
+            "chitchat",
+            &[
+                "how's the weather today?",
+                "how's the weather today?",
+                "how are things going?",
+                "lovely weather today",
+                "the weather is horrendous",
+                "let's go to the chippy",
+            ],
+        );
+        let router_layer = RouteLayerBuilder::default()
+            .embedder(OpenAiEmbedder::default())
+            .add_route(politics_route)
+            .add_route(chitchat_route)
+            .threshold(0.5)
+            .build()
+            .await
+            .unwrap();
+        let routes = router_layer.route("Whats you favorite car").await.unwrap();
+        println!("{:?}", routes.unwrap().name);
     }
 }
