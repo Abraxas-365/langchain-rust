@@ -1,7 +1,6 @@
 #![allow(dead_code)]
-use std::error::Error;
 
-use crate::embedding::embedder_trait::Embedder;
+use crate::embedding::{embedder_trait::Embedder, EmbedderError};
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
     types::{CreateEmbeddingRequestArgs, EmbeddingInput},
@@ -48,7 +47,7 @@ impl Default for OpenAiEmbedder<OpenAIConfig> {
 
 #[async_trait]
 impl<C: Config + Send + Sync> Embedder for OpenAiEmbedder<C> {
-    async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
+    async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, EmbedderError> {
         let client = Client::with_config(self.config.clone());
 
         let request = CreateEmbeddingRequestArgs::default()
@@ -73,7 +72,7 @@ impl<C: Config + Send + Sync> Embedder for OpenAiEmbedder<C> {
         Ok(embeddings)
     }
 
-    async fn embed_query(&self, text: &str) -> Result<Vec<f64>, Box<dyn Error>> {
+    async fn embed_query(&self, text: &str) -> Result<Vec<f64>, EmbedderError> {
         let client = Client::with_config(self.config.clone());
 
         let request = CreateEmbeddingRequestArgs::default()

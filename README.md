@@ -38,6 +38,8 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 - [Q&A chian](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/qa_chain.rs) : Question answer Chain
 
+- [Semantic Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/semantic_routes.rs) : Semantic routing
+
 ## Installation
 
 This library heavily relies on `serde_json` for its operation.
@@ -59,6 +61,7 @@ Then, you can add `langchain-rust` to your Rust project.
 ```bash
 cargo add langchain-rust
 ```
+
 #### With Sqlite
 
 ```bash
