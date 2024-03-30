@@ -14,7 +14,7 @@ documentation = "https://langchain-rust.sellie.tech/get-started/quickstart"
 [dependencies]
 scraper = "0.19"
 serde = { version = "1.0", features = ["derive"] }
-async-trait = "0.1.78"
+async-trait = "0.1.79"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.11", features = ["json"] }
 serde_json = "1.0"
