@@ -1,7 +1,6 @@
 #![allow(dead_code)]
-use std::error::Error;
 
-use crate::embedding::embedder_trait::Embedder;
+use crate::embedding::{embedder_trait::Embedder, EmbedderError};
 use async_trait::async_trait;
 use reqwest::{Client, Url};
 use serde::Deserialize;
@@ -47,7 +46,7 @@ impl Default for OllamaEmbedder {
 
 #[async_trait]
 impl Embedder for OllamaEmbedder {
-    async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
+    async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, EmbedderError> {
         log::debug!("Embedding documents: {:?}", documents);
         let client = Client::new();
         let url = Url::parse(&format!("{}{}", self.base_url, "/api/embeddings"))?;
@@ -64,7 +63,11 @@ impl Embedder for OllamaEmbedder {
                 .send()
                 .await?;
             if res.status() != 200 {
-                return Err("Error from OLLAMA".into());
+                log::error!("Error from OLLAMA: {}", &res.status());
+                return Err(EmbedderError::HttpError {
+                    status_code: res.status(),
+                    error_message: format!("Received non-200 response: {}", res.status()),
+                });
             }
             let data: EmbeddingResponse = res.json().await?;
             embeddings.push(data.embedding);
@@ -73,7 +76,7 @@ impl Embedder for OllamaEmbedder {
         Ok(embeddings)
     }
 
-    async fn embed_query(&self, text: &str) -> Result<Vec<f64>, Box<dyn Error>> {
+    async fn embed_query(&self, text: &str) -> Result<Vec<f64>, EmbedderError> {
         log::debug!("Embedding query: {:?}", text);
         let client = Client::new();
         let url = Url::parse(&format!("{}{}", self.base_url, "/api/embeddings"))?;
@@ -89,7 +92,10 @@ impl Embedder for OllamaEmbedder {
 
         if res.status() != 200 {
             log::error!("Error from OLLAMA: {}", &res.status());
-            return Err("Error from OLLAMA".into());
+            return Err(EmbedderError::HttpError {
+                status_code: res.status(),
+                error_message: format!("Received non-200 response: {}", res.status()),
+            });
         }
         let data: EmbeddingResponse = res.json().await?;
         Ok(data.embedding)
