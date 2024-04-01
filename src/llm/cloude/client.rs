@@ -150,16 +150,19 @@ impl LLM for Cloude {
                     Ok(bytes) => {
                         let value: Value = parse_sse_to_json(&String::from_utf8_lossy(&bytes))
                             .unwrap_or_else(|_| {
-                                println!(
-                                    "Error parsing JSON: {:?}",
+                                log::error!(
+                                    "Failed to parse SSE data to JSON {}",
                                     String::from_utf8_lossy(&bytes)
                                 );
                                 json!({})
                             });
-                        let content = value["delta"]["text"].clone();
-
-                        // Return StreamData based on the parsed content
-                        Ok(StreamData::new(value, content.as_str().unwrap_or("")))
+                        if value["type"].as_str().unwrap_or("") == "content_block_delta" {
+                            let content = value["delta"]["text"].clone();
+                            // Return StreamData based on the parsed content
+                            Ok(StreamData::new(value, content.as_str().unwrap_or("")))
+                        } else {
+                            Ok(StreamData::new(value, ""))
+                        }
                     }
                     Err(e) => Err(LLMError::RequestError(e)),
                 }
