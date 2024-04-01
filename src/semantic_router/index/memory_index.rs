@@ -48,7 +48,6 @@ impl Index for MemoryIndex {
             if let Some(embeddings) = &router.embedding {
                 for embedding in embeddings {
                     let similarity = cosine_similarity(vector, embedding);
-                    println!("Similarity {}", similarity);
                     all_similarities.push((name.clone(), similarity));
                 }
             }
