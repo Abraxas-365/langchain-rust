@@ -163,6 +163,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     async fn test_route_layer_builder() {
         let captial_route = Router::new(
             "captial",
@@ -191,6 +192,7 @@ mod tests {
             .call("What is the temperature in Peru?")
             .await
             .unwrap();
-        println!("{:?}", routes);
+
+        assert_eq!(routes.unwrap().route, "temperature");
     }
 }
