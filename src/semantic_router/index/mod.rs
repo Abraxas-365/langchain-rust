@@ -1,5 +1,8 @@
 mod index;
 pub use index::*;
 
-mod local_index;
-pub use local_index::*;
+mod memory_index;
+pub use memory_index::*;
+
+mod error;
+pub use error::*;

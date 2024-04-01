@@ -6,10 +6,10 @@ use crate::semantic_router::{utils::cosine_similarity, IndexError, Router};
 
 use super::Index;
 
-pub struct LocalIndex {
+pub struct MemoryIndex {
     routers: HashMap<String, Router>,
 }
-impl LocalIndex {
+impl MemoryIndex {
     pub fn new() -> Self {
         return Self {
             routers: HashMap::new(),
@@ -18,7 +18,7 @@ impl LocalIndex {
 }
 
 #[async_trait]
-impl Index for LocalIndex {
+impl Index for MemoryIndex {
     async fn add(&mut self, routers: &[Router]) -> Result<(), IndexError> {
         for router in routers {
             if router.embedding.is_none() {

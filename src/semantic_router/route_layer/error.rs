@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::embedding::EmbedderError;
+use crate::{embedding::EmbedderError, semantic_router::IndexError};
 
 #[derive(Error, Debug)]
 pub enum RouterBuilderError {
@@ -36,13 +36,4 @@ pub enum RouteLayerError {
 
     #[error("Index error: {0}")]
     IndexError(#[from] IndexError),
-}
-
-#[derive(Error, Debug)]
-pub enum IndexError {
-    #[error("No Emedding on Route: {0}")]
-    MissingEmbedding(String),
-
-    #[error("Error: {0}")]
-    OtherError(String),
 }
