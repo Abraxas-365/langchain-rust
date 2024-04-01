@@ -6,6 +6,7 @@ pub struct Router {
     pub utterances: Vec<String>,
     pub embedding: Option<Vec<Vec<f64>>>,
     pub similarity: Option<f64>,
+    pub tool_description: Option<String>,
 }
 impl Router {
     pub fn new<S: AsRef<str>>(name: &str, utterances: &[S]) -> Self {
@@ -14,11 +15,17 @@ impl Router {
             utterances: utterances.iter().map(|s| s.as_ref().to_string()).collect(),
             embedding: None,
             similarity: None,
+            tool_description: None,
         }
     }
 
     pub fn with_embedding(mut self, embedding: Vec<Vec<f64>>) -> Self {
         self.embedding = Some(embedding);
+        self
+    }
+
+    pub fn with_tool_description<S: Into<String>>(mut self, tool_description: S) -> Self {
+        self.tool_description = Some(tool_description.into());
         self
     }
 

@@ -1,6 +1,10 @@
 use thiserror::Error;
 
-use crate::{embedding::EmbedderError, semantic_router::IndexError};
+use crate::{
+    chain::ChainError, embedding::EmbedderError, language_models::LLMError,
+    semantic_router::IndexError,
+};
+use serde_json::Error as SerdeJsonError;
 
 #[derive(Error, Debug)]
 pub enum RouterBuilderError {
@@ -27,6 +31,9 @@ pub enum RouteLayerBuilderError {
 
     #[error("Embedding error: {0}")]
     EmbeddingError(#[from] EmbedderError),
+
+    #[error("Chain error: {0}")]
+    ChainError(#[from] ChainError),
 }
 
 #[derive(Error, Debug)]
@@ -36,4 +43,13 @@ pub enum RouteLayerError {
 
     #[error("Index error: {0}")]
     IndexError(#[from] IndexError),
+
+    #[error("LLM error: {0}")]
+    LLMError(#[from] LLMError),
+
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] SerdeJsonError),
+
+    #[error("Chain error: {0}")]
+    ChainError(#[from] ChainError),
 }

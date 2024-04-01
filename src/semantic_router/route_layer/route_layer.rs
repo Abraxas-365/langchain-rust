@@ -1,8 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
+use serde_json::Value;
+
 use crate::{
+    chain::{Chain, LLMChain},
     embedding::Embedder,
-    language_models::llm::LLM,
+    prompt_args,
     semantic_router::{Index, RouteLayerError, Router},
 };
 
@@ -28,13 +31,14 @@ impl AggregationMethod {
 pub struct RouteChoise {
     pub route: String,
     pub similarity_score: f64,
+    pub tool_input: Option<Value>,
 }
 
 pub struct RouteLayer {
     pub(crate) embedder: Arc<dyn Embedder>,
     pub(crate) index: Box<dyn Index>,
     pub(crate) threshold: f64,
-    pub(crate) llm: Arc<dyn LLM>,
+    pub(crate) llm: LLMChain,
     pub(crate) top_k: usize,
     pub(crate) aggregation_method: AggregationMethod,
 }
@@ -59,8 +63,8 @@ impl RouteLayer {
         Ok(())
     }
 
-    pub async fn get_routes(&self) -> Result<Vec<Router>, RouteLayerError> {
-        let routes = self.index.get_routes().await?;
+    pub async fn get_routers(&self) -> Result<Vec<Router>, RouteLayerError> {
+        let routes = self.index.get_routers().await?;
         Ok(routes)
     }
 
@@ -119,9 +123,31 @@ impl RouteLayer {
         &self,
         query: S,
     ) -> Result<Option<RouteChoise>, RouteLayerError> {
-        let query_vector = self.embedder.embed_query(&query.into()).await?;
+        let query: String = query.into();
+        let query_vector = self.embedder.embed_query(&query).await?;
 
-        self.call_embedding(&query_vector).await
+        let route_choise = self.call_embedding(&query_vector).await?;
+        if route_choise.is_none() {
+            return Ok(None);
+        }
+
+        let router = self
+            .index
+            .get_router(&route_choise.as_ref().unwrap().route) //safe to unwrap
+            .await?;
+
+        if router.tool_description.is_none() {
+            return Ok(route_choise);
+        }
+
+        let tool_input = self
+            .generate_tool_input(&query, &router.tool_description.unwrap())
+            .await?;
+
+        Ok(route_choise.map(|route| RouteChoise {
+            tool_input: Some(tool_input),
+            ..route
+        }))
     }
 
     pub async fn call_embedding(
@@ -150,8 +176,27 @@ impl RouteLayer {
 
         Ok(top_route.map(|route| RouteChoise {
             route,
-            similarity_score: top_scores.get(0).copied().unwrap_or(0.0),
+            similarity_score: top_scores[0],
+            tool_input: None,
         }))
+    }
+
+    async fn generate_tool_input(
+        &self,
+        query: &str,
+        description: &str,
+    ) -> Result<Value, RouteLayerError> {
+        let output = self
+            .llm
+            .invoke(prompt_args! {
+                "description"=>description,
+                "query"=>query
+            })
+            .await?;
+        match serde_json::from_str::<Value>(&output) {
+            Ok(value_result) => Ok(value_result),
+            Err(_) => Ok(Value::String(output)),
+        }
     }
 }
 
@@ -172,6 +217,13 @@ mod tests {
                 "What is the captial of France?",
             ],
         );
+        let description = String::from(
+            r#""A wrapper around Google Search. "
+	"Useful for when you need to answer questions about current events. "
+	"Always one of the first options when you need to find information on internet"
+	"Input should be a search query."#,
+        );
+
         let weather_route = Router::new(
             "temperature",
             &[
@@ -179,7 +231,8 @@ mod tests {
                 "Is it raining?",
                 "Is it cloudy?",
             ],
-        );
+        )
+        .with_tool_description(description);
         let router_layer = RouteLayerBuilder::default()
             .embedder(OpenAiEmbedder::default())
             .add_route(captial_route)
@@ -193,6 +246,7 @@ mod tests {
             .await
             .unwrap();
 
+        println!("{:?}", routes);
         assert_eq!(routes.unwrap().route, "temperature");
     }
 }

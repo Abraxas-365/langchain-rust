@@ -7,4 +7,7 @@ pub enum IndexError {
 
     #[error("Error: {0}")]
     OtherError(String),
+
+    #[error("No Route found: {0}")]
+    RouterNotFound(String),
 }

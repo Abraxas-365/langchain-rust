@@ -13,7 +13,9 @@ pub trait Index {
     /// Result<Vec<(route_name,similarity_score)>>
     async fn query(&self, vector: &[f64], top_k: usize) -> Result<Vec<(String, f64)>, IndexError>;
 
-    async fn get_routes(&self) -> Result<Vec<Router>, IndexError>;
+    async fn get_routers(&self) -> Result<Vec<Router>, IndexError>;
+
+    async fn get_router(&self, route_name: &str) -> Result<Router, IndexError>;
 
     async fn delete_index(&mut self) -> Result<(), IndexError>;
 }
