@@ -40,6 +40,8 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 - [Semantic Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/semantic_routes.rs) : Semantic routing
 
+- [Dynamic Semantic Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/dynamic_semantic_routes.rs) : Dynamic Semantic routing Wiht tool call
+
 ## Installation
 
 This library heavily relies on `serde_json` for its operation.
