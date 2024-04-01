@@ -1,4 +1,7 @@
+use std::pin::Pin;
+
 use async_trait::async_trait;
+use futures::Stream;
 use serde_json::Value;
 
 use crate::{
@@ -6,6 +9,7 @@ use crate::{
     language_models::{GenerateResult, TokenUsage},
     prompt::PromptArgs,
     prompt_args,
+    schemas::StreamData,
     tools::SQLDatabase,
 };
 
@@ -82,15 +86,11 @@ impl SQLDatabaseChain {
     pub fn prompt_builder(&self) -> SqlChainPromptBuilder {
         SqlChainPromptBuilder::new()
     }
-}
 
-#[async_trait]
-impl Chain for SQLDatabaseChain {
-    fn get_input_keys(&self) -> Vec<String> {
-        self.llmchain.get_input_keys()
-    }
-
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
+    async fn call_builder_chains(
+        &self,
+        input_variables: &PromptArgs,
+    ) -> Result<(PromptArgs, Option<TokenUsage>), ChainError> {
         let mut token_usage: Option<TokenUsage> = None;
 
         let query = input_variables
@@ -145,7 +145,18 @@ impl Chain for SQLDatabaseChain {
                 &query, QUERY_PREFIX_WITH, sql_query, STOP_WORD, &query_result,
             )),
         );
+        Ok((llm_inputs, token_usage))
+    }
+}
 
+#[async_trait]
+impl Chain for SQLDatabaseChain {
+    fn get_input_keys(&self) -> Vec<String> {
+        self.llmchain.get_input_keys()
+    }
+
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
+        let (llm_inputs, mut token_usage) = self.call_builder_chains(&input_variables).await?;
         let output = self.llmchain.call(llm_inputs).await?;
         if let Some(tokens) = output.tokens {
             if let Some(general_result) = token_usage.as_mut() {
@@ -171,8 +182,19 @@ impl Chain for SQLDatabaseChain {
             tokens: token_usage,
         })
     }
+
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         let result = self.call(input_variables).await?;
         Ok(result.generation)
+    }
+
+    async fn stream(
+        &self,
+        input_variables: PromptArgs,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
+    {
+        let (llm_inputs, _) = self.call_builder_chains(&input_variables).await?;
+
+        self.llmchain.stream(llm_inputs).await
     }
 }
