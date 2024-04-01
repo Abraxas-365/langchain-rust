@@ -94,6 +94,8 @@ impl RouteLayerBuilder {
             "You should Generate the input for the following tool.
 Tool description:{{description}}.
 Input query context to generate the input for the tool :{{query}}
+
+Tool Input:
 ",
             "description",
             "query"

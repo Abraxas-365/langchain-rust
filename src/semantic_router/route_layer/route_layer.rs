@@ -127,6 +127,7 @@ impl RouteLayer {
         let query_vector = self.embedder.embed_query(&query).await?;
 
         let route_choise = self.call_embedding(&query_vector).await?;
+
         if route_choise.is_none() {
             return Ok(None);
         }
