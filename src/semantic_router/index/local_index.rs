@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use semanticsimilarity_rs::cosine_similarity;
 
-use crate::semantic_router::{IndexError, Router};
+use crate::semantic_router::{utils::cosine_similarity, IndexError, Router};
 
 use super::Index;
 
