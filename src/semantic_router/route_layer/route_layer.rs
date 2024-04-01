@@ -119,6 +119,8 @@ impl RouteLayer {
         (top_route, top_scores)
     }
 
+    /// Call the route layer with a query and return the best route choise
+    /// If route has a tool description, it will also return the tool input
     pub async fn call<S: Into<String>>(
         &self,
         query: S,
@@ -151,6 +153,9 @@ impl RouteLayer {
         }))
     }
 
+    /// Call the route layer with a query and return the best route choise
+    /// If route has a tool description, it will not return the tool input,
+    /// this just returns the route
     pub async fn call_embedding(
         &self,
         embedding: &[f64],
