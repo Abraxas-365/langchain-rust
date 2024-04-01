@@ -7,7 +7,7 @@ pub enum AgentError {
     #[error("LLM error: {0}")]
     LLMError(#[from] LLMError),
 
-    #[error("LLM error: {0}")]
+    #[error("Chain error: {0}")]
     ChainError(#[from] ChainError),
 
     #[error("Prompt error: {0}")]

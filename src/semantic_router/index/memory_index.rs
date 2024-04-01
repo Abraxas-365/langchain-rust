@@ -64,9 +64,17 @@ impl Index for MemoryIndex {
         Ok(top_similarities)
     }
 
-    async fn get_routes(&self) -> Result<Vec<Router>, IndexError> {
+    async fn get_routers(&self) -> Result<Vec<Router>, IndexError> {
         let routes = self.routers.values().cloned().collect();
         Ok(routes)
+    }
+
+    async fn get_router(&self, route_name: &str) -> Result<Router, IndexError> {
+        return self
+            .routers
+            .get(route_name)
+            .cloned()
+            .ok_or(IndexError::RouterNotFound(route_name.into()));
     }
 
     async fn delete_index(&mut self) -> Result<(), IndexError> {

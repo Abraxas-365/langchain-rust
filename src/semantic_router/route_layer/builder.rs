@@ -3,54 +3,50 @@ use std::sync::Arc;
 use futures_util::future::try_join_all;
 
 use crate::{
+    chain::{LLMChain, LLMChainBuilder},
     embedding::{openai::OpenAiEmbedder, Embedder},
     language_models::llm::LLM,
     llm::openai::OpenAI,
+    prompt::HumanMessagePromptTemplate,
     semantic_router::{Index, MemoryIndex, RouteLayerBuilderError, Router},
+    template_jinja2,
 };
 
 use super::{AggregationMethod, RouteLayer};
 
 /// A builder for creating a `RouteLayer`.
 ///```rust,ignore
-/// let politics_route = RouterBuilder::new("politics")
-///     .utterances(&[
-///         "isn't politics the best thing ever",
-///         "why don't you tell me about your political opinions",
-///         "don't you just love the president",
-///         "they're going to destroy this country!",
-///         "they will save the country!",
-///     ])
-///     .build()
-///     .unwrap();
-///
-/// let chitchat_route = RouterBuilder::new("chitchat")
-///     .utterances(&[
-///         "how's the weather today?",
-///         "how are things going?",
-///         "lovely weather today",
-///         "the weather is horrendous",
-///         "let's go to the chippy",
-///     ])
-///     .build()
-///     .unwrap();
-///
-/// let router_layer = RouteLayerBuilder::new()
+/// let captial_route = Router::new(
+///     "captial",
+///     &[
+///         "Capital of France is Paris.",
+///         "What is the captial of France?",
+///     ],
+/// );
+/// let weather_route = Router::new(
+///     "temperature",
+///     &[
+///         "What is the temperature?",
+///         "Is it raining?",
+///         "Is it cloudy?",
+///     ],
+/// );
+/// let router_layer = RouteLayerBuilder::default()
 ///     .embedder(OpenAiEmbedder::default())
-///     .add_route(politics_route)
-///     .add_route(chitchat_route)
-///     .threshold(0.7)
+///     .add_route(captial_route)
+///     .add_route(weather_route)
+///     .aggregation_method(AggregationMethod::Sum)
+///     .threshold(0.82)
 ///     .build()
 ///     .await
 ///     .unwrap();
 /// ```
-///
 pub struct RouteLayerBuilder {
     embedder: Option<Arc<dyn Embedder>>,
     routes: Vec<Router>,
     threshold: Option<f64>,
     index: Option<Box<dyn Index>>,
-    llm: Option<Arc<dyn LLM>>,
+    llm: Option<LLMChain>,
     top_k: usize,
     aggregation_method: AggregationMethod,
 }
@@ -87,7 +83,22 @@ impl RouteLayerBuilder {
     }
 
     pub fn llm<L: LLM + 'static>(mut self, llm: L) -> Self {
-        self.llm = Some(Arc::new(llm));
+        let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
+            "You should Generate the input for the following tool.
+Tool description:{{description}}.
+Input query context to generate the input for the tool :{{query}}
+
+Tool Input:
+",
+            "description",
+            "query"
+        ));
+        let chain = LLMChainBuilder::new()
+            .prompt(prompt)
+            .llm(llm)
+            .build()
+            .unwrap(); //safe to unwrap
+        self.llm = Some(chain);
         self
     }
 
