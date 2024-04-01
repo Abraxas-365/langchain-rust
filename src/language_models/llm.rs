@@ -10,7 +10,11 @@ use super::{options::CallOptions, GenerateResult, LLMError};
 #[async_trait]
 pub trait LLM: Sync + Send {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError>;
-    async fn invoke(&self, prompt: &str) -> Result<String, LLMError>;
+    async fn invoke(&self, prompt: &str) -> Result<String, LLMError> {
+        self.generate(&[Message::new_human_message(prompt)])
+            .await
+            .map(|res| res.generation)
+    }
     async fn stream(
         &self,
         _messages: &[Message],
