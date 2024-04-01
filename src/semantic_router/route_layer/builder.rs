@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use futures_util::future::try_join_all;
+
 use crate::{
     embedding::{openai::OpenAiEmbedder, Embedder},
     language_models::llm::LLM,
@@ -139,12 +141,31 @@ impl RouteLayerBuilder {
             top_k: self.top_k,
             aggregation_method: self.aggregation_method,
         };
-        for route in self.routes.iter_mut() {
-            if route.embedding.is_none() {
-                let embeddings = router.embedder.embed_documents(&route.utterances).await?;
-                route.embedding = Some(embeddings);
-            }
+
+        let embedding_futures = self
+            .routes
+            .iter_mut()
+            .filter_map(|route| {
+                if route.embedding.is_none() {
+                    Some(router.embedder.embed_documents(&route.utterances))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let embeddings = try_join_all(embedding_futures).await?;
+
+        for (route, embedding) in self
+            .routes
+            .iter_mut()
+            .filter(|r| r.embedding.is_none())
+            .zip(embeddings)
+        {
+            route.embedding = Some(embedding);
         }
+
+        // Add routes to the index.
         router.index.add(&self.routes).await?;
 
         Ok(router)
