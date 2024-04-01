@@ -16,38 +16,31 @@ use super::{AggregationMethod, RouteLayer};
 
 /// A builder for creating a `RouteLayer`.
 ///```rust,ignore
-/// let politics_route = RouterBuilder::new("politics")
-///     .utterances(&[
-///         "isn't politics the best thing ever",
-///         "why don't you tell me about your political opinions",
-///         "don't you just love the president",
-///         "they're going to destroy this country!",
-///         "they will save the country!",
-///     ])
-///     .build()
-///     .unwrap();
-///
-/// let chitchat_route = RouterBuilder::new("chitchat")
-///     .utterances(&[
-///         "how's the weather today?",
-///         "how are things going?",
-///         "lovely weather today",
-///         "the weather is horrendous",
-///         "let's go to the chippy",
-///     ])
-///     .build()
-///     .unwrap();
-///
-/// let router_layer = RouteLayerBuilder::new()
+/// let captial_route = Router::new(
+///     "captial",
+///     &[
+///         "Capital of France is Paris.",
+///         "What is the captial of France?",
+///     ],
+/// );
+/// let weather_route = Router::new(
+///     "temperature",
+///     &[
+///         "What is the temperature?",
+///         "Is it raining?",
+///         "Is it cloudy?",
+///     ],
+/// );
+/// let router_layer = RouteLayerBuilder::default()
 ///     .embedder(OpenAiEmbedder::default())
-///     .add_route(politics_route)
-///     .add_route(chitchat_route)
-///     .threshold(0.7)
+///     .add_route(captial_route)
+///     .add_route(weather_route)
+///     .aggregation_method(AggregationMethod::Sum)
+///     .threshold(0.82)
 ///     .build()
 ///     .await
 ///     .unwrap();
 /// ```
-///
 pub struct RouteLayerBuilder {
     embedder: Option<Arc<dyn Embedder>>,
     routes: Vec<Router>,
