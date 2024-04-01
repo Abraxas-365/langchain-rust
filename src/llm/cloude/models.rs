@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::schemas::{Message, MessageType};
 
 #[derive(Serialize, Deserialize)]
-pub struct CloudeMessage {
+pub(crate) struct CloudeMessage {
     pub role: String,
     pub content: String,
 }
@@ -26,7 +26,7 @@ impl CloudeMessage {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Payload {
+pub(crate) struct Payload {
     pub model: String,
     pub messages: Vec<CloudeMessage>,
     pub max_tokens: u16,
@@ -35,7 +35,7 @@ pub struct Payload {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ApiResponse {
+pub(crate) struct ApiResponse {
     pub content: Vec<Content>,
     pub id: String,
     pub model: String,
@@ -48,14 +48,14 @@ pub struct ApiResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Content {
+pub(crate) struct Content {
     pub text: String,
     #[serde(rename = "type")]
     pub content_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Usage {
+pub(crate) struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
 }

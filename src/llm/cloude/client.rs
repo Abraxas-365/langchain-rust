@@ -29,6 +29,12 @@ pub struct Cloude {
     anthropic_version: String,
 }
 
+impl Default for Cloude {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Cloude {
     pub fn new() -> Self {
         Self {
@@ -51,6 +57,11 @@ impl Cloude {
 
     pub fn with_api_key<S: Into<String>>(mut self, api_key: S) -> Self {
         self.api_key = api_key.into();
+        self
+    }
+
+    pub fn with_anthropic_version<S: Into<String>>(mut self, version: S) -> Self {
+        self.anthropic_version = version.into();
         self
     }
 
