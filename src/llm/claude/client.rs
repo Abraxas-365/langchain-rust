@@ -72,17 +72,14 @@ impl Claude {
 
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         let client = Client::new();
-        let is_stream = match &self.options.streaming_func {
-            Some(_) => true,
-            None => false,
-        };
+        let is_stream = self.options.streaming_func.is_some();
 
         let payload = self.build_payload(messages, is_stream);
         let res = client
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", self.anthropic_version.clone())
-            .header("content-type", "application/json")
+            .header("content-type", "application/json; charset=utf-8")
             .json(&payload)
             .send()
             .await?;
@@ -175,7 +172,7 @@ impl LLM for Claude {
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", &self.anthropic_version)
-            .header("content-type", "application/json")
+            .header("content-type", "application/json; charset=utf-8")
             .json(&payload)
             .build()?;
 
