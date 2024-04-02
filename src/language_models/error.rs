@@ -4,10 +4,15 @@ use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
 use tokio::time::error::Elapsed;
 
+use crate::llm::AnthropicError;
+
 #[derive(Error, Debug)]
 pub enum LLMError {
     #[error("OpenAI error: {0}")]
     OpenAIError(#[from] OpenAIError),
+
+    #[error("Anthropic error: {0}")]
+    AnthropicError(#[from] AnthropicError),
 
     #[error("Network request failed: {0}")]
     RequestError(#[from] ReqwestError),

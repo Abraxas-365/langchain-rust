@@ -1,11 +1,12 @@
 use crate::{
     language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
+    llm::AnthropicError,
     schemas::{Message, StreamData},
 };
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::{collections::HashMap, pin::Pin};
 
 use super::models::{ApiResponse, CloudeMessage, Payload};
@@ -71,16 +72,12 @@ impl Cloude {
 
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         let client = Client::new();
-        let payload = Payload {
-            model: self.model.clone(),
-            messages: messages
-                .iter()
-                .map(|m| CloudeMessage::from_message(m))
-                .collect::<Vec<_>>(),
-            max_tokens: self.options.max_tokens.unwrap_or(1024),
-            stream: None,
+        let is_stream = match &self.options.streaming_func {
+            Some(_) => true,
+            None => false,
         };
 
+        let payload = self.build_payload(messages, is_stream);
         let res = client
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
@@ -88,9 +85,25 @@ impl Cloude {
             .header("content-type", "application/json")
             .json(&payload)
             .send()
-            .await?
-            .json::<ApiResponse>()
             .await?;
+        let res = match res.status().as_u16() {
+            401 => Err(LLMError::AnthropicError(
+                AnthropicError::AuthenticationError("Invalid API Key".to_string()),
+            )),
+            403 => Err(LLMError::AnthropicError(AnthropicError::PermissionError(
+                "Permission Denied".to_string(),
+            ))),
+            404 => Err(LLMError::AnthropicError(AnthropicError::NotFoundError(
+                "Not Found".to_string(),
+            ))),
+            429 => Err(LLMError::AnthropicError(AnthropicError::RateLimitError(
+                "Rate Limit Exceeded".to_string(),
+            ))),
+            503 => Err(LLMError::AnthropicError(AnthropicError::OverloadedError(
+                "Service Unavailable".to_string(),
+            ))),
+            _ => Ok(res.json::<ApiResponse>().await?),
+        }?;
 
         let generation = res
             .content
@@ -105,6 +118,26 @@ impl Cloude {
         });
 
         Ok(GenerateResult { tokens, generation })
+    }
+
+    fn build_payload(&self, messages: &[Message], stream: bool) -> Payload {
+        let mut payload = Payload {
+            model: self.model.clone(),
+            messages: messages
+                .iter()
+                .map(|m| CloudeMessage::from_message(m))
+                .collect::<Vec<_>>(),
+            max_tokens: self.options.max_tokens.unwrap_or(1024),
+            stream: None,
+            stop_sequences: self.options.stop_words.clone(),
+            temperature: self.options.temperature,
+            top_p: self.options.top_p,
+            top_k: self.options.top_k,
+        };
+        if stream {
+            payload.stream = Some(true);
+        }
+        payload
     }
 }
 
@@ -137,16 +170,7 @@ impl LLM for Cloude {
         messages: &[Message],
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
         let client = Client::new();
-        let payload = Payload {
-            model: self.model.clone(),
-            messages: messages
-                .iter()
-                .map(|m| CloudeMessage::from_message(m))
-                .collect::<Vec<_>>(),
-            max_tokens: self.options.max_tokens.unwrap_or(1024),
-            stream: Some(true),
-        };
-
+        let payload = self.build_payload(messages, true);
         let request = client
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.api_key)
@@ -163,14 +187,7 @@ impl LLM for Cloude {
             async move {
                 match result {
                     Ok(bytes) => {
-                        let value: Value = parse_sse_to_json(&String::from_utf8_lossy(&bytes))
-                            .unwrap_or_else(|_| {
-                                log::error!(
-                                    "Failed to parse SSE data to JSON {}",
-                                    String::from_utf8_lossy(&bytes)
-                                );
-                                json!({})
-                            });
+                        let value: Value = parse_sse_to_json(&String::from_utf8_lossy(&bytes))?;
                         if value["type"].as_str().unwrap_or("") == "content_block_delta" {
                             let content = value["delta"]["text"].clone();
                             // Return StreamData based on the parsed content
@@ -192,7 +209,11 @@ impl LLM for Cloude {
     }
 }
 
-fn parse_sse_to_json(sse_data: &str) -> Result<Value, serde_json::Error> {
+fn parse_sse_to_json(sse_data: &str) -> Result<Value, LLMError> {
+    if let Ok(json) = serde_json::from_str::<Value>(sse_data) {
+        return parse_error(&json);
+    }
+
     let lines: Vec<&str> = sse_data.trim().split('\n').collect();
     let mut event_data: HashMap<&str, String> = HashMap::new();
 
@@ -203,32 +224,49 @@ fn parse_sse_to_json(sse_data: &str) -> Result<Value, serde_json::Error> {
     }
 
     if let Some(data) = event_data.get("data") {
-        serde_json::from_str(data)
-    } else {
-        log::error!("No data field in the SSE event");
-        Ok(json!({}))
+        let data: Value = serde_json::from_str(data)?;
+        return match data["type"].as_str() {
+            Some("error") => parse_error(&data),
+            _ => Ok(data),
+        };
+    }
+    log::error!("No data field in the SSE event");
+    Err(LLMError::ContentNotFound("data".to_string()))
+}
+
+fn parse_error(json: &Value) -> Result<Value, LLMError> {
+    let error_type = json["error"]["type"].as_str().unwrap_or("");
+    let message = json["error"]["message"].as_str().unwrap_or("").to_string();
+    match error_type {
+        "invalid_request_error" => Err(AnthropicError::InvalidRequestError(message))?,
+        "authentication_error" => Err(AnthropicError::AuthenticationError(message))?,
+        "permission_error" => Err(AnthropicError::PermissionError(message))?,
+        "not_found_error" => Err(AnthropicError::NotFoundError(message))?,
+        "rate_limit_error" => Err(AnthropicError::RateLimitError(message))?,
+        "api_error" => Err(AnthropicError::ApiError(message))?,
+        "overloaded_error" => Err(AnthropicError::OverloadedError(message))?,
+        _ => Err(LLMError::OtherError("Unknown error".to_string())),
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use tokio::test;
 
     #[test]
-    #[ignore]
     async fn test_cloudia_generate() {
         let cloudia = Cloude::new();
 
-        let a = cloudia
+        let res = cloudia
             .generate(&[Message::new_human_message("Hi, how are you doing")])
             .await
             .unwrap();
 
-        println!("{:?}", a)
+        println!("{:?}", res)
     }
 
     #[test]
-    #[ignore]
     async fn test_cloudia_stream() {
         let cloudia = Cloude::new();
         let mut stream = cloudia
