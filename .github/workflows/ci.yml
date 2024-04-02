@@ -36,6 +36,8 @@ jobs:
             echo "git tag version (${{ env.TAG_VERSION }}) does not match Cargo.toml version (v${{ env.CARGO_VERSION }})"
             exit 1
           fi
+      - name: install pandoc
+        run: sudo apt-get install pandoc
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:

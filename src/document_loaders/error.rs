@@ -24,6 +24,9 @@ pub enum LoaderError {
     #[error(transparent)]
     ReadabilityError(#[from] readability::error::Error),
 
+    #[error(transparent)]
+    JoinError(#[from] tokio::task::JoinError),
+
     #[error("Error: {0}")]
     OtherError(String),
 }
