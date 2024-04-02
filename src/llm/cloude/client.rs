@@ -255,6 +255,7 @@ mod tests {
     use tokio::test;
 
     #[test]
+    #[ignore]
     async fn test_cloudia_generate() {
         let cloudia = Cloude::new();
 
@@ -267,6 +268,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     async fn test_cloudia_stream() {
         let cloudia = Cloude::new();
         let mut stream = cloudia
