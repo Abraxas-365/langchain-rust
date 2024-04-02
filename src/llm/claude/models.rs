@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 use crate::schemas::{Message, MessageType};
 
 #[derive(Serialize, Deserialize)]
-pub(crate) struct CloudeMessage {
+pub(crate) struct ClaudeMessage {
     pub role: String,
     pub content: String,
 }
-impl CloudeMessage {
+impl ClaudeMessage {
     pub fn new<S: Into<String>>(role: S, content: S) -> Self {
         Self {
             role: role.into(),
@@ -28,7 +28,7 @@ impl CloudeMessage {
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Payload {
     pub model: String,
-    pub messages: Vec<CloudeMessage>,
+    pub messages: Vec<ClaudeMessage>,
     pub max_tokens: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,

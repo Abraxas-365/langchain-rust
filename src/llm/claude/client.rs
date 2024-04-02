@@ -9,41 +9,41 @@ use reqwest::Client;
 use serde_json::Value;
 use std::{collections::HashMap, pin::Pin};
 
-use super::models::{ApiResponse, CloudeMessage, Payload};
+use super::models::{ApiResponse, ClaudeMessage, Payload};
 
-pub enum CloudeModel {
+pub enum ClaudeModel {
     Claude3pus20240229,
     Claude3sonnet20240229,
     Claude3haiku20240307,
 }
 
-impl ToString for CloudeModel {
+impl ToString for ClaudeModel {
     fn to_string(&self) -> String {
         match self {
-            CloudeModel::Claude3pus20240229 => "claude-3-opus-20240229".to_string(),
-            CloudeModel::Claude3sonnet20240229 => "claude-3-sonnet-20240229".to_string(),
-            CloudeModel::Claude3haiku20240307 => "claude-3-haiku-20240307".to_string(),
+            ClaudeModel::Claude3pus20240229 => "claude-3-opus-20240229".to_string(),
+            ClaudeModel::Claude3sonnet20240229 => "claude-3-sonnet-20240229".to_string(),
+            ClaudeModel::Claude3haiku20240307 => "claude-3-haiku-20240307".to_string(),
         }
     }
 }
 
-pub struct Cloude {
+pub struct Claude {
     model: String,
     options: CallOptions,
     api_key: String,
     anthropic_version: String,
 }
 
-impl Default for Cloude {
+impl Default for Claude {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Cloude {
+impl Claude {
     pub fn new() -> Self {
         Self {
-            model: CloudeModel::Claude3pus20240229.to_string(),
+            model: ClaudeModel::Claude3pus20240229.to_string(),
             options: CallOptions::default(),
             api_key: std::env::var("CLOUDE_API_KEY").unwrap_or_default(),
             anthropic_version: "2023-06-01".to_string(),
@@ -125,7 +125,7 @@ impl Cloude {
             model: self.model.clone(),
             messages: messages
                 .iter()
-                .map(|m| CloudeMessage::from_message(m))
+                .map(|m| ClaudeMessage::from_message(m))
                 .collect::<Vec<_>>(),
             max_tokens: self.options.max_tokens.unwrap_or(1024),
             stream: None,
@@ -142,7 +142,7 @@ impl Cloude {
 }
 
 #[async_trait]
-impl LLM for Cloude {
+impl LLM for Claude {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         match &self.options.streaming_func {
             Some(func) => {
@@ -257,7 +257,7 @@ mod tests {
     #[test]
     #[ignore]
     async fn test_cloudia_generate() {
-        let cloudia = Cloude::new();
+        let cloudia = Claude::new();
 
         let res = cloudia
             .generate(&[Message::new_human_message("Hi, how are you doing")])
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     #[ignore]
     async fn test_cloudia_stream() {
-        let cloudia = Cloude::new();
+        let cloudia = Claude::new();
         let mut stream = cloudia
             .stream(&[Message::new_human_message("Hi, how are you doing")])
             .await
