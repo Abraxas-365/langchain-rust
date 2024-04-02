@@ -12,12 +12,16 @@ use super::models::{ApiResponse, CloudeMessage, Payload};
 
 pub enum CloudeModel {
     Claude3pus20240229,
+    Claude3sonnet20240229,
+    Claude3haiku20240307,
 }
 
 impl ToString for CloudeModel {
     fn to_string(&self) -> String {
         match self {
             CloudeModel::Claude3pus20240229 => "claude-3-opus-20240229".to_string(),
+            CloudeModel::Claude3sonnet20240229 => "claude-3-sonnet-20240229".to_string(),
+            CloudeModel::Claude3haiku20240307 => "claude-3-haiku-20240307".to_string(),
         }
     }
 }
@@ -68,7 +72,7 @@ impl Cloude {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         let client = Client::new();
         let payload = Payload {
-            model: "claude-3-opus-20240229".to_string(),
+            model: self.model.clone(),
             messages: messages
                 .iter()
                 .map(|m| CloudeMessage::from_message(m))
