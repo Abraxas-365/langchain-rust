@@ -58,6 +58,11 @@ impl<C: Config> Text2SpeechOpenAI<C> {
         self.path = path.into();
         self
     }
+
+    pub fn with_config(mut self, config: C) -> Self {
+        self.config = config;
+        self
+    }
 }
 
 impl Default for Text2SpeechOpenAI<OpenAIConfig> {
