@@ -46,40 +46,10 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 - LLMs
 
-  - [x] OpenAi
-    ```rust
-      let open_ai = OpenAI::default().with_model("gpt-3.5-turbo");
-    ```
-  - [x] Azure OpenAi
-
-  ```rust
-    let azure_config = AzureConfig::default()
-        .with_api_key("REPLACE_ME_WITH_YOUR_API_KEY")
-        .with_api_base("https://REPLACE_ME.openai.azure.com")
-        .with_api_version("2024-02-15-preview")
-        .with_deployment_id("chatGPT_GPT35-turbo-0301");
-
-    let open_ai = OpenAI::new(azure_config);
-  ```
-
-  - [x] Ollama and Compatible Api
-
-    ```rust
-     let ollama = OpenAI::default()
-         .with_config(
-             OpenAIConfig::default()
-                 .with_api_base("http://localhost:11434/v1")
-                 .with_api_key("ollama"),
-         )
-         .with_model("llama2");
-
-    ```
-
-  - [x] Anthropic Claude
-
-    ```rust
-    let cloude=Claude::default().with_model("claude-3-opus-20240229");
-    ```
+  - [x] [OpenAi](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm.rs)
+  - [x] [Azure OpenAi](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_azure_open_ai.rs)
+  - [x] [Ollama and Compatible Api](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_azure_open_ai.rs)
+  - [x] [Anthropic Claude](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_anthropic_claude.rs)
 
 - Embeddings
 
