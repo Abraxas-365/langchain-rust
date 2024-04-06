@@ -76,12 +76,17 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
     ```
 
   - [x] Anthropic Claude
+
     ```rust
     let cloude=Claude::default().with_model("claude-3-opus-20240229");
     ```
-    ```
 
-    ```
+- Embeddings
+
+  - [x] [OpenAi](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_openai.rs)
+  - [x] [Ollama](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_ollama.rs)
+  - [x] [Azure OpenAi](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_azure_open_ai.rs)
+  - [x] [Local FastEmbed](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_fastembed.rs)
 
 - VectorStores
 
@@ -105,8 +110,9 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 - Tools
 
   - [x] Serpapi/Google
-  - [x] Wolfram/Math
+  - [x] [Wolfram/Math](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/wolfram_tool.rs)
   - [x] Command line
+  - [x] [Text2Speech](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/speec2text_openai.rs)
 
 - Document Loaders
 
