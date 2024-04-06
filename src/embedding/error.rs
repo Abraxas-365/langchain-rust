@@ -18,4 +18,7 @@ pub enum EmbedderError {
         status_code: StatusCode,
         error_message: String,
     },
+
+    #[error("FastEmbed error: {0}")]
+    FastEmbedError(String),
 }

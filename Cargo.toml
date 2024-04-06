@@ -41,6 +41,7 @@ tokio-stream = "0.1.15"
 secrecy = "0.8.0"
 readability = "0.3.0"
 url = "2.5.0"
+fastembed = "3.3.0"
 
 [features]
 default = []
