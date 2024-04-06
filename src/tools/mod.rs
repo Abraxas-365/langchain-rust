@@ -15,3 +15,6 @@ pub use serpapi::*;
 
 mod command_executor;
 pub use command_executor::*;
+
+mod text2speech;
+pub use text2speech::*;
