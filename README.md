@@ -14,34 +14,6 @@
 
 This is the Rust language implementation of [LangChain](https://github.com/langchain-ai/langchain).
 
-## Examples
-
-- [rcommit](https://github.com/Abraxas-365/rcommit): rcommit allows you to create git commits with AI
-
-- [Conversational chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/conversational_chain.rs) : A chain design for conversation, with memory
-
-- [LLM chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_chain.rs) : the core chain, customisable
-
-- [Secuential chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sequential_chain.rs): run chain in secuential order, with the ouput of one being the input of the next one
-
-- [Vectore Store with pgvector](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_postgres.rs) : And implementation of vector stroe with pgvector
-
-- [Vectore Store with sqlite_vss](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_sqlite.rs) : And implementation of vector stroe with sqlite_vss
-
-- [Embedding with Ollama](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_ollama.rs) : Embedding with Ollama
-
-- [Agentes](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/agent.rs) : Agent implementation for complex tasks
-
-- [Open AI Tools Agent](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/open_ai_tools_agent.rs) : Agent using openAi Tools
-
-- [Streaming from a Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/streaming_from_chain.rs) : Streming example
-
-- [Q&A chian](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/qa_chain.rs) : Question answer Chain
-
-- [Semantic Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/semantic_routes.rs) : Semantic routing
-
-- [Dynamic Semantic Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/dynamic_semantic_routes.rs) : Dynamic Semantic routing Wiht tool call
-
 ## Current Features
 
 - LLMs
@@ -75,7 +47,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 - Agents
 
   - [x] [Chat Agent with Tools](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/agent.rs)
-  - [x] [Open Ai Tools Agent](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/open_ai_tools_agent.rs)
+  - [x] [Open AI Compatible Tools Agent](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/open_ai_tools_agent.rs)
 
 - Tools
 
@@ -83,6 +55,11 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Wolfram/Math](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/wolfram_tool.rs)
   - [x] Command line
   - [x] [Text2Speech](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/speec2text_openai.rs)
+
+- Semantic Routing
+
+  - [x] [Static Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/semantic_routes.rs)
+  - [x] [Dynamic Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/dynamic_semantic_routes.rs)
 
 - Document Loaders
 
