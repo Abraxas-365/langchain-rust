@@ -45,21 +45,44 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 ## Current Features
 
 - LLMs
+
   - [x] OpenAi
     ```rust
       let open_ai = OpenAI::default().with_model("gpt-3.5-turbo");
     ```
+  - [x] Azure OpenAi
+
+  ```rust
+    let azure_config = AzureConfig::default()
+        .with_api_key("REPLACE_ME_WITH_YOUR_API_KEY")
+        .with_api_base("https://REPLACE_ME.openai.azure.com")
+        .with_api_version("2024-02-15-preview")
+        .with_deployment_id("chatGPT_GPT35-turbo-0301");
+
+    let open_ai = OpenAI::new(azure_config);
+  ```
+
+  - [x] Ollama and Compatible Api
+
+    ```rust
+     let ollama = OpenAI::default()
+         .with_config(
+             OpenAIConfig::default()
+                 .with_api_base("http://localhost:11434/v1")
+                 .with_api_key("ollama"),
+         )
+         .with_model("llama2");
+
+    ```
+
   - [x] Anthropic Claude
     ```rust
     let cloude=Claude::default().with_model("claude-3-opus-20240229");
     ```
-  - [x] Ollama and Compatible Api
-    ```rust
-    let open_ai = OpenAI::default()
-        .with_api_base("http://localhost:11434/v1")
-        .with_api_key("ollama")
-        .with_model("llama2");
     ```
+
+    ```
+
 - VectorStores
 
   - [x] [Postgres](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_postgres.rs)
@@ -90,72 +113,90 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] PDF
 
     ```rust
-    let path = "./src/document_loaders/test_data/sample.pdf";
+    use futures_util::StreamExt;
 
-    let loader = LoPdfLoader::from_path(path).expect("Failed to create PdfLoader");
+    async fn main() {
+        let path = "./src/document_loaders/test_data/sample.pdf";
 
-    let docs = loader
-        .load()
-        .await
-        .unwrap()
-        .map(|d| d.unwrap())
-        .collect::<Vec<_>>()
-        .await;
+        let loader = LoPdfLoader::from_path(path).expect("Failed to create PdfLoader");
+
+        let docs = loader
+            .load()
+            .await
+            .unwrap()
+            .map(|d| d.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+
+    }
     ```
 
   - [x] Pandoc
 
     ```rust
-    let path = "./src/document_loaders/test_data/sample.docx";
+    use futures_util::StreamExt;
 
-    let loader = PandocLoader::from_path(InputFormat::Docx.to_string(), path)
-        .await
-        .expect("Failed to create PandocLoader");
+    async fn main() {
 
-    let docs = loader
-        .load()
-        .await
-        .unwrap()
-        .map(|d| d.unwrap())
-        .collect::<Vec<_>>()
-        .await;
+        let path = "./src/document_loaders/test_data/sample.docx";
+
+        let loader = PandocLoader::from_path(InputFormat::Docx.to_string(), path)
+            .await
+            .expect("Failed to create PandocLoader");
+
+        let docs = loader
+            .load()
+            .await
+            .unwrap()
+            .map(|d| d.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+    }
     ```
 
   - [x] HTML
 
     ```rust
-    let path = "./src/document_loaders/test_data/example.html";
-    let html_loader = HtmlLoader::from_path(path, Url::parse("https://example.com/").unwrap())
-        .expect("Failed to create html loader");
+    use futures_util::StreamExt;
 
-    let documents = html_loader
-        .load()
-        .await
-        .unwrap()
-        .map(|x| x.unwrap())
-        .collect::<Vec<_>>()
-        .await;
+    async fn main() {
+        let path = "./src/document_loaders/test_data/example.html";
+        let html_loader = HtmlLoader::from_path(path, Url::parse("https://example.com/").unwrap())
+            .expect("Failed to create html loader");
+
+        let documents = html_loader
+            .load()
+            .await
+            .unwrap()
+            .map(|x| x.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+    }
     ```
 
   - [x] CSV
 
     ```rust
-    let path = "./src/document_loaders/test_data/test.csv";
-    let columns = vec![
-        "name".to_string(),
-        "age".to_string(),
-        "city".to_string(),
-        "country".to_string(),
-    ];
-    let csv_loader = CsvLoader::from_path(path, columns).expect("Failed to create csv loader");
+    use futures_util::StreamExt;
 
-    let documents = csv_loader
-        .load()
-        .await
-        .unwrap()
-        .map(|x| x.unwrap())
-        .collect::<Vec<_>>()
-        .await;
+    async fn main() {
+        let path = "./src/document_loaders/test_data/test.csv";
+        let columns = vec![
+            "name".to_string(),
+            "age".to_string(),
+            "city".to_string(),
+            "country".to_string(),
+        ];
+        let csv_loader = CsvLoader::from_path(path, columns).expect("Failed to create csv loader");
+
+        let documents = csv_loader
+            .load()
+            .await
+            .unwrap()
+            .map(|x| x.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+    }
     ```
 
 ## Installation
