@@ -4,3 +4,6 @@ mod error;
 pub mod ollama;
 pub mod openai;
 pub use error::*;
+
+mod fastembed;
+pub use fastembed::*;
