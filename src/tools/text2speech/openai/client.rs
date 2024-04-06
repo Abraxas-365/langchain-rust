@@ -34,7 +34,7 @@ impl<C: Config> Text2SpeechOpenAI<C> {
         }
     }
 
-    pub fn wiith_model<S: Into<String>>(mut self, model: S) -> Self {
+    pub fn with_model<S: Into<String>>(mut self, model: S) -> Self {
         self.model = model.into();
         self
     }
