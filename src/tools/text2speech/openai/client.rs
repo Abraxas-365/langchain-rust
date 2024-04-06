@@ -33,13 +33,13 @@ impl<C: Config> Text2SpeechOpenAI<C> {
         }
     }
 
-    pub fn with_model<S: Into<String>>(mut self, model: S) -> Self {
-        self.model = SpeechModel::Other(model.into());
+    pub fn with_model(mut self, model: SpeechModel) -> Self {
+        self.model = model;
         self
     }
 
-    pub fn with_voice<S: Into<String>>(mut self, voice: S) -> Self {
-        self.voice = Voice::Other(voice.into());
+    pub fn with_voice(mut self, voice: Voice) -> Self {
+        self.voice = voice;
         self
     }
 
