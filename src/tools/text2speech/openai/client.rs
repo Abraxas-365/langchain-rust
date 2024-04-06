@@ -1,24 +1,23 @@
 use std::{error::Error, sync::Arc};
 
-use async_openai::{
+use async_openai::types::CreateSpeechRequestArgs;
+use async_openai::Client;
+pub use async_openai::{
     config::{Config, OpenAIConfig},
-    types::{CreateSpeechRequestArgs, SpeechModel, SpeechResponseFormat, Voice},
-    Client,
+    types::{SpeechModel, SpeechResponseFormat, Voice},
 };
 use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::tools::{SpeechStorage, Tool};
 
-use super::models::{OpenAIVoices, OpenAiResponseFormat, Text2SpeechOpenAIModel};
-
 #[derive(Clone)]
 pub struct Text2SpeechOpenAI<C: Config> {
     config: C,
-    model: String,
-    voice: String,
+    model: SpeechModel,
+    voice: Voice,
     storage: Option<Arc<dyn SpeechStorage>>,
-    response_format: OpenAiResponseFormat,
+    response_format: SpeechResponseFormat,
     path: String,
 }
 
@@ -26,21 +25,21 @@ impl<C: Config> Text2SpeechOpenAI<C> {
     pub fn new(config: C) -> Self {
         Self {
             config,
-            model: Text2SpeechOpenAIModel::TTS1.into(),
-            voice: OpenAIVoices::Alloy.into(),
+            model: SpeechModel::Tts1,
+            voice: Voice::Alloy,
             storage: None,
-            response_format: OpenAiResponseFormat::Mp3,
+            response_format: SpeechResponseFormat::Mp3,
             path: "./data/audio.mp3".to_string(),
         }
     }
 
     pub fn with_model<S: Into<String>>(mut self, model: S) -> Self {
-        self.model = model.into();
+        self.model = SpeechModel::Other(model.into());
         self
     }
 
     pub fn with_voice<S: Into<String>>(mut self, voice: S) -> Self {
-        self.voice = voice.into();
+        self.voice = Voice::Other(voice.into());
         self
     }
 
@@ -49,7 +48,7 @@ impl<C: Config> Text2SpeechOpenAI<C> {
         self
     }
 
-    pub fn with_response_format(mut self, response_format: OpenAiResponseFormat) -> Self {
+    pub fn with_response_format(mut self, response_format: SpeechResponseFormat) -> Self {
         self.response_format = response_format;
         self
     }
@@ -93,9 +92,9 @@ impl<C: Config + Send + Sync> Tool for Text2SpeechOpenAI<C> {
 
         let request = CreateSpeechRequestArgs::default()
             .input(input)
-            .voice(Voice::Other(self.voice.clone()))
+            .voice(self.voice.clone())
             .response_format(response_format)
-            .model(SpeechModel::Other(self.model.clone()))
+            .model(self.model.clone())
             .build()?;
 
         let response = client.audio().speech(request).await?;
