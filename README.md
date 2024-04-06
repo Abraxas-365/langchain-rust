@@ -14,33 +14,143 @@
 
 This is the Rust language implementation of [LangChain](https://github.com/langchain-ai/langchain).
 
-## Examples
+## Current Features
 
-- [rcommit](https://github.com/Abraxas-365/rcommit): rcommit allows you to create git commits with AI
+- LLMs
 
-- [Conversational chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/conversational_chain.rs) : A chain design for conversation, with memory
+  - [x] [OpenAi](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm.rs)
+  - [x] [Azure OpenAi](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_azure_open_ai.rs)
+  - [x] [Ollama and Compatible Api](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_azure_open_ai.rs)
+  - [x] [Anthropic Claude](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_anthropic_claude.rs)
 
-- [LLM chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_chain.rs) : the core chain, customisable
+- Embeddings
 
-- [Secuential chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sequential_chain.rs): run chain in secuential order, with the ouput of one being the input of the next one
+  - [x] [OpenAi](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_openai.rs)
+  - [x] [Ollama](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_ollama.rs)
+  - [x] [Azure OpenAi](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_azure_open_ai.rs)
+  - [x] [Local FastEmbed](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_fastembed.rs)
 
-- [Vectore Store with pgvector](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_postgres.rs) : And implementation of vector stroe with pgvector
+- VectorStores
 
-- [Vectore Store with sqlite_vss](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_sqlite.rs) : And implementation of vector stroe with sqlite_vss
+  - [x] [Postgres](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_postgres.rs)
+  - [x] [Sqlite](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_sqlite.rs)
+  - [x] [SurrealDB](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_surrealdb/src/main.rs)
 
-- [Embedding with Ollama](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_ollama.rs) : Embedding with Ollama
+- Chain
 
-- [Agentes](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/agent.rs) : Agent implementation for complex tasks
+  - [x] [LLM Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_chain.rs)
+  - [x] [Sequential Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sequential_chain.rs)
+  - [x] [Conversational Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/conversational_chain.rs)
+  - [x] [Q&A Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/qa_chain.rs)
+  - [x] [SQL Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sql_chain.rs)
 
-- [Open AI Tools Agent](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/open_ai_tools_agent.rs) : Agent using openAi Tools
+- Agents
 
-- [Streaming from a Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/streaming_from_chain.rs) : Streming example
+  - [x] [Chat Agent with Tools](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/agent.rs)
+  - [x] [Open AI Compatible Tools Agent](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/open_ai_tools_agent.rs)
 
-- [Q&A chian](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/qa_chain.rs) : Question answer Chain
+- Tools
 
-- [Semantic Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/semantic_routes.rs) : Semantic routing
+  - [x] Serpapi/Google
+  - [x] [Wolfram/Math](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/wolfram_tool.rs)
+  - [x] Command line
+  - [x] [Text2Speech](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/speec2text_openai.rs)
 
-- [Dynamic Semantic Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/dynamic_semantic_routes.rs) : Dynamic Semantic routing Wiht tool call
+- Semantic Routing
+
+  - [x] [Static Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/semantic_routes.rs)
+  - [x] [Dynamic Routing](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/dynamic_semantic_routes.rs)
+
+- Document Loaders
+
+  - [x] PDF
+
+    ```rust
+    use futures_util::StreamExt;
+
+    async fn main() {
+        let path = "./src/document_loaders/test_data/sample.pdf";
+
+        let loader = LoPdfLoader::from_path(path).expect("Failed to create PdfLoader");
+
+        let docs = loader
+            .load()
+            .await
+            .unwrap()
+            .map(|d| d.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+
+    }
+    ```
+
+  - [x] Pandoc
+
+    ```rust
+    use futures_util::StreamExt;
+
+    async fn main() {
+
+        let path = "./src/document_loaders/test_data/sample.docx";
+
+        let loader = PandocLoader::from_path(InputFormat::Docx.to_string(), path)
+            .await
+            .expect("Failed to create PandocLoader");
+
+        let docs = loader
+            .load()
+            .await
+            .unwrap()
+            .map(|d| d.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+    }
+    ```
+
+  - [x] HTML
+
+    ```rust
+    use futures_util::StreamExt;
+
+    async fn main() {
+        let path = "./src/document_loaders/test_data/example.html";
+        let html_loader = HtmlLoader::from_path(path, Url::parse("https://example.com/").unwrap())
+            .expect("Failed to create html loader");
+
+        let documents = html_loader
+            .load()
+            .await
+            .unwrap()
+            .map(|x| x.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+    }
+    ```
+
+  - [x] CSV
+
+    ```rust
+    use futures_util::StreamExt;
+
+    async fn main() {
+        let path = "./src/document_loaders/test_data/test.csv";
+        let columns = vec![
+            "name".to_string(),
+            "age".to_string(),
+            "city".to_string(),
+            "country".to_string(),
+        ];
+        let csv_loader = CsvLoader::from_path(path, columns).expect("Failed to create csv loader");
+
+        let documents = csv_loader
+            .load()
+            .await
+            .unwrap()
+            .map(|x| x.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+    }
+    ```
 
 ## Installation
 
