@@ -111,6 +111,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
     ```rust
     use futures_util::StreamExt;
+    use url::Url;
 
     async fn main() {
         let path = "./src/document_loaders/test_data/example.html";
