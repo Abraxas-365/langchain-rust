@@ -27,6 +27,9 @@ pub enum LoaderError {
     #[error(transparent)]
     JoinError(#[from] tokio::task::JoinError),
 
+    #[error(transparent)]
+    DiscoveryError(#[from] gix::discover::Error),
+
     #[error("Error: {0}")]
     OtherError(String),
 }

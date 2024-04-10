@@ -153,6 +153,25 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
     }
     ```
 
+  - [x] Git commits
+
+    ```rust
+    use futures_util::StreamExt;
+
+    async fn main() {
+        let path = "/path/to/git/repo";
+        let git_commit_loader = GitCommitLoader::from_path(path).expect("Failed to create git commit loader");
+
+        let documents = csv_loader
+            .load()
+            .await
+            .unwrap()
+            .map(|x| x.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+    }
+    ```
+
 ## Installation
 
 This library heavily relies on `serde_json` for its operation.
