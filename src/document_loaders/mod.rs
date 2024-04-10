@@ -23,3 +23,11 @@ pub use html_loader::*;
 
 mod error;
 pub use error::*;
+
+mod dir_loader;
+pub use dir_loader::*;
+
+#[cfg(feature = "tree-sitter")]
+mod source_code_loader;
+#[cfg(feature = "tree-sitter")]
+pub use source_code_loader::*;

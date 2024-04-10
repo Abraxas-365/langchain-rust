@@ -175,6 +175,22 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
     }
     ```
 
+  - [x] Source code
+
+    ```rust
+
+    let loader_with_dir =
+    SourceCodeLoader::from_path("./src/document_loaders/test_data".to_string())
+    .with_dir_loader_options(DirLoaderOptions {
+    glob: None,
+    suffixes: Some(vec!["rs".to_string()]),
+    exclude: None,
+    });
+
+    let stream = loader_with_dir.load().await.unwrap();
+    let documents = stream.map(|x| x.unwrap()).collect::<Vec<_>>().await;
+    ```
+
 ## Installation
 
 This library heavily relies on `serde_json` for its operation.
