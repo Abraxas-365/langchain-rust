@@ -12,3 +12,4 @@ pub mod semantic_router;
 pub mod text_splitter;
 pub mod tools;
 pub mod vectorstore;
+pub use url;
