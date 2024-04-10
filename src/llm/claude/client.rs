@@ -27,6 +27,7 @@ impl ToString for ClaudeModel {
     }
 }
 
+#[derive(Clone)]
 pub struct Claude {
     model: String,
     options: CallOptions,
