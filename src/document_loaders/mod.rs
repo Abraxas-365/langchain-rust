@@ -7,6 +7,9 @@ pub use text_loader::*;
 mod csv_loader;
 pub use csv_loader::*;
 
+mod git_commit_loader;
+pub use git_commit_loader::*;
+
 mod pandoc_loader;
 pub use pandoc_loader::*;
 
