@@ -27,6 +27,7 @@ pub enum LoaderError {
     #[error(transparent)]
     JoinError(#[from] tokio::task::JoinError),
 
+    #[cfg(feature = "git")]
     #[error(transparent)]
     DiscoveryError(#[from] gix::discover::Error),
 
