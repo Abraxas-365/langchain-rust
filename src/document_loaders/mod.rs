@@ -7,7 +7,9 @@ pub use text_loader::*;
 mod csv_loader;
 pub use csv_loader::*;
 
+#[cfg(feature = "git")]
 mod git_commit_loader;
+#[cfg(feature = "git")]
 pub use git_commit_loader::*;
 
 mod pandoc_loader;

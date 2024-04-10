@@ -53,8 +53,6 @@ impl Loader for GitCommitLoader {
                 "commit {commit_id}\nAuthor: {name} <{email}>\n\n    {message}"
             ));
             let mut metadata = HashMap::new();
-            metadata.insert("name".to_string(), Value::from(name));
-            metadata.insert("email".to_string(), Value::from(email));
             metadata.insert("commit".to_string(), Value::from(commit_id.to_string()));
 
             document.metadata = metadata;
@@ -101,7 +99,6 @@ mod tests {
 
         dbg!(&documents);
         // assert_eq!(documents[0].page_content, "");
-
         todo!()
     }
 }
