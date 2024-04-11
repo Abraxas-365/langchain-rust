@@ -52,12 +52,6 @@ pub struct OpenAI<C: Config> {
     model: String,
 }
 
-impl<C: Config + Send + Sync + 'static> Into<Box<dyn LLM>> for OpenAI<C> {
-    fn into(self) -> Box<dyn LLM> {
-        Box::new(self)
-    }
-}
-
 impl<C: Config> OpenAI<C> {
     pub fn new(config: C) -> Self {
         Self {

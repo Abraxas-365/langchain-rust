@@ -8,6 +8,7 @@ use crate::{
     },
     language_models::llm::LLM,
     memory::SimpleMemory,
+    output_parsers::OutputParser,
     prompt::HumanMessagePromptTemplate,
     schemas::memory::BaseMemory,
     template_fstring,
@@ -15,36 +16,37 @@ use crate::{
 
 use super::{prompt::DEFAULT_TEMPLATE, ConversationalChain};
 
-pub struct ConversationalChainBuilder<L>
-where
-    L: LLM + 'static,
-{
-    llm: Option<L>,
+pub struct ConversationalChainBuilder {
+    llm: Option<Box<dyn LLM>>,
     options: Option<ChainCallOptions>,
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     output_key: Option<String>,
+    output_parser: Option<Box<dyn OutputParser>>,
 }
 
-impl<L> ConversationalChainBuilder<L>
-where
-    L: LLM + 'static,
-{
+impl ConversationalChainBuilder {
     pub fn new() -> Self {
         Self {
             llm: None,
             options: None,
             memory: None,
             output_key: None,
+            output_parser: None,
         }
     }
 
-    pub fn llm(mut self, llm: L) -> Self {
-        self.llm = Some(llm);
+    pub fn llm<L: Into<Box<dyn LLM>>>(mut self, llm: L) -> Self {
+        self.llm = Some(llm.into());
         self
     }
 
     pub fn options(mut self, options: ChainCallOptions) -> Self {
         self.options = Some(options);
+        self
+    }
+
+    pub fn output_parser<P: Into<Box<dyn OutputParser>>>(mut self, output_parser: P) -> Self {
+        self.output_parser = Some(output_parser.into());
         self
     }
 
@@ -68,18 +70,21 @@ where
             "input"
         ));
 
-        let llm_chain = match self.options {
-            Some(options) => LLMChainBuilder::new()
-                .prompt(prompt)
-                .output_key(self.output_key.unwrap_or(DEFAULT_OUTPUT_KEY.into()))
-                .llm(llm)
-                .options(options)
-                .build()?,
-            None => LLMChainBuilder::new()
+        let llm_chain = {
+            let mut builder = LLMChainBuilder::new()
                 .prompt(prompt)
                 .llm(llm)
-                .output_key(self.output_key.unwrap_or(DEFAULT_OUTPUT_KEY.into()))
-                .build()?,
+                .output_key(self.output_key.unwrap_or_else(|| DEFAULT_OUTPUT_KEY.into()));
+
+            if let Some(options) = self.options {
+                builder = builder.options(options);
+            }
+
+            if let Some(output_parser) = self.output_parser {
+                builder = builder.output_parser(output_parser);
+            }
+
+            builder.build()?
         };
 
         let memory = self

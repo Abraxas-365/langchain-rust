@@ -3,6 +3,7 @@ use crate::{
         llm_chain::LLMChainBuilder, options::ChainCallOptions, ChainError, DEFAULT_OUTPUT_KEY,
     },
     language_models::llm::LLM,
+    output_parsers::OutputParser,
     prompt::HumanMessagePromptTemplate,
     template_jinja2,
     tools::SQLDatabase,
@@ -14,21 +15,16 @@ use super::{
     STOP_WORD,
 };
 
-pub struct SQLDatabaseChainBuilder<L>
-where
-    L: LLM + 'static,
-{
-    llm: Option<L>,
+pub struct SQLDatabaseChainBuilder {
+    llm: Option<Box<dyn LLM>>,
     options: Option<ChainCallOptions>,
     top_k: Option<usize>,
     database: Option<SQLDatabase>,
     output_key: Option<String>,
+    output_parser: Option<Box<dyn OutputParser>>,
 }
 
-impl<L> SQLDatabaseChainBuilder<L>
-where
-    L: LLM + 'static,
-{
+impl SQLDatabaseChainBuilder {
     pub fn new() -> Self {
         Self {
             llm: None,
@@ -36,11 +32,22 @@ where
             top_k: None,
             database: None,
             output_key: None,
+            output_parser: None,
         }
     }
 
-    pub fn llm(mut self, llm: L) -> Self {
-        self.llm = Some(llm);
+    pub fn llm<L: Into<Box<dyn LLM>>>(mut self, llm: L) -> Self {
+        self.llm = Some(llm.into());
+        self
+    }
+
+    pub fn output_key<S: Into<String>>(mut self, output_key: S) -> Self {
+        self.output_key = Some(output_key.into());
+        self
+    }
+
+    pub fn output_parser<P: Into<Box<dyn OutputParser>>>(mut self, output_parser: P) -> Self {
+        self.output_parser = Some(output_parser.into());
         self
     }
 
@@ -78,19 +85,21 @@ where
             "input"
         ));
 
-        let llm_chain = match self.options {
-            Some(options) => LLMChainBuilder::new()
+        let llm_chain = {
+            let mut builder = LLMChainBuilder::new()
                 .prompt(prompt)
-                .llm(llm)
-                .output_key(self.output_key.unwrap_or(DEFAULT_OUTPUT_KEY.into()))
-                .options(options.with_stop_words(vec![STOP_WORD.to_string()]))
-                .build()?,
-            None => LLMChainBuilder::new()
-                .prompt(prompt)
-                .output_key(self.output_key.unwrap_or(DEFAULT_OUTPUT_KEY.into()))
-                .options(ChainCallOptions::default().with_stop_words(vec![STOP_WORD.to_string()]))
-                .llm(llm)
-                .build()?,
+                .output_key(self.output_key.unwrap_or_else(|| DEFAULT_OUTPUT_KEY.into()))
+                .llm(llm);
+
+            let mut options = self.options.unwrap_or_else(ChainCallOptions::default);
+            options = options.with_stop_words(vec![STOP_WORD.to_string()]);
+            builder = builder.options(options);
+
+            if let Some(output_parser) = self.output_parser {
+                builder = builder.output_parser(output_parser);
+            }
+
+            builder.build()?
         };
 
         Ok(SQLDatabaseChain {

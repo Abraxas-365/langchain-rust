@@ -34,3 +34,12 @@ pub trait LLM: Sync + Send {
             .join("\n")
     }
 }
+
+impl<L> From<L> for Box<dyn LLM>
+where
+    L: 'static + LLM,
+{
+    fn from(llm: L) -> Self {
+        Box::new(llm)
+    }
+}
