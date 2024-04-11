@@ -19,12 +19,6 @@ pub struct HumanMessagePromptTemplate {
     prompt: PromptTemplate,
 }
 
-impl Into<Box<dyn MessageFormatter>> for HumanMessagePromptTemplate {
-    fn into(self) -> Box<dyn MessageFormatter> {
-        Box::new(self)
-    }
-}
-
 impl HumanMessagePromptTemplate {
     pub fn new(prompt: PromptTemplate) -> Self {
         Self { prompt }
@@ -67,12 +61,6 @@ pub struct SystemMessagePromptTemplate {
     prompt: PromptTemplate,
 }
 
-impl Into<Box<dyn MessageFormatter>> for SystemMessagePromptTemplate {
-    fn into(self) -> Box<dyn MessageFormatter> {
-        Box::new(self)
-    }
-}
-
 impl SystemMessagePromptTemplate {
     pub fn new(prompt: PromptTemplate) -> Self {
         Self { prompt }
@@ -113,12 +101,6 @@ impl MessageFormatter for SystemMessagePromptTemplate {
 #[derive(Clone)]
 pub struct AIMessagePromptTemplate {
     prompt: PromptTemplate,
-}
-
-impl Into<Box<dyn MessageFormatter>> for AIMessagePromptTemplate {
-    fn into(self) -> Box<dyn MessageFormatter> {
-        Box::new(self)
-    }
 }
 
 impl FormatPrompter for AIMessagePromptTemplate {

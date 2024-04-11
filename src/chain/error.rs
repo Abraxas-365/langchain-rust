@@ -1,11 +1,14 @@
 use thiserror::Error;
 
-use crate::{language_models::LLMError, prompt::PromptError};
+use crate::{language_models::LLMError, output_parsers::OutputParserError, prompt::PromptError};
 
 #[derive(Error, Debug)]
 pub enum ChainError {
     #[error("LLM error: {0}")]
     LLMError(#[from] LLMError),
+
+    #[error("OutputParser error: {0}")]
+    OutputParser(#[from] OutputParserError),
 
     #[error("Prompt error: {0}")]
     PromptError(#[from] PromptError),

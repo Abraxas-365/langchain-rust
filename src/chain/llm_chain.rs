@@ -6,6 +6,7 @@ use futures_util::TryStreamExt;
 
 use crate::{
     language_models::{llm::LLM, GenerateResult},
+    output_parsers::{OutputParser, SimpleParser},
     prompt::{FormatPrompter, PromptArgs},
     schemas::StreamData,
 };
@@ -17,6 +18,7 @@ pub struct LLMChainBuilder {
     llm: Option<Box<dyn LLM>>,
     output_key: Option<String>,
     options: Option<ChainCallOptions>,
+    output_parser: Option<Box<dyn OutputParser>>,
 }
 
 impl LLMChainBuilder {
@@ -26,6 +28,7 @@ impl LLMChainBuilder {
             llm: None,
             options: None,
             output_key: None,
+            output_parser: None,
         }
     }
     pub fn options(mut self, options: ChainCallOptions) -> Self {
@@ -33,24 +36,23 @@ impl LLMChainBuilder {
         self
     }
 
-    pub fn prompt<P>(mut self, prompt: P) -> Self
-    where
-        P: FormatPrompter + 'static,
-    {
-        self.prompt = Some(Box::new(prompt));
+    pub fn prompt<P: Into<Box<dyn FormatPrompter>>>(mut self, prompt: P) -> Self {
+        self.prompt = Some(prompt.into());
         self
     }
 
-    pub fn llm<L>(mut self, llm: L) -> Self
-    where
-        L: LLM + 'static,
-    {
-        self.llm = Some(Box::new(llm));
+    pub fn llm<L: Into<Box<dyn LLM>>>(mut self, llm: L) -> Self {
+        self.llm = Some(llm.into());
         self
     }
 
     pub fn output_key<S: Into<String>>(mut self, output_key: S) -> Self {
         self.output_key = Some(output_key.into());
+        self
+    }
+
+    pub fn output_parser<P: Into<Box<dyn OutputParser>>>(mut self, output_parser: P) -> Self {
+        self.output_parser = Some(output_parser.into());
         self
     }
 
@@ -72,6 +74,9 @@ impl LLMChainBuilder {
             prompt,
             llm,
             output_key: self.output_key.unwrap_or("output".to_string()),
+            output_parser: self
+                .output_parser
+                .unwrap_or_else(|| Box::new(SimpleParser::default())),
         };
 
         Ok(chain)
@@ -82,6 +87,7 @@ pub struct LLMChain {
     prompt: Box<dyn FormatPrompter>,
     llm: Box<dyn LLM>,
     output_key: String,
+    output_parser: Box<dyn OutputParser>,
 }
 
 #[async_trait]
@@ -97,7 +103,9 @@ impl Chain for LLMChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
         log::debug!("Prompt: {:?}", prompt);
-        let output = self.llm.generate(&prompt.to_chat_messages()).await?;
+        let mut output = self.llm.generate(&prompt.to_chat_messages()).await?;
+        output.generation = self.output_parser.parse(&output.generation).await?;
+
         Ok(output)
     }
 
