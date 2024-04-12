@@ -75,7 +75,7 @@ impl StuffDocument {
     /// println!("{}", ouput);
     /// ```
     ///
-    pub fn load_stuff_qa<L: LLM + 'static>(llm: L) -> Self {
+    pub fn load_stuff_qa<L: Into<Box<dyn LLM>>>(llm: L) -> Self {
         load_stuff_qa(llm, None)
     }
 
@@ -141,7 +141,23 @@ impl Chain for StuffDocument {
         input_variables: PromptArgs,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
-        self.llm_chain.stream(input_variables).await
+        let docs = input_variables
+            .get(&self.input_key)
+            .ok_or_else(|| ChainError::MissingInputVariable(self.input_key.clone()))?;
+
+        let documents: Vec<Document> = serde_json::from_value(docs.clone()).map_err(|e| {
+            ChainError::IncorrectInputVariable {
+                source: e,
+                expected_type: "Vec<Document>".to_string(),
+            }
+        })?;
+
+        let mut input_values = input_variables.clone();
+        input_values.insert(
+            self.document_variable_name.clone(),
+            Value::String(self.join_documents(documents)),
+        );
+        self.llm_chain.stream(input_values).await
     }
 
     fn get_input_keys(&self) -> Vec<String> {

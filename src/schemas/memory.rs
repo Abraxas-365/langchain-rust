@@ -27,3 +27,12 @@ pub trait BaseMemory: Send + Sync {
             .join("\n")
     }
 }
+
+impl<M> From<M> for Box<dyn BaseMemory>
+where
+    M: BaseMemory + 'static,
+{
+    fn from(memory: M) -> Self {
+        Box::new(memory)
+    }
+}

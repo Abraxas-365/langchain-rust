@@ -8,7 +8,7 @@ use crate::schemas::{Message, StreamData};
 use super::{options::CallOptions, GenerateResult, LLMError};
 
 #[async_trait]
-pub trait LLM: Sync + Send {
+pub trait LLM: Sync + Send + LLMClone {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError>;
     async fn invoke(&self, prompt: &str) -> Result<String, LLMError> {
         self.generate(&[Message::new_human_message(prompt)])
@@ -32,6 +32,19 @@ pub trait LLM: Sync + Send {
             .map(|m| format!("{:?}: {}", m.message_type, m.content))
             .collect::<Vec<String>>()
             .join("\n")
+    }
+}
+
+pub trait LLMClone {
+    fn clone_box(&self) -> Box<dyn LLM>;
+}
+
+impl<T> LLMClone for T
+where
+    T: 'static + LLM + Clone,
+{
+    fn clone_box(&self) -> Box<dyn LLM> {
+        Box::new(self.clone())
     }
 }
 

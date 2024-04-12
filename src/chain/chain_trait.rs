@@ -188,6 +188,18 @@ pub trait Chain: Sync + Send {
 
     fn get_output_keys(&self) -> Vec<String> {
         log::info!("Using defualt implementation");
-        return vec![String::from(DEFAULT_OUTPUT_KEY)];
+        return vec![
+            String::from(DEFAULT_OUTPUT_KEY),
+            String::from(DEFAULT_RESULT_KEY),
+        ];
+    }
+}
+
+impl<C> From<C> for Box<dyn Chain>
+where
+    C: Chain + 'static,
+{
+    fn from(chain: C) -> Self {
+        Box::new(chain)
     }
 }

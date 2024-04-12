@@ -23,6 +23,14 @@ pub trait VectorStore: Send + Sync {
         opt: &VecStoreOptions,
     ) -> Result<Vec<Document>, Box<dyn Error>>;
 }
+impl<VS> From<VS> for Box<dyn VectorStore>
+where
+    VS: 'static + VectorStore,
+{
+    fn from(vector_store: VS) -> Self {
+        Box::new(vector_store)
+    }
+}
 
 #[macro_export]
 macro_rules! add_documents {
@@ -49,15 +57,15 @@ macro_rules! similarity_search {
 }
 
 // Retriever is a retriever for vector stores.
-pub struct Retriver {
+pub struct Retriever {
     vstore: Box<dyn VectorStore>,
     num_docs: usize,
     options: VecStoreOptions,
 }
-impl Retriver {
-    pub fn new<V: VectorStore + 'static>(vstore: V, num_docs: usize) -> Self {
-        Retriver {
-            vstore: Box::new(vstore),
+impl Retriever {
+    pub fn new<V: Into<Box<dyn VectorStore>>>(vstore: V, num_docs: usize) -> Self {
+        Retriever {
+            vstore: vstore.into(),
             num_docs,
             options: VecStoreOptions::default(),
         }
@@ -70,7 +78,7 @@ impl Retriver {
 }
 
 #[async_trait]
-impl schemas::Retriever for Retriver {
+impl schemas::Retriever for Retriever {
     async fn get_relevant_documents(&self, query: &str) -> Result<Vec<Document>, Box<dyn Error>> {
         self.vstore
             .similarity_search(query, self.num_docs, &self.options)

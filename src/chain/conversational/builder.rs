@@ -14,7 +14,7 @@ use crate::{
     template_fstring,
 };
 
-use super::{prompt::DEFAULT_TEMPLATE, ConversationalChain};
+use super::{prompt::DEFAULT_TEMPLATE, ConversationalChain, DEFAULT_INPUT_VARIABLE};
 
 pub struct ConversationalChainBuilder {
     llm: Option<Box<dyn LLM>>,
@@ -22,6 +22,7 @@ pub struct ConversationalChainBuilder {
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     output_key: Option<String>,
     output_parser: Option<Box<dyn OutputParser>>,
+    input_key: Option<String>,
 }
 
 impl ConversationalChainBuilder {
@@ -32,6 +33,7 @@ impl ConversationalChainBuilder {
             memory: None,
             output_key: None,
             output_parser: None,
+            input_key: None,
         }
     }
 
@@ -42,6 +44,11 @@ impl ConversationalChainBuilder {
 
     pub fn options(mut self, options: ChainCallOptions) -> Self {
         self.options = Some(options);
+        self
+    }
+
+    pub fn input_key<S: Into<String>>(mut self, input_key: S) -> Self {
+        self.input_key = Some(input_key.into());
         self
     }
 
@@ -94,6 +101,9 @@ impl ConversationalChainBuilder {
         Ok(ConversationalChain {
             llm: llm_chain,
             memory,
+            input_key: self
+                .input_key
+                .unwrap_or_else(|| DEFAULT_INPUT_VARIABLE.to_string()),
         })
     }
 }

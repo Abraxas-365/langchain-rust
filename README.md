@@ -39,8 +39,10 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 - Chain
 
   - [x] [LLM Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_chain.rs)
-  - [x] [Sequential Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sequential_chain.rs)
   - [x] [Conversational Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/conversational_chain.rs)
+  - [x] [Conversational Retriver Simple](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/conversational_retriver_simple_chain.rs)
+    - [x] [Conversational Retriver With Vector Store](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/conversational_retriver_chain_with_vector_store.rs)
+  - [x] [Sequential Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sequential_chain.rs)
   - [x] [Q&A Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/qa_chain.rs)
   - [x] [SQL Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sql_chain.rs)
 
