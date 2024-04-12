@@ -25,7 +25,7 @@ const CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_GENERATED_QUESTION_KEY: &str = "genera
 
 pub struct ConversationalRetriverChain {
     pub(crate) retriver: Box<dyn Retriever>,
-    pub(crate) memory: Arc<Mutex<dyn BaseMemory>>,
+    pub memory: Arc<Mutex<dyn BaseMemory>>,
     pub(crate) combine_documents_chain: Box<dyn Chain>,
     pub(crate) condense_question_chian: Box<dyn Chain>,
     pub(crate) rephrase_question: bool,
