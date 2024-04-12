@@ -11,7 +11,6 @@ use langchain_rust::{
     memory::SimpleMemory,
     prompt_args,
     schemas::Document,
-    similarity_search,
     vectorstore::{pgvector::StoreBuilder, Retriever, VectorStore},
 };
 
