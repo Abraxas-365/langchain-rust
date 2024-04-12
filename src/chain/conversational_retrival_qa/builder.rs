@@ -11,6 +11,36 @@ use crate::{
 use super::ConversationalRetriverChain;
 
 const CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_INPUT_KEY: &str = "question";
+
+///Conversation Retriver Chain Builder
+/// # Usage
+/// ## Convensional way
+/// ```rust,ignore
+/// let chain = ConversationalRetriverChainBuilder::new()
+///     .llm(llm)
+///     .rephrase_question(true)
+///     .retriver(RetriverMock {})
+///     .memory(SimpleMemory::new().into())
+///     .build()
+///     .expect("Error building ConversationalChain");
+///
+/// ```
+/// ## Custom way
+/// ```rust,ignore
+///
+/// let llm = Box::new(OpenAI::default().with_model(OpenAIModel::Gpt35.to_string()));
+/// let combine_documents_chain = StuffDocument::load_stuff_qa(llm.clone_box());
+//  let condense_question_chian = CondenseQuetionGeneratorChain::new(llm.clone_box());
+/// let chain = ConversationalRetriverChainBuilder::new()
+///     .rephrase_question(true)
+///     .combine_documents_chain(Box::new(combine_documents_chain))
+///     .condense_question_chian(Box::new(condense_question_chian))
+///     .retriver(RetriverMock {})
+///     .memory(SimpleMemory::new().into())
+///     .build()
+///     .expect("Error building ConversationalChain");
+/// ```
+///
 pub struct ConversationalRetriverChainBuilder {
     llm: Option<Box<dyn LLM>>,
     retriver: Option<Box<dyn Retriever>>,
@@ -57,6 +87,7 @@ impl ConversationalRetriverChainBuilder {
         self
     }
 
+    ///Chain designed to take the documents and the question and generate an output
     pub fn combine_documents_chain<C: Into<Box<dyn Chain>>>(
         mut self,
         combine_documents_chain: C,
@@ -65,6 +96,7 @@ impl ConversationalRetriverChainBuilder {
         self
     }
 
+    ///Chain designed to reformulate the question based on the cat history
     pub fn condense_question_chian<C: Into<Box<dyn Chain>>>(
         mut self,
         condense_question_chian: C,
