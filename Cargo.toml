@@ -43,6 +43,8 @@ readability = "0.3.0"
 url = "2.5.0"
 fastembed = "3.3.0"
 gix = { version = "0.61.0", default-features = false, optional = true, features = ["parallel", "revision", "serde"] }
+opensearch = { version = "2", optional = true, features = ["aws-auth"] }
+aws-config = { version = "1.1", optional = true, features = ["behavior-version-latest"] }
 
 [features]
 default = []
@@ -50,6 +52,7 @@ postgres = ["pgvector", "sqlx", "uuid"]
 surrealdb = ["dep:surrealdb"]
 sqlite = ["sqlx"]
 git = ["gix"]
+opensearch = ["dep:opensearch", "aws-config"]
 
 [dev-dependencies]
 tokio-test = "0.4.4"
