@@ -42,6 +42,7 @@ async fn main() {
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
     let chain = ConversationalRetriverChainBuilder::new()
         .llm(llm)
+        .rephrase_question(true)
         .retriver(RetriverMock {})
         .memory(SimpleMemory::new().into())
         .build()

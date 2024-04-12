@@ -30,8 +30,8 @@ impl ConversationalRetriverChainBuilder {
             memory: None,
             combine_documents_chain: None,
             condense_question_chian: None,
-            rephrase_question: false,
-            return_source_documents: false,
+            rephrase_question: true,
+            return_source_documents: true,
             input_key: CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_INPUT_KEY.to_string(),
             output_key: DEFAULT_OUTPUT_KEY.to_string(),
         }

@@ -53,6 +53,7 @@ async fn main() {
 
     let chain = ConversationalRetriverChainBuilder::new()
         .llm(llm)
+        .rephrase_question(true)
         .memory(SimpleMemory::new().into())
         .retriver(Retriever::new(store, 5))
         .build()

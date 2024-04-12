@@ -39,6 +39,9 @@ impl ConversationalRetriverChain {
         history: &[Message],
         input: &str,
     ) -> Result<(String, Option<TokenUsage>), ChainError> {
+        if history.is_empty() {
+            return Ok((input.to_string(), None));
+        }
         let mut token_usage: Option<TokenUsage> = None;
         let question = match self.rephrase_question {
             true => {
