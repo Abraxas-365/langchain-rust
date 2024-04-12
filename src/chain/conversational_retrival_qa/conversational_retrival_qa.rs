@@ -270,6 +270,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_invoke_retriever_conversational() {
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
         let chain = ConversationalRetriverChainBuilder::new()
