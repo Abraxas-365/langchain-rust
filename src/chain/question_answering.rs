@@ -57,7 +57,7 @@ pub struct CondenseQuetionGeneratorChain {
 }
 
 impl CondenseQuetionGeneratorChain {
-    pub fn new<L: LLM + 'static>(llm: L) -> Self {
+    pub fn new<L: Into<Box<dyn LLM>>>(llm: L) -> Self {
         let condense_question_prompt_template =
             template_jinja2!(DEFAULTCONDENSEQUESTIONTEMPLATE, "chat_history", "question");
 
@@ -129,7 +129,7 @@ impl<'a> StuffQAPromptBuilder<'a> {
     }
 }
 
-pub(crate) fn load_stuff_qa<L: LLM + 'static>(
+pub(crate) fn load_stuff_qa<L: Into<Box<dyn LLM>>>(
     llm: L,
     options: Option<ChainCallOptions>,
 ) -> StuffDocument {

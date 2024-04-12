@@ -8,3 +8,12 @@ use super::Document;
 pub trait Retriever: Sync + Send {
     async fn get_relevant_documents(&self, query: &str) -> Result<Vec<Document>, Box<dyn Error>>;
 }
+
+impl<R> From<R> for Box<dyn Retriever>
+where
+    R: Retriever + 'static,
+{
+    fn from(retriver: R) -> Self {
+        Box::new(retriver)
+    }
+}
