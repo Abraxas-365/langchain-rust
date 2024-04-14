@@ -2,8 +2,3 @@ target/
 Cargo.lock
 .DS_Store
 
-.env
-.envrc
-.idea/
-.fastembed_cache/
-
