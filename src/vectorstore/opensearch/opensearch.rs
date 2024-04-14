@@ -2,12 +2,16 @@ use async_trait::async_trait;
 use opensearch::http::request::JsonBody;
 use opensearch::http::response::Response;
 use opensearch::indices::{IndicesCreateParts, IndicesDeleteParts};
-pub use opensearch::OpenSearch;
 use opensearch::{BulkParts, SearchParts};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
+
+pub use opensearch::auth::Credentials;
+pub use opensearch::cert::CertificateValidation;
+pub use opensearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
+pub use opensearch::OpenSearch;
 
 use crate::{
     embedding::embedder_trait::Embedder,

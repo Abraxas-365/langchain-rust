@@ -7,10 +7,6 @@ use langchain_rust::{
     embedding::openai::openai_embedder::OpenAiEmbedder, schemas::Document,
     vectorstore::opensearch::Store, vectorstore::opensearch::*,
 };
-use opensearch::auth::Credentials;
-use opensearch::cert::CertificateValidation;
-use opensearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
-use opensearch::OpenSearch;
 use serde_json::json;
 use std::collections::HashMap;
 use std::error::Error;
