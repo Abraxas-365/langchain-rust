@@ -6,14 +6,14 @@ use langchain_rust::{
     embedding::openai::openai_embedder::OpenAiEmbedder, schemas::Document,
     vectorstore::opensearch::Store, vectorstore::opensearch::*,
 };
-use serde_json::json;
-use std::collections::HashMap;
-use std::error::Error;
-use std::io::Write;
 use opensearch::auth::Credentials;
 use opensearch::cert::CertificateValidation;
 use opensearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
 use opensearch::OpenSearch;
+use serde_json::json;
+use std::collections::HashMap;
+use std::error::Error;
+use std::io::Write;
 use url::Url;
 
 #[cfg(feature = "opensearch")]
@@ -24,13 +24,13 @@ async fn main() {
 
     /* In this example we use an opensearch instance running on localhost (docker):
 
-docker run --rm -it -p 9200:9200 -p 9600:9600 \
-    -e "discovery.type=single-node" \
-    -e "node.name=localhost" \
-    -e "OPENSEARCH_INITIAL_ADMIN_PASSWORD=ZxPZ3cZL0ky1bzVu+~N" \
-    opensearchproject/opensearch:latest
+    docker run --rm -it -p 9200:9200 -p 9600:9600 \
+        -e "discovery.type=single-node" \
+        -e "node.name=localhost" \
+        -e "OPENSEARCH_INITIAL_ADMIN_PASSWORD=ZxPZ3cZL0ky1bzVu+~N" \
+        opensearchproject/opensearch:latest
 
- */
+     */
 
     let opensearch_host = "https://localhost:9200";
     let opensearch_index = "test";
@@ -39,9 +39,13 @@ docker run --rm -it -p 9200:9200 -p 9600:9600 \
     let conn_pool = SingleNodeConnectionPool::new(url);
     let transport = TransportBuilder::new(conn_pool)
         .disable_proxy()
-        .auth(Credentials::Basic("admin".to_string(), "ZxPZ3cZL0ky1bzVu+~N".to_string()))
+        .auth(Credentials::Basic(
+            "admin".to_string(),
+            "ZxPZ3cZL0ky1bzVu+~N".to_string(),
+        ))
         .cert_validation(CertificateValidation::None)
-        .build().unwrap();
+        .build()
+        .unwrap();
     let client = OpenSearch::new(transport);
 
     // We could also use an AOSS instance:
