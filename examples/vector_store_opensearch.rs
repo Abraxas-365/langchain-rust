@@ -1,7 +1,5 @@
 // To run this example execute: cargo run --example vector_store_opensearch --features opensearch
 
-use async_openai::config::AzureConfig;
-use aws_config::BehaviorVersion;
 use langchain_rust::vectorstore::{VecStoreOptions, VectorStore};
 #[cfg(feature = "opensearch")]
 use langchain_rust::{
@@ -12,48 +10,63 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Write;
+use opensearch::auth::Credentials;
+use opensearch::cert::CertificateValidation;
+use opensearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
+use opensearch::OpenSearch;
+use url::Url;
 
 #[cfg(feature = "opensearch")]
 #[tokio::main]
 async fn main() {
-    // In this example we use azure openai
-    let api_base = "https://blahblah-aoai-fc.openai.azure.com";
-    let api_key = "blahblah";
-    let api_version = "2024-02-01";
-    let embedding_model = "text-embedding-ada-002";
+    // Initialize Embedder
+    let embedder = OpenAiEmbedder::default();
 
-    let openai_config = AzureConfig::new()
-        .with_api_base(api_base)
-        .with_api_key(api_key)
-        .with_api_version(api_version)
-        .with_deployment_id(embedding_model);
-    let embedder = OpenAiEmbedder::new(openai_config);
+    /* In this example we use an opensearch instance running on localhost (docker):
 
-    // In this example we use an AWS profile to get (temporary credentials)
-    std::env::set_var("AWS_PROFILE", "xxx");
-    let sdk_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
+docker run --rm -it -p 9200:9200 -p 9600:9600 \
+    -e "discovery.type=single-node" \
+    -e "node.name=localhost" \
+    -e "OPENSEARCH_INITIAL_ADMIN_PASSWORD=ZxPZ3cZL0ky1bzVu+~N" \
+    opensearchproject/opensearch:latest
 
-    // AOSS configuration
-    let index = "test_aoss_2";
-    let aoss_host = "https://blahblah.eu-central-1.aoss.amazonaws.com/";
+ */
+
+    let opensearch_host = "https://localhost:9200";
+    let opensearch_index = "test";
+
+    let url = Url::parse(opensearch_host).unwrap();
+    let conn_pool = SingleNodeConnectionPool::new(url);
+    let transport = TransportBuilder::new(conn_pool)
+        .disable_proxy()
+        .auth(Credentials::Basic("admin".to_string(), "ZxPZ3cZL0ky1bzVu+~N".to_string()))
+        .cert_validation(CertificateValidation::None)
+        .build().unwrap();
+    let client = OpenSearch::new(transport);
+
+    // We could also use an AOSS instance:
+    //std::env::set_var("AWS_PROFILE", "xxx");
+    //use aws_config::BehaviorVersion;
+    //let sdk_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
+    //let aoss_host = "https://blahblah.eu-central-1.aoss.amazonaws.com/";
 
     let store = StoreBuilder::new()
         .embedder(embedder)
-        .index(index)
+        .index(opensearch_index)
         .content_field("the_content_field")
         .vector_field("the_vector_field")
-        .aoss_client(&sdk_config, aoss_host)
-        .unwrap()
+        //.aoss_client(&sdk_config, aoss_host).unwrap()
+        .client(client)
         .build()
         .await
         .unwrap();
 
-    //store.delete_index().await.unwrap();
-    //store.create_index().await.unwrap();
-    //let added_ids = add_documents_to_index(&store).await.unwrap();
-    //for id in added_ids {
-    //    println!("added {id}");
-    //}
+    let _ = store.delete_index().await;
+    store.create_index().await.unwrap();
+    let added_ids = add_documents_to_index(&store).await.unwrap();
+    for id in added_ids {
+        println!("added document with id: {id}");
+    }
     // it can take a while before the documents are actually available in the index...
 
     // Ask for user input
