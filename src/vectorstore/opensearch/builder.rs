@@ -1,11 +1,8 @@
 use crate::embedding::Embedder;
 use crate::vectorstore::opensearch::Store;
-use aws_config::SdkConfig;
-use opensearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
 use opensearch::OpenSearch;
 use std::error::Error;
 use std::sync::Arc;
-use url::Url;
 
 pub struct StoreBuilder {
     client: Option<OpenSearch>,
@@ -32,16 +29,6 @@ impl StoreBuilder {
     pub fn client(mut self, client: OpenSearch) -> Self {
         self.client = Some(client);
         self
-    }
-
-    pub fn aoss_client(
-        mut self,
-        sdk_config: &SdkConfig,
-        host: &str,
-    ) -> Result<Self, Box<dyn Error>> {
-        let client = build_aoss_client(sdk_config, host)?;
-        self.client = Some(client);
-        Ok(self)
     }
 
     pub fn embedder<E: Embedder + 'static>(mut self, embedder: E) -> Self {
@@ -92,16 +79,4 @@ impl StoreBuilder {
             content_field: self.content_field,
         })
     }
-}
-
-fn build_aoss_client(sdk_config: &SdkConfig, host: &str) -> Result<OpenSearch, Box<dyn Error>> {
-    let opensearch_url = Url::parse(host)?;
-    let conn_pool = SingleNodeConnectionPool::new(opensearch_url);
-
-    let transport = TransportBuilder::new(conn_pool)
-        .auth(sdk_config.try_into()?)
-        .service_name("aoss")
-        .build()?;
-    let client = OpenSearch::new(transport);
-    Ok(client)
 }

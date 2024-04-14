@@ -14,6 +14,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Write;
+use aws_config::SdkConfig;
 use url::Url;
 
 #[cfg(feature = "opensearch")]
@@ -49,17 +50,17 @@ async fn main() {
     let client = OpenSearch::new(transport);
 
     // We could also use an AOSS instance:
-    //std::env::set_var("AWS_PROFILE", "xxx");
-    //use aws_config::BehaviorVersion;
-    //let sdk_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    //let aoss_host = "https://blahblah.eu-central-1.aoss.amazonaws.com/";
+    // std::env::set_var("AWS_PROFILE", "xxx");
+    // use aws_config::BehaviorVersion;
+    // let sdk_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
+    // let aoss_host = "https://blahblah.eu-central-1.aoss.amazonaws.com/";
+    // let client = build_aoss_client(&sdk_config, aoss_host).unwrap();
 
     let store = StoreBuilder::new()
         .embedder(embedder)
         .index(opensearch_index)
         .content_field("the_content_field")
         .vector_field("the_vector_field")
-        //.aoss_client(&sdk_config, aoss_host).unwrap()
         .client(client)
         .build()
         .await
@@ -122,6 +123,19 @@ async fn add_documents_to_index(store: &Store) -> Result<Vec<String>, Box<dyn Er
         .await?;
 
     Ok(result)
+}
+
+#[allow(dead_code)]
+fn build_aoss_client(sdk_config: &SdkConfig, host: &str) -> Result<OpenSearch, Box<dyn Error>> {
+    let opensearch_url = Url::parse(host)?;
+    let conn_pool = SingleNodeConnectionPool::new(opensearch_url);
+
+    let transport = TransportBuilder::new(conn_pool)
+        .auth(sdk_config.try_into()?)
+        .service_name("aoss")
+        .build()?;
+    let client = OpenSearch::new(transport);
+    Ok(client)
 }
 
 #[cfg(not(feature = "opensearch"))]
