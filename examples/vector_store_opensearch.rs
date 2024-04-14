@@ -1,5 +1,6 @@
 // To run this example execute: cargo run --example vector_store_opensearch --features opensearch
 
+use aws_config::SdkConfig;
 use langchain_rust::vectorstore::{VecStoreOptions, VectorStore};
 #[cfg(feature = "opensearch")]
 use langchain_rust::{
@@ -14,7 +15,6 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Write;
-use aws_config::SdkConfig;
 use url::Url;
 
 #[cfg(feature = "opensearch")]
