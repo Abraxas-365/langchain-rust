@@ -7,8 +7,8 @@ pub enum ChainError {
     #[error("LLM error: {0}")]
     LLMError(#[from] LLMError),
 
-    #[error("Retreiver error: {0}")]
-    RetreiverError(String),
+    #[error("Retriever error: {0}")]
+    RetrieverError(String),
 
     #[error("OutputParser error: {0}")]
     OutputParser(#[from] OutputParserError),

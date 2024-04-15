@@ -13,8 +13,8 @@ pub use prompt::*;
 pub mod document;
 pub use document::*;
 
-mod retrivers;
-pub use retrivers::*;
+mod retrievers;
+pub use retrievers::*;
 
 mod tools_openai_like;
 pub use tools_openai_like::*;

@@ -2,24 +2,24 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
-    chain::{Chain, ChainError, CondenseQuetionGeneratorChain, StuffDocument, DEFAULT_OUTPUT_KEY},
+    chain::{Chain, ChainError, CondenseQuestionGeneratorChain, StuffDocument, DEFAULT_OUTPUT_KEY},
     language_models::llm::LLM,
     memory::SimpleMemory,
     schemas::{BaseMemory, Retriever},
 };
 
-use super::ConversationalRetriverChain;
+use super::ConversationalRetrieverChain;
 
 const CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_INPUT_KEY: &str = "question";
 
-///Conversation Retriver Chain Builder
+///Conversation Retriever Chain Builder
 /// # Usage
 /// ## Convensional way
 /// ```rust,ignore
-/// let chain = ConversationalRetriverChainBuilder::new()
+/// let chain = ConversationalRetrieverChainBuilder::new()
 ///     .llm(llm)
 ///     .rephrase_question(true)
-///     .retriver(RetriverMock {})
+///     .retriever(RetrieverMock {})
 ///     .memory(SimpleMemory::new().into())
 ///     .build()
 ///     .expect("Error building ConversationalChain");
@@ -30,20 +30,20 @@ const CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_INPUT_KEY: &str = "question";
 ///
 /// let llm = Box::new(OpenAI::default().with_model(OpenAIModel::Gpt35.to_string()));
 /// let combine_documents_chain = StuffDocument::load_stuff_qa(llm.clone_box());
-//  let condense_question_chian = CondenseQuetionGeneratorChain::new(llm.clone_box());
-/// let chain = ConversationalRetriverChainBuilder::new()
+//  let condense_question_chian = CondenseQuestionGeneratorChain::new(llm.clone_box());
+/// let chain = ConversationalRetrieverChainBuilder::new()
 ///     .rephrase_question(true)
 ///     .combine_documents_chain(Box::new(combine_documents_chain))
 ///     .condense_question_chian(Box::new(condense_question_chian))
-///     .retriver(RetriverMock {})
+///     .retriever(RetrieverMock {})
 ///     .memory(SimpleMemory::new().into())
 ///     .build()
 ///     .expect("Error building ConversationalChain");
 /// ```
 ///
-pub struct ConversationalRetriverChainBuilder {
+pub struct ConversationalRetrieverChainBuilder {
     llm: Option<Box<dyn LLM>>,
-    retriver: Option<Box<dyn Retriever>>,
+    retriever: Option<Box<dyn Retriever>>,
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     combine_documents_chain: Option<Box<dyn Chain>>,
     condense_question_chian: Option<Box<dyn Chain>>,
@@ -52,11 +52,11 @@ pub struct ConversationalRetriverChainBuilder {
     input_key: String,
     output_key: String,
 }
-impl ConversationalRetriverChainBuilder {
+impl ConversationalRetrieverChainBuilder {
     pub fn new() -> Self {
-        ConversationalRetriverChainBuilder {
+        ConversationalRetrieverChainBuilder {
             llm: None,
-            retriver: None,
+            retriever: None,
             memory: None,
             combine_documents_chain: None,
             condense_question_chian: None,
@@ -67,8 +67,8 @@ impl ConversationalRetriverChainBuilder {
         }
     }
 
-    pub fn retriver<R: Into<Box<dyn Retriever>>>(mut self, retriver: R) -> Self {
-        self.retriver = Some(retriver.into());
+    pub fn retriever<R: Into<Box<dyn Retriever>>>(mut self, retriever: R) -> Self {
+        self.retriever = Some(retriever.into());
         self
     }
 
@@ -115,17 +115,17 @@ impl ConversationalRetriverChainBuilder {
         self
     }
 
-    pub fn build(mut self) -> Result<ConversationalRetriverChain, ChainError> {
+    pub fn build(mut self) -> Result<ConversationalRetrieverChain, ChainError> {
         if let Some(llm) = self.llm {
             let combine_documents_chain = StuffDocument::load_stuff_qa(llm.clone_box());
-            let condense_question_chian = CondenseQuetionGeneratorChain::new(llm.clone_box());
+            let condense_question_chian = CondenseQuestionGeneratorChain::new(llm.clone_box());
             self.combine_documents_chain = Some(Box::new(combine_documents_chain));
             self.condense_question_chian = Some(Box::new(condense_question_chian));
         }
 
-        let retriver = self
-            .retriver
-            .ok_or_else(|| ChainError::MissingObject("Retriver must be set".into()))?;
+        let retriever = self
+            .retriever
+            .ok_or_else(|| ChainError::MissingObject("Retriever must be set".into()))?;
 
         let memory = self
             .memory
@@ -141,8 +141,8 @@ impl ConversationalRetriverChainBuilder {
                 "Condense question chain must be set or llm must be set".into(),
             )
         })?;
-        Ok(ConversationalRetriverChain {
-            retriver,
+        Ok(ConversationalRetrieverChain {
+            retriever,
             memory,
             combine_documents_chain,
             condense_question_chian,

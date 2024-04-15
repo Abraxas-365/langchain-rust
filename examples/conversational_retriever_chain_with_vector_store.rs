@@ -1,11 +1,11 @@
-// To run this example execute: cargo run --example conversational_retriver_chain --features postgres
+// To run this example execute: cargo run --example conversational_retriever_chain --features postgres
 
 #[cfg(feature = "postgres")]
 use futures_util::StreamExt;
 #[cfg(feature = "postgres")]
 use langchain_rust::{
     add_documents,
-    chain::{Chain, ConversationalRetriverChainBuilder},
+    chain::{Chain, ConversationalRetrieverChainBuilder},
     embedding::openai::openai_embedder::OpenAiEmbedder,
     llm::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
@@ -51,11 +51,11 @@ async fn main() {
 
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
 
-    let chain = ConversationalRetriverChainBuilder::new()
+    let chain = ConversationalRetrieverChainBuilder::new()
         .llm(llm)
         .rephrase_question(true)
         .memory(SimpleMemory::new().into())
-        .retriver(Retriever::new(store, 5))
+        .retriever(Retriever::new(store, 5))
         .build()
         .expect("Error building ConversationalChain");
 
@@ -88,5 +88,5 @@ async fn main() {
 fn main() {
     println!("This example requires the 'postgres' feature to be enabled.");
     println!("Please run the command as follows:");
-    println!("cargo run --example conversational_retriver_chain --features postgres");
+    println!("cargo run --example conversational_retriever_chain --features postgres");
 }

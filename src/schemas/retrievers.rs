@@ -13,7 +13,7 @@ impl<R> From<R> for Box<dyn Retriever>
 where
     R: Retriever + 'static,
 {
-    fn from(retriver: R) -> Self {
-        Box::new(retriver)
+    fn from(retriever: R) -> Self {
+        Box::new(retriever)
     }
 }
