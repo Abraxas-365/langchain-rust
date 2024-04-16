@@ -23,8 +23,8 @@ use crate::{
 const CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_SOURCE_DOCUMENT_KEY: &str = "source_documents";
 const CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_GENERATED_QUESTION_KEY: &str = "generated_question";
 
-pub struct ConversationalRetriverChain {
-    pub(crate) retriver: Box<dyn Retriever>,
+pub struct ConversationalRetrieverChain {
+    pub(crate) retriever: Box<dyn Retriever>,
     pub memory: Arc<Mutex<dyn BaseMemory>>,
     pub(crate) combine_documents_chain: Box<dyn Chain>,
     pub(crate) condense_question_chian: Box<dyn Chain>,
@@ -33,7 +33,7 @@ pub struct ConversationalRetriverChain {
     pub(crate) input_key: String,  //Default is `question`
     pub(crate) output_key: String, //default is output
 }
-impl ConversationalRetriverChain {
+impl ConversationalRetrieverChain {
     async fn get_question(
         &self,
         history: &[Message],
@@ -67,7 +67,7 @@ impl ConversationalRetriverChain {
 }
 
 #[async_trait]
-impl Chain for ConversationalRetriverChain {
+impl Chain for ConversationalRetrieverChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let output = self.execute(input_variables).await?;
         let result: GenerateResult = serde_json::from_value(output[DEFAULT_RESULT_KEY].clone())?;
@@ -95,10 +95,10 @@ impl Chain for ConversationalRetriverChain {
         }
 
         let documents = self
-            .retriver
+            .retriever
             .get_relevant_documents(&question)
             .await
-            .map_err(|e| ChainError::RetreiverError(e.to_string()))?;
+            .map_err(|e| ChainError::RetrieverError(e.to_string()))?;
 
         let mut output = self
             .combine_documents_chain
@@ -166,10 +166,10 @@ impl Chain for ConversationalRetriverChain {
         let (question, _) = self.get_question(&history, &human_message.content).await?;
 
         let documents = self
-            .retriver
+            .retriever
             .get_relevant_documents(&question)
             .await
-            .map_err(|e| ChainError::RetreiverError(e.to_string()))?;
+            .map_err(|e| ChainError::RetrieverError(e.to_string()))?;
 
         let stream = self
             .combine_documents_chain
@@ -235,7 +235,7 @@ mod tests {
     use std::error::Error;
 
     use crate::{
-        chain::ConversationalRetriverChainBuilder,
+        chain::ConversationalRetrieverChainBuilder,
         llm::openai::{OpenAI, OpenAIModel},
         memory::SimpleMemory,
         prompt_args,
@@ -244,9 +244,9 @@ mod tests {
 
     use super::*;
 
-    struct RetriverTest {}
+    struct RetrieverTest {}
     #[async_trait]
-    impl Retriever for RetriverTest {
+    impl Retriever for RetrieverTest {
         async fn get_relevant_documents(
             &self,
             _question: &str,
@@ -276,9 +276,9 @@ mod tests {
     #[ignore]
     async fn test_invoke_retriever_conversational() {
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
-        let chain = ConversationalRetriverChainBuilder::new()
+        let chain = ConversationalRetrieverChainBuilder::new()
             .llm(llm)
-            .retriver(RetriverTest {})
+            .retriever(RetrieverTest {})
             .memory(SimpleMemory::new().into())
             .build()
             .expect("Error building ConversationalChain");

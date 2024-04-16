@@ -52,11 +52,11 @@ impl CondenseQuestionPromptBuilder {
     }
 }
 
-pub struct CondenseQuetionGeneratorChain {
+pub struct CondenseQuestionGeneratorChain {
     chain: LLMChain,
 }
 
-impl CondenseQuetionGeneratorChain {
+impl CondenseQuestionGeneratorChain {
     pub fn new<L: Into<Box<dyn LLM>>>(llm: L) -> Self {
         let condense_question_prompt_template =
             template_jinja2!(DEFAULTCONDENSEQUESTIONTEMPLATE, "chat_history", "question");
@@ -76,7 +76,7 @@ impl CondenseQuetionGeneratorChain {
 }
 
 #[async_trait]
-impl Chain for CondenseQuetionGeneratorChain {
+impl Chain for CondenseQuestionGeneratorChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         self.chain.call(input_variables).await
     }

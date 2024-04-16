@@ -3,16 +3,16 @@ use std::error::Error;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use langchain_rust::{
-    chain::{Chain, ConversationalRetriverChainBuilder},
+    chain::{Chain, ConversationalRetrieverChainBuilder},
     llm::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     prompt_args,
     schemas::{Document, Retriever},
 };
 
-struct RetriverMock {}
+struct RetrieverMock {}
 #[async_trait]
-impl Retriever for RetriverMock {
+impl Retriever for RetrieverMock {
     async fn get_relevant_documents(
         &self,
         _question: &str,
@@ -40,10 +40,10 @@ impl Retriever for RetriverMock {
 #[tokio::main]
 async fn main() {
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
-    let chain = ConversationalRetriverChainBuilder::new()
+    let chain = ConversationalRetrieverChainBuilder::new()
         .llm(llm)
         .rephrase_question(true)
-        .retriver(RetriverMock {})
+        .retriever(RetrieverMock {})
         .memory(SimpleMemory::new().into())
         .build()
         .expect("Error building ConversationalChain");

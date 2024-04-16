@@ -19,8 +19,8 @@ pub use stuff_documents::*;
 mod question_answering;
 pub use question_answering::*;
 
-mod conversational_retrival_qa;
-pub use conversational_retrival_qa::*;
+mod conversational_retrieval_qa;
+pub use conversational_retrieval_qa::*;
 
 mod error;
 pub use error::*;
