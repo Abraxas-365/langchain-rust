@@ -2,16 +2,22 @@
 
 #[cfg(feature = "opensearch")]
 use aws_config::SdkConfig;
+#[cfg(feature = "opensearch")]
 use langchain_rust::vectorstore::{VecStoreOptions, VectorStore};
 #[cfg(feature = "opensearch")]
 use langchain_rust::{
     embedding::openai::openai_embedder::OpenAiEmbedder, schemas::Document,
     vectorstore::opensearch::Store, vectorstore::opensearch::*,
 };
+#[cfg(feature = "opensearch")]
 use serde_json::json;
+#[cfg(feature = "opensearch")]
 use std::collections::HashMap;
+#[cfg(feature = "opensearch")]
 use std::error::Error;
+#[cfg(feature = "opensearch")]
 use std::io::Write;
+#[cfg(feature = "opensearch")]
 use url::Url;
 
 #[cfg(feature = "opensearch")]
