@@ -1,5 +1,6 @@
 // To run this example execute: cargo run --example vector_store_opensearch --features opensearch
 
+#[cfg(feature = "opensearch")]
 use aws_config::SdkConfig;
 use langchain_rust::vectorstore::{VecStoreOptions, VectorStore};
 #[cfg(feature = "opensearch")]
@@ -91,6 +92,7 @@ async fn main() {
     }
 }
 
+#[cfg(feature = "opensearch")]
 async fn add_documents_to_index(store: &Store) -> Result<Vec<String>, Box<dyn Error>> {
     let doc1 = Document::new(
         "langchain-rust is a port of the langchain python library to rust and was written in 2024.",
@@ -121,6 +123,7 @@ async fn add_documents_to_index(store: &Store) -> Result<Vec<String>, Box<dyn Er
     Ok(result)
 }
 
+#[cfg(feature = "opensearch")]
 #[allow(dead_code)]
 fn build_aoss_client(sdk_config: &SdkConfig, host: &str) -> Result<OpenSearch, Box<dyn Error>> {
     let opensearch_url = Url::parse(host)?;
