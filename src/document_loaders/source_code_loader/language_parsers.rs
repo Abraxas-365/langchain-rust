@@ -8,7 +8,13 @@ use tree_sitter::{Parser, Tree};
 #[derive(Display, Debug, Clone)]
 pub enum Language {
     Rust,
-    // TODO add more languages here
+    C,
+    Cpp,
+    Javascript,
+    // TODO add Typescript when tree-sitter-typescript-21+ is available,
+    // Typescript,
+    Go,
+    Python,
 }
 
 pub enum LanguageContentTypes {
@@ -68,6 +74,14 @@ pub fn get_language_by_filename(name: &String) -> Language {
     let extension = name.split('.').last().unwrap();
     match extension.to_lowercase().as_str() {
         "rs" => Language::Rust,
+        "c" => Language::C,
+        "cpp" => Language::Cpp,
+        "h" => Language::C,
+        "hpp" => Language::Cpp,
+        "js" => Language::Javascript,
+        // "ts" => Language::Typescript,
+        "go" => Language::Go,
+        "py" => Language::Python,
         _ => panic!("Unsupported language"),
     }
 }
@@ -76,6 +90,12 @@ fn get_language_parser(language: &Language) -> Parser {
     let mut parser = Parser::new();
     let lang = match language {
         Language::Rust => tree_sitter_rust::language(),
+        Language::C => tree_sitter_c::language(),
+        Language::Cpp => tree_sitter_cpp::language(),
+        Language::Javascript => tree_sitter_javascript::language(),
+        // Language::Typescript => tree_sitter_typescript::language_typescript(),
+        Language::Go => tree_sitter_go::language(),
+        Language::Python => tree_sitter_python::language(),
     };
     parser.set_language(&lang).expect("Error loading grammar");
     parser
