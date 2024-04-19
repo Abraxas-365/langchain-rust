@@ -1,4 +1,4 @@
 target/
 Cargo.lock
 .DS_Store
-
+.fastembed_cache
