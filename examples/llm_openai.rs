@@ -1,3 +1,5 @@
+use langchain_rust::llm::OpenAIConfig;
+
 use langchain_rust::{language_models::llm::LLM, llm::openai::OpenAI};
 
 #[tokio::main]
@@ -14,6 +16,6 @@ async fn main() {
             .with_api_key("<you_api_key>"), //if you want to set you open ai key,
     );
 
-    let response = ollama.invoke("hola").await.unwrap();
+    let response = open_ai.invoke("hola").await.unwrap();
     println!("{}", response);
 }
