@@ -99,4 +99,4 @@ tokio-test = "0.4.4"
 testcontainers = "0.15"
 
 [build-dependencies]
-cc = { version = "*", optional = true }
+cc = { version = "1", optional = true }
