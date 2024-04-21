@@ -62,7 +62,7 @@ gix = { version = "0.61.0", default-features = false, optional = true, features 
   "serde",
 ] }
 opensearch = { version = "2", optional = true, features = ["aws-auth"] }
-aws-config = { version = "1.1", optional = true, features = [
+aws-config = { version = "1.2", optional = true, features = [
   "behavior-version-latest",
 ] }
 glob = "0.3.1"
