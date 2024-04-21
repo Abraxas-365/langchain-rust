@@ -75,6 +75,7 @@ tree-sitter-javascript = { version = "0.21", optional = true }
 tree-sitter-c = { version = "0.21", optional = true }
 tree-sitter-go = { version = "0.21", optional = true }
 tree-sitter-python = { version = "0.21", optional = true }
+qdrant-client = {version = "1.8.0", optional = true }
 
 [features]
 default = []
@@ -93,6 +94,7 @@ surrealdb = ["dep:surrealdb"]
 sqlite = ["sqlx"]
 git = ["gix"]
 opensearch = ["dep:opensearch", "aws-config"]
+qdrant = ["qdrant-client", "uuid"]
 
 [dev-dependencies]
 tokio-test = "0.4.4"

@@ -34,6 +34,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
   - [x] [OpenSearch](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_opensearch.rs)
   - [x] [Postgres](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_postgres.rs)
+  - [x] [Qdrant](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_qdrant.rs)
   - [x] [Sqlite](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_sqlite.rs)
   - [x] [SurrealDB](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_surrealdb/src/main.rs)
 
@@ -219,7 +220,7 @@ cargo add langchain-rust
 cargo add langchain-rust --features sqlite
 ```
 
-Download additional sqlite_vss libraries from https://github.com/asg017/sqlite-vss
+Download additional sqlite_vss libraries from <https://github.com/asg017/sqlite-vss>
 
 #### With Postgres
 
@@ -231,6 +232,12 @@ cargo add langchain-rust --features postgres
 
 ```bash
 cargo add langchain-rust --features surrealdb
+```
+
+#### With Qdrant
+
+```bash
+cargo add langchain-rust --features qdrant
 ```
 
 Please remember to replace the feature flags `sqlite`, `postgres` or `surrealdb` based on your

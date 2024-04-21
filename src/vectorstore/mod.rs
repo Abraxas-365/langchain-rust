@@ -12,6 +12,9 @@ pub mod surrealdb;
 #[cfg(feature = "opensearch")]
 pub mod opensearch;
 
+#[cfg(feature = "qdrant")]
+pub mod qdrant;
+
 mod vectorstore;
 
 pub use options::*;
