@@ -1,4 +1,4 @@
-// To run this example execute: cargo run --example slq_chain --features postgres
+// To run this example execute: cargo run --example sql_chain --features postgres
 
 #[cfg(feature = "postgres")]
 use langchain_rust::{
