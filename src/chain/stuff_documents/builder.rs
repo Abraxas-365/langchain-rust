@@ -41,6 +41,7 @@ impl StuffDocumentBuilder {
         self
     }
 
+    ///If you want to add a custom prompt,keep in mind which variables are obligatory.
     pub fn prompt<P: Into<Box<dyn FormatPrompter>>>(mut self, prompt: P) -> Self {
         self.prompt = Some(prompt.into());
         self
