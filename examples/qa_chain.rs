@@ -9,7 +9,11 @@ use langchain_rust::{
 async fn main() {
     let llm = OpenAI::default();
 
-    let chain = StuffDocumentBuilder::new().llm(llm).build().unwrap();
+    let chain = StuffDocumentBuilder::new()
+        .llm(llm)
+        // .prompt() you can add a custom prompt if you want
+        .build()
+        .unwrap();
     let input = prompt_args! {
         "input_documents"=>vec![
             Document::new(format!(

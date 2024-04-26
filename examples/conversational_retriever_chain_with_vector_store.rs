@@ -17,6 +17,11 @@ use langchain_rust::{
 #[cfg(feature = "postgres")]
 #[tokio::main]
 async fn main() {
+    use langchain_rust::{
+        fmt_message, fmt_template, message_formatter, prompt::HumanMessagePromptTemplate,
+        schemas::Message, template_jinja2,
+    };
+
     let documents = vec![
         Document::new(format!(
             "\nQuestion: {}\nAnswer: {}\n",
@@ -50,12 +55,30 @@ async fn main() {
     });
 
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
+    let prompt= message_formatter![
+                    fmt_message!(Message::new_system_message("You are a helpful assistant")),
+                    fmt_template!(HumanMessagePromptTemplate::new(
+                    template_jinja2!("
+Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+
+{{context}}
+
+Question:{{question}}
+Helpful Answer:
+
+        ",
+                    "context","question")))
+
+                ];
 
     let chain = ConversationalRetrieverChainBuilder::new()
         .llm(llm)
         .rephrase_question(true)
         .memory(SimpleMemory::new().into())
         .retriever(Retriever::new(store, 5))
+        //If you want to sue the default prompt remove the .prompt()
+        //Keep in mind if you want to change the prmpt; this chain need the {{context}} variable
+        .prompt(prompt)
         .build()
         .expect("Error building ConversationalChain");
 

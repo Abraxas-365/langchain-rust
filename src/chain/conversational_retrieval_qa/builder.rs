@@ -2,9 +2,12 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
-    chain::{Chain, ChainError, CondenseQuestionGeneratorChain, StuffDocument, DEFAULT_OUTPUT_KEY},
+    chain::{
+        Chain, ChainError, CondenseQuestionGeneratorChain, StuffDocumentBuilder, DEFAULT_OUTPUT_KEY,
+    },
     language_models::llm::LLM,
     memory::SimpleMemory,
+    prompt::FormatPrompter,
     schemas::{BaseMemory, Retriever},
 };
 
@@ -47,6 +50,7 @@ pub struct ConversationalRetrieverChainBuilder {
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     combine_documents_chain: Option<Box<dyn Chain>>,
     condense_question_chian: Option<Box<dyn Chain>>,
+    prompt: Option<Box<dyn FormatPrompter>>,
     rephrase_question: bool,
     return_source_documents: bool,
     input_key: String,
@@ -60,6 +64,7 @@ impl ConversationalRetrieverChainBuilder {
             memory: None,
             combine_documents_chain: None,
             condense_question_chian: None,
+            prompt: None,
             rephrase_question: true,
             return_source_documents: true,
             input_key: CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_INPUT_KEY.to_string(),
@@ -69,6 +74,11 @@ impl ConversationalRetrieverChainBuilder {
 
     pub fn retriever<R: Into<Box<dyn Retriever>>>(mut self, retriever: R) -> Self {
         self.retriever = Some(retriever.into());
+        self
+    }
+
+    pub fn prompt<P: Into<Box<dyn FormatPrompter>>>(mut self, prompt: P) -> Self {
+        self.prompt = Some(prompt.into());
         self
     }
 
@@ -117,7 +127,13 @@ impl ConversationalRetrieverChainBuilder {
 
     pub fn build(mut self) -> Result<ConversationalRetrieverChain, ChainError> {
         if let Some(llm) = self.llm {
-            let combine_documents_chain = StuffDocument::load_stuff_qa(llm.clone_box());
+            let combine_documents_chain = {
+                let mut builder = StuffDocumentBuilder::new().llm(llm.clone_box());
+                if let Some(prompt) = self.prompt {
+                    builder = builder.prompt(prompt);
+                }
+                builder.build()?
+            };
             let condense_question_chian = CondenseQuestionGeneratorChain::new(llm.clone_box());
             self.combine_documents_chain = Some(Box::new(combine_documents_chain));
             self.condense_question_chian = Some(Box::new(condense_question_chian));
