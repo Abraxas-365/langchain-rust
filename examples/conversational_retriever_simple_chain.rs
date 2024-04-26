@@ -4,10 +4,14 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use langchain_rust::{
     chain::{Chain, ConversationalRetrieverChainBuilder},
+    fmt_message, fmt_template,
     llm::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
+    message_formatter,
+    prompt::HumanMessagePromptTemplate,
     prompt_args,
-    schemas::{Document, Retriever},
+    schemas::{Document, Message, Retriever},
+    template_jinja2,
 };
 
 struct RetrieverMock {}
@@ -40,11 +44,29 @@ impl Retriever for RetrieverMock {
 #[tokio::main]
 async fn main() {
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
+    let prompt=message_formatter![
+                    fmt_message!(Message::new_system_message("You are a helpful assistant")),
+                    fmt_template!(HumanMessagePromptTemplate::new(
+                    template_jinja2!("
+Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+
+{{context}}
+
+Question:{{question}}
+Helpful Answer:
+
+        ",
+                    "context","question")))
+
+                ];
     let chain = ConversationalRetrieverChainBuilder::new()
         .llm(llm)
         .rephrase_question(true)
         .retriever(RetrieverMock {})
         .memory(SimpleMemory::new().into())
+        //If you want to sue the default prompt remove the .prompt()
+        //Keep in mind if you want to change the prmpt; this chain need the {{context}} variable
+        .prompt(prompt)
         .build()
         .expect("Error building ConversationalChain");
 
