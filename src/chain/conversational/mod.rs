@@ -20,6 +20,7 @@ use super::{chain_trait::Chain, llm_chain::LLMChain, ChainError};
 pub mod builder;
 mod prompt;
 
+///This is only usefull when you dont modify the original prompt
 pub struct ConversationalChainPromptBuilder {
     input: String,
 }
