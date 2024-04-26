@@ -3,14 +3,14 @@ use std::io::{stdout, Write};
 use futures_util::StreamExt;
 use langchain_rust::{
     chain::{builder::ConversationalChainBuilder, Chain},
-    fmt_message, fmt_template,
+    // fmt_message, fmt_template,
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
-    message_formatter,
-    prompt::HumanMessagePromptTemplate,
+    // message_formatter,
+    // prompt::HumanMessagePromptTemplate,
     prompt_args,
-    schemas::Message,
-    template_fstring,
+    // schemas::Message,
+    // template_fstring,
 };
 
 #[tokio::main]

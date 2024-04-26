@@ -1,17 +1,17 @@
 use langchain_rust::{
-    chain::{Chain, StuffDocument},
+    chain::{Chain, StuffDocumentBuilder},
     llm::openai::OpenAI,
+    prompt_args,
     schemas::Document,
 };
 
 #[tokio::main]
 async fn main() {
     let llm = OpenAI::default();
-    let chain = StuffDocument::load_stuff_qa(llm);
-    let input = chain
-        .qa_prompt_builder()
-        //You could also get the documents form a retriver
-        .documents(&[
+
+    let chain = StuffDocumentBuilder::new().llm(llm).build().unwrap();
+    let input = prompt_args! {
+        "input_documents"=>vec![
             Document::new(format!(
                 "\nQuestion: {}\nAnswer: {}\n",
                 "Which is the favorite text editor of luis", "Nvim"
@@ -20,9 +20,9 @@ async fn main() {
                 "\nQuestion: {}\nAnswer: {}\n",
                 "How old is Luis", "24"
             )),
-        ])
-        .question("How old is luis and whats his favorite text editor")
-        .build();
+        ],
+        "question"=>"How old is luis and whats his favorite text editor"
+    };
 
     let ouput = chain.invoke(input).await.unwrap();
 

@@ -42,6 +42,7 @@ impl StuffDocument {
             .join(&self.separator)
     }
 
+    ///Inly use thi if you use the deafult prompt
     pub fn qa_prompt_builder<'a>(&self) -> StuffQAPromptBuilder<'a> {
         StuffQAPromptBuilder::new()
     }
