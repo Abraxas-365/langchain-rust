@@ -46,7 +46,7 @@ impl Claude {
         Self {
             model: ClaudeModel::Claude3pus20240229.to_string(),
             options: CallOptions::default(),
-            api_key: std::env::var("CLOUDE_API_KEY").unwrap_or_default(),
+            api_key: std::env::var("CLAUDE_API_KEY").unwrap_or_default(),
             anthropic_version: "2023-06-01".to_string(),
         }
     }
