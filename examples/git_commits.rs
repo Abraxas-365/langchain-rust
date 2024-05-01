@@ -43,18 +43,18 @@ async fn main() {
 
     let git_commit_loader = GitCommitLoader::from_path(repo_path).unwrap();
 
-    let documents = git_commit_loader
-        .load()
-        .await
-        .unwrap()
-        .map(|x| x.unwrap())
-        .collect::<Vec<_>>()
-        .await;
-
-    store
-        .add_documents(&documents, &VecStoreOptions::default())
-        .await
-        .unwrap();
+    let mut stream = git_commit_loader.load().await.unwrap();
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok(document) => {
+                store
+                    .add_documents(&[document], &VecStoreOptions::default())
+                    .await
+                    .unwrap();
+            }
+            Err(e) => panic!("Error fetching git commits {:?}", e),
+        }
+    }
 
     // Ask for user input
     print!("Query> ");

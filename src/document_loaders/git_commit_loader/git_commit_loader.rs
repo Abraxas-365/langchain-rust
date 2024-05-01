@@ -5,7 +5,6 @@ use crate::document_loaders::{process_doc_stream, LoaderError};
 use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
 use async_trait::async_trait;
 use futures::Stream;
-use futures_util::stream;
 use gix::ThreadSafeRepository;
 use serde_json::Value;
 
@@ -35,34 +34,42 @@ impl Loader for GitCommitLoader {
     > {
         let repo = self.repo.to_thread_local();
 
-        let revwalk = repo
-            .rev_walk(Some(repo.head_id().unwrap().detach()))
-            .all()
-            .unwrap()
-            .filter_map(Result::ok);
+        // Since commits_iter can't be shared across thread safely, use channels as a workaround.
+        let (tx, rx) = flume::bounded(1);
 
-        let commits_iter = revwalk.map(|oid| {
-            let commit = oid.object().unwrap();
-            let commit_id = commit.id;
-            let author = commit.author().unwrap();
-            let email = author.email.to_string();
-            let name = author.name.to_string();
-            let message = format!("{}", commit.message().unwrap().title);
+        tokio::spawn(async move {
+            let commits_iter = repo
+                .rev_walk(Some(repo.head_id().unwrap().detach()))
+                .all()
+                .unwrap()
+                .filter_map(Result::ok)
+                .map(|oid| {
+                    let commit = oid.object().unwrap();
+                    let commit_id = commit.id;
+                    let author = commit.author().unwrap();
+                    let email = author.email.to_string();
+                    let name = author.name.to_string();
+                    let message = format!("{}", commit.message().unwrap().title);
 
-            let mut document = Document::new(format!(
-                "commit {commit_id}\nAuthor: {name} <{email}>\n\n    {message}"
-            ));
-            let mut metadata = HashMap::new();
-            metadata.insert("commit".to_string(), Value::from(commit_id.to_string()));
+                    let mut document = Document::new(format!(
+                        "commit {commit_id}\nAuthor: {name} <{email}>\n\n    {message}"
+                    ));
+                    let mut metadata = HashMap::new();
+                    metadata.insert("commit".to_string(), Value::from(commit_id.to_string()));
 
-            document.metadata = metadata;
-            Ok(document)
+                    document.metadata = metadata;
+                    Ok(document)
+                });
+
+            for document in commits_iter {
+                if tx.send(document).is_err() {
+                    // stream might have been dropped
+                    break;
+                }
+            }
         });
 
-        // TODO: This is a temporary solution to collect all the docs as can't share it between threads
-        let documents = commits_iter.collect::<Vec<_>>();
-
-        Ok(Box::pin(stream::iter(documents)))
+        Ok(Box::pin(rx.into_stream()))
     }
 
     async fn load_and_split<TS: TextSplitter + 'static>(
