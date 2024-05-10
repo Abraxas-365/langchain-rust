@@ -78,7 +78,7 @@ impl Loader for SourceCodeLoader {
                         }
                     };
                     let mut content = String::new();
-                file.read_to_string(&mut content).unwrap();
+                    file.read_to_string(&mut content).unwrap();
                     let language = get_language_by_filename(&filename);
                     let mut parser = LanguageParser::from_language(language).with_parser_option(self.parser_option.clone());
                     let docs = parser.parse_code(&content);

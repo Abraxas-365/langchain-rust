@@ -11,8 +11,7 @@ pub enum Language {
     C,
     Cpp,
     Javascript,
-    // TODO add Typescript when tree-sitter-typescript-21+ is available,
-    // Typescript,
+    Typescript,
     Go,
     Python,
 }
@@ -79,7 +78,8 @@ pub fn get_language_by_filename(name: &String) -> Language {
         "h" => Language::C,
         "hpp" => Language::Cpp,
         "js" => Language::Javascript,
-        // "ts" => Language::Typescript,
+        "ts" => Language::Typescript,
+        "tsx" => Language::Typescript,
         "go" => Language::Go,
         "py" => Language::Python,
         _ => panic!("Unsupported language"),
@@ -93,7 +93,7 @@ fn get_language_parser(language: &Language) -> Parser {
         Language::C => tree_sitter_c::language(),
         Language::Cpp => tree_sitter_cpp::language(),
         Language::Javascript => tree_sitter_javascript::language(),
-        // Language::Typescript => tree_sitter_typescript::language_typescript(),
+        Language::Typescript => tree_sitter_typescript::language_typescript(),
         Language::Go => tree_sitter_go::language(),
         Language::Python => tree_sitter_python::language(),
     };
