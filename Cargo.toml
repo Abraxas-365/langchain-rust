@@ -101,7 +101,7 @@ qdrant = ["qdrant-client", "uuid"]
 
 [dev-dependencies]
 tokio-test = "0.4.4"
-testcontainers = "0.15"
+testcontainers = "0.16"
 
 [build-dependencies]
 cc = { version = "1", optional = true }
