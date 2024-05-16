@@ -1,3 +1,4 @@
+use text_splitter::ChunkConfigError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -17,6 +18,15 @@ pub enum TextSplitterError {
     #[error("Tokenizer creation failed due to invalid model")]
     InvalidModel,
 
+    #[error("Invalid chunk overlap and size")]
+    InvalidSplitterOptions,
+
     #[error("Error: {0}")]
     OtherError(String),
+}
+
+impl From<ChunkConfigError> for TextSplitterError {
+    fn from(_: ChunkConfigError) -> Self {
+        Self::InvalidSplitterOptions
+    }
 }
