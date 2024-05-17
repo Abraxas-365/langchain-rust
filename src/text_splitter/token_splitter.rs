@@ -22,6 +22,7 @@ impl TokenSplitter {
         }
     }
 
+    #[deprecated = "Use `SplitterOptions::get_tokenizer_from_str` instead"]
     pub fn get_tokenizer_from_str(&self, s: &str) -> Option<Tokenizer> {
         match s.to_lowercase().as_str() {
             "cl100k_base" => Some(Tokenizer::Cl100kBase),
