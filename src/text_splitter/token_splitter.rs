@@ -1,14 +1,12 @@
 use async_trait::async_trait;
-use tiktoken_rs::{get_bpe_from_model, get_bpe_from_tokenizer, tokenizer::Tokenizer, CoreBPE};
+use text_splitter::ChunkConfig;
+use tiktoken_rs::tokenizer::Tokenizer;
 
 use super::{SplitterOptions, TextSplitter, TextSplitterError};
 
 #[derive(Debug, Clone)]
 pub struct TokenSplitter {
-    chunk_size: usize,
-    model_name: String,
-    encoding_name: String,
-    trim_chunks: bool,
+    splitter_options: SplitterOptions,
 }
 
 impl Default for TokenSplitter {
@@ -20,13 +18,11 @@ impl Default for TokenSplitter {
 impl TokenSplitter {
     pub fn new(options: SplitterOptions) -> TokenSplitter {
         TokenSplitter {
-            chunk_size: options.chunk_size,
-            model_name: options.model_name,
-            encoding_name: options.encoding_name,
-            trim_chunks: options.trim_chunks,
+            splitter_options: options,
         }
     }
 
+    #[deprecated = "Use `SplitterOptions::get_tokenizer_from_str` instead"]
     pub fn get_tokenizer_from_str(&self, s: &str) -> Option<Tokenizer> {
         match s.to_lowercase().as_str() {
             "cl100k_base" => Some(Tokenizer::Cl100kBase),
@@ -37,30 +33,15 @@ impl TokenSplitter {
             _ => None,
         }
     }
-
-    fn split(&self, text: &str, tokenizer: CoreBPE) -> Vec<String> {
-        let splitter =
-            text_splitter::TextSplitter::new(tokenizer).with_trim_chunks(self.trim_chunks);
-        splitter
-            .chunks(text, self.chunk_size)
-            .map(|x| x.to_string())
-            .collect()
-    }
 }
 
 #[async_trait]
 impl TextSplitter for TokenSplitter {
     async fn split_text(&self, text: &str) -> Result<Vec<String>, TextSplitterError> {
-        let tk = if !self.encoding_name.is_empty() {
-            let tokenizer = self
-                .get_tokenizer_from_str(&self.encoding_name)
-                .ok_or(TextSplitterError::TokenizerNotFound)?;
-
-            get_bpe_from_tokenizer(tokenizer).map_err(|_| TextSplitterError::InvalidTokenizer)?
-        } else {
-            get_bpe_from_model(&self.model_name).map_err(|_| TextSplitterError::InvalidModel)?
-        };
-        let text = self.split(text, tk);
-        Ok(text)
+        let chunk_config = ChunkConfig::try_from(&self.splitter_options)?;
+        Ok(text_splitter::TextSplitter::new(chunk_config)
+            .chunks(text)
+            .map(|x| x.to_string())
+            .collect())
     }
 }
