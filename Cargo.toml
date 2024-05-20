@@ -7,12 +7,7 @@ publish = true
 repository = "https://github.com/Abraxas-365/langchain-rust"
 license = "MIT"
 description = "LangChain for Rust, the easiest way to write LLM-based programs in Rust"
-keywords = [
-  "chain",
-  "chatgpt",
-  "llm",
-  "langchain",
-] # List of keywords related to your crate
+keywords = ["chain", "chatgpt", "llm", "langchain"]
 documentation = "https://langchain-rust.sellie.tech/get-started/quickstart"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -32,16 +27,16 @@ async-openai = "0.21.0"
 mockito = "1.4.0"
 tiktoken-rs = "0.5.8"
 sqlx = { version = "0.7.4", default-features = false, features = [
-  "postgres",
-  "sqlite",
-  "runtime-tokio-native-tls",
-  "json",
-  "uuid",
+    "postgres",
+    "sqlite",
+    "runtime-tokio-native-tls",
+    "json",
+    "uuid",
 ], optional = true }
 uuid = { version = "1.8.0", features = ["v4"], optional = true }
 pgvector = { version = "0.3.2", features = [
-  "postgres",
-  "sqlx",
+    "postgres",
+    "sqlx",
 ], optional = true }
 text-splitter = { version = "0.13", features = ["tiktoken-rs", "markdown"] }
 surrealdb = { version = "1.4.2", optional = true, default-features = false }
@@ -58,13 +53,13 @@ url = "2.5.0"
 fastembed = "3"
 flume = { version = "0.11.0", optional = true }
 gix = { version = "0.62.0", default-features = false, optional = true, features = [
-  "parallel",
-  "revision",
-  "serde",
+    "parallel",
+    "revision",
+    "serde",
 ] }
 opensearch = { version = "2", optional = true, features = ["aws-auth"] }
 aws-config = { version = "1.2", optional = true, features = [
-  "behavior-version-latest",
+    "behavior-version-latest",
 ] }
 glob = "0.3.1"
 strum_macros = "0.26.2"
@@ -77,27 +72,29 @@ tree-sitter-c = { version = "0.21", optional = true }
 tree-sitter-go = { version = "0.21", optional = true }
 tree-sitter-python = { version = "0.21", optional = true }
 tree-sitter-typescript = { version = "0.21", optional = true }
-qdrant-client = {version = "1.8.0", optional = true }
+qdrant-client = { version = "1.8.0", optional = true }
+ollama-rs = { version = "0.1.9", optional = true }
 
 [features]
 default = []
 postgres = ["pgvector", "sqlx", "uuid"]
 tree-sitter = [
-  "cc",
-  "dep:tree-sitter",
-  "dep:tree-sitter-rust",
-  "dep:tree-sitter-cpp",
-  "dep:tree-sitter-javascript",
-  "dep:tree-sitter-c",
-  "dep:tree-sitter-go",
-  "dep:tree-sitter-python",
-  "dep:tree-sitter-typescript",
+    "cc",
+    "dep:tree-sitter",
+    "dep:tree-sitter-rust",
+    "dep:tree-sitter-cpp",
+    "dep:tree-sitter-javascript",
+    "dep:tree-sitter-c",
+    "dep:tree-sitter-go",
+    "dep:tree-sitter-python",
+    "dep:tree-sitter-typescript",
 ]
 surrealdb = ["dep:surrealdb"]
 sqlite = ["sqlx"]
 git = ["gix", "flume"]
 opensearch = ["dep:opensearch", "aws-config"]
 qdrant = ["qdrant-client", "uuid"]
+ollama = ['ollama-rs']
 
 [dev-dependencies]
 tokio-test = "0.4.4"

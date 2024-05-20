@@ -1,10 +1,9 @@
-#![allow(dead_code)]
+use std::sync::Arc;
 
 use crate::embedding::{embedder_trait::Embedder, EmbedderError};
 use async_trait::async_trait;
-use reqwest::{Client, Url};
+use ollama_rs::{generation::options::GenerationOptions, Ollama};
 use serde::Deserialize;
-use serde_json::json;
 
 #[derive(Debug, Deserialize)]
 struct EmbeddingResponse {
@@ -13,15 +12,24 @@ struct EmbeddingResponse {
 
 #[derive(Debug)]
 pub struct OllamaEmbedder {
+    pub(crate) client: Arc<Ollama>,
     pub(crate) model: String,
-    pub(crate) base_url: String,
+    pub(crate) options: Option<GenerationOptions>,
 }
 
+/// [nomic-embed-text](https://ollama.com/library/nomic-embed-text) is a 137M parameters, 274MB model.
+const DEFAULT_MODEL: &str = "nomic-embed-text";
+
 impl OllamaEmbedder {
-    pub fn new<S: Into<String>>(model: S, base_url: S) -> Self {
+    pub fn new<S: Into<String>>(
+        client: Arc<Ollama>,
+        model: S,
+        options: Option<GenerationOptions>,
+    ) -> Self {
         OllamaEmbedder {
+            client,
             model: model.into(),
-            base_url: base_url.into(),
+            options,
         }
     }
 
@@ -30,17 +38,16 @@ impl OllamaEmbedder {
         self
     }
 
-    pub fn with_api_base<S: Into<String>>(mut self, base_url: S) -> Self {
-        self.base_url = base_url.into();
+    pub fn with_options(mut self, options: GenerationOptions) -> Self {
+        self.options = Some(options);
         self
     }
 }
 
 impl Default for OllamaEmbedder {
     fn default() -> Self {
-        let model = String::from("nomic-embed-text");
-        let base_url = String::from("http://localhost:11434");
-        OllamaEmbedder::new(model, base_url)
+        let client = Arc::new(Ollama::default());
+        OllamaEmbedder::new(client, String::from(DEFAULT_MODEL), None)
     }
 }
 
@@ -48,29 +55,16 @@ impl Default for OllamaEmbedder {
 impl Embedder for OllamaEmbedder {
     async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, EmbedderError> {
         log::debug!("Embedding documents: {:?}", documents);
-        let client = Client::new();
-        let url = Url::parse(&format!("{}{}", self.base_url, "/api/embeddings"))?;
 
         let mut embeddings = Vec::with_capacity(documents.len());
 
         for doc in documents {
-            let res = client
-                .post(url.clone())
-                .json(&json!({
-                    "prompt": doc,
-                    "model": &self.model,
-                }))
-                .send()
+            let res = self
+                .client
+                .generate_embeddings(self.model.clone(), doc.clone(), self.options.clone())
                 .await?;
-            if res.status() != 200 {
-                log::error!("Error from OLLAMA: {}", &res.status());
-                return Err(EmbedderError::HttpError {
-                    status_code: res.status(),
-                    error_message: format!("Received non-200 response: {}", res.status()),
-                });
-            }
-            let data: EmbeddingResponse = res.json().await?;
-            embeddings.push(data.embedding);
+
+            embeddings.push(res.embeddings);
         }
 
         Ok(embeddings)
@@ -78,26 +72,12 @@ impl Embedder for OllamaEmbedder {
 
     async fn embed_query(&self, text: &str) -> Result<Vec<f64>, EmbedderError> {
         log::debug!("Embedding query: {:?}", text);
-        let client = Client::new();
-        let url = Url::parse(&format!("{}{}", self.base_url, "/api/embeddings"))?;
 
-        let res = client
-            .post(url)
-            .json(&json!({
-                "prompt": text,
-                "model": &self.model,
-            }))
-            .send()
+        let res = self
+            .client
+            .generate_embeddings(self.model.clone(), text.to_string(), self.options.clone())
             .await?;
 
-        if res.status() != 200 {
-            log::error!("Error from OLLAMA: {}", &res.status());
-            return Err(EmbedderError::HttpError {
-                status_code: res.status(),
-                error_message: format!("Received non-200 response: {}", res.status()),
-            });
-        }
-        let data: EmbeddingResponse = res.json().await?;
-        Ok(data.embedding)
+        Ok(res.embeddings)
     }
 }
