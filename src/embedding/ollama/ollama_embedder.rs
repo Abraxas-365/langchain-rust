@@ -2,17 +2,11 @@ use std::sync::Arc;
 
 use crate::embedding::{embedder_trait::Embedder, EmbedderError};
 use async_trait::async_trait;
-use ollama_rs::{generation::options::GenerationOptions, Ollama};
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
-struct EmbeddingResponse {
-    embedding: Vec<f64>,
-}
+use ollama_rs::{generation::options::GenerationOptions, Ollama as OllamaClient};
 
 #[derive(Debug)]
 pub struct OllamaEmbedder {
-    pub(crate) client: Arc<Ollama>,
+    pub(crate) client: Arc<OllamaClient>,
     pub(crate) model: String,
     pub(crate) options: Option<GenerationOptions>,
 }
@@ -22,11 +16,11 @@ const DEFAULT_MODEL: &str = "nomic-embed-text";
 
 impl OllamaEmbedder {
     pub fn new<S: Into<String>>(
-        client: Arc<Ollama>,
+        client: Arc<OllamaClient>,
         model: S,
         options: Option<GenerationOptions>,
     ) -> Self {
-        OllamaEmbedder {
+        Self {
             client,
             model: model.into(),
             options,
@@ -46,8 +40,8 @@ impl OllamaEmbedder {
 
 impl Default for OllamaEmbedder {
     fn default() -> Self {
-        let client = Arc::new(Ollama::default());
-        OllamaEmbedder::new(client, String::from(DEFAULT_MODEL), None)
+        let client = Arc::new(OllamaClient::default());
+        Self::new(client, String::from(DEFAULT_MODEL), None)
     }
 }
 
@@ -79,5 +73,22 @@ impl Embedder for OllamaEmbedder {
             .await?;
 
         Ok(res.embeddings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_ollama_embed() {
+        let ollama = OllamaEmbedder::default()
+            .with_model("nomic-embed-text")
+            .with_options(GenerationOptions::default().temperature(0.5));
+
+        let response = ollama.embed_query("Why is the sky blue?").await.unwrap();
+
+        assert_eq!(response.len(), 768);
     }
 }
