@@ -178,8 +178,8 @@ impl LLM for Claude {
             .build()?;
 
         // Instead of sending the request directly, return a stream wrapper
-        let stream = client.execute(request).await?.bytes_stream();
-
+        let stream = client.execute(request).await?;
+        let stream = stream.bytes_stream();
         // Process each chunk as it arrives
         let processed_stream = stream.then(move |result| {
             async move {

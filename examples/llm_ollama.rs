@@ -1,12 +1,8 @@
-use langchain_rust::{
-    language_models::llm::LLM,
-    llm::{ollama::openai::OllamaConfig, openai::OpenAI},
-};
+use langchain_rust::{language_models::llm::LLM, llm::ollama::client::Ollama};
 
 #[tokio::main]
 async fn main() {
-    // since Ollama is OpenAI compatible, you can use it as below:
-    let ollama = OpenAI::new(OllamaConfig::default()).with_model("llama2");
+    let ollama = Ollama::default().with_model("llama3");
 
     let response = ollama.invoke("hola").await.unwrap();
     println!("{}", response);

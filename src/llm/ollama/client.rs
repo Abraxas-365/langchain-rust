@@ -1,16 +1,15 @@
 use std::sync::Arc;
 
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
+    language_models::{llm::LLM, GenerateResult, LLMError, TokenUsage},
     schemas::{Message, MessageType, StreamData},
 };
 use async_trait::async_trait;
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use ollama_rs::{
     error::OllamaError,
     generation::{
         chat::{request::ChatMessageRequest, ChatMessage, MessageRole},
-        completion::request::GenerationRequest,
         options::GenerationOptions,
     },
     Ollama as OllamaClient,
@@ -70,8 +69,8 @@ impl From<&Message> for ChatMessage {
 impl From<MessageType> for MessageRole {
     fn from(message_type: MessageType) -> Self {
         match message_type {
-            MessageType::AIMessage => MessageRole::Assistant, // TODO: !!!
-            MessageType::ToolMessage => MessageRole::Assistant, // TODO: !!!
+            MessageType::AIMessage => MessageRole::Assistant,
+            MessageType::ToolMessage => MessageRole::Assistant,
             MessageType::SystemMessage => MessageRole::System,
             MessageType::HumanMessage => MessageRole::User,
         }
@@ -87,16 +86,6 @@ impl Default for Ollama {
 
 #[async_trait]
 impl LLM for Ollama {
-    async fn stream(
-        &self,
-        messages: &[Message],
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
-        let request = self.generate_request(messages);
-        let result = self.client.send_chat_messages_stream(request).await?;
-
-        unimplemented!()
-    }
-
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         let request = self.generate_request(messages);
         let result = self.client.send_chat_messages(request).await?;
@@ -117,5 +106,25 @@ impl LLM for Ollama {
         });
 
         Ok(GenerateResult { tokens, generation })
+    }
+
+    async fn stream(
+        &self,
+        messages: &[Message],
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
+        let request = self.generate_request(messages);
+        let result = self.client.send_chat_messages_stream(request).await?;
+
+        // Err(OllamaError::from("Stream error".to_string()).into())
+        // let stream = result
+        //     .map(|data| {
+        //         data.map(|d| StreamData {
+        //             content: "???".to_string(),
+        //             value: serde_json::Value::default(),
+        //         })
+        //     })
+        //     .collect();
+
+        todo!("not sure about how to map the stream")
     }
 }

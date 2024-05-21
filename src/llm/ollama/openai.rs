@@ -12,8 +12,8 @@ const OLLAMA_API_BASE: &str = "http://localhost:11434/v1";
 /// ## Example
 ///
 /// ```rs
-/// let ollama = OpenAI::new(OllamaConfig::default()).with_model("llama2");
-/// let response = ollama.invoke("hola").await.unwrap();
+/// let ollama = OpenAI::new(OllamaConfig::default()).with_model("llama3");
+/// let response = ollama.invoke("Say hello!").await.unwrap();
 /// ```
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
