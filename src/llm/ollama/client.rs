@@ -14,6 +14,7 @@ use ollama_rs::{
 };
 use std::pin::Pin;
 use std::sync::Arc;
+use tokio_stream::StreamExt;
 
 #[derive(Debug, Clone)]
 pub struct Ollama {
@@ -113,13 +114,18 @@ impl LLM for Ollama {
         let request = self.generate_request(messages);
         let result = self.client.send_chat_messages_stream(request).await?;
 
-        let stream = result
-            .map_ok(|data| StreamData {
-                // value: serde_json::to_value(data).map_err(LLMError::from),
-                value: serde_json::Value::default(),
-                content: data.message.unwrap().content,
-            })
-            .map_err(|_| OllamaError::from("Ollama stream error".to_string()).into());
+        let stream = result.map(|data| match data {
+            Ok(data) => match data.message {
+                Some(message) => Ok(StreamData::new(
+                    serde_json::to_value(message.clone()).unwrap_or_default(),
+                    message.content,
+                )),
+                None => Err(LLMError::ContentNotFound(
+                    "No message in response".to_string(),
+                )),
+            },
+            Err(_) => Err(OllamaError::from("Stream error".to_string()).into()),
+        });
 
         Ok(Box::pin(stream))
     }
@@ -135,10 +141,7 @@ mod tests {
     #[ignore]
     async fn test_generate() {
         let ollama = Ollama::default().with_model("llama3");
-        let response = ollama
-            .invoke("Explain what Rayleigh scattering is.")
-            .await
-            .unwrap();
+        let response = ollama.invoke("Hey Macarena, ay").await.unwrap();
         println!("{}", response);
     }
 
@@ -154,6 +157,7 @@ mod tests {
             let data = res.unwrap();
             stdout.write(data.content.as_bytes()).await.unwrap();
         }
+        stdout.write(b"\n").await.unwrap();
         stdout.flush().await.unwrap();
     }
 }
