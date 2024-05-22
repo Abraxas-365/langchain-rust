@@ -57,19 +57,33 @@ impl Default for OllamaConfig {
     }
 }
 
-#[cfg(tests)]
+#[cfg(test)]
 mod tests {
-    use crate::{
-        language_models::llm::LLM,
-        llm::{ollama::openai::OllamaConfig, openai::OpenAI},
-    };
+    use super::*;
+    use crate::{language_models::llm::LLM, llm::openai::OpenAI, schemas::Message};
+    use tokio::io::AsyncWriteExt;
+    use tokio_stream::StreamExt;
 
     #[tokio::test]
+    #[ignore]
     async fn test_ollama_openai() {
-        use super::*;
-
         let ollama = OpenAI::new(OllamaConfig::default()).with_model("llama2");
         let response = ollama.invoke("hola").await.unwrap();
         println!("{}", response);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_ollama_openai_stream() {
+        let ollama = OpenAI::new(OllamaConfig::default()).with_model("phi3");
+
+        let message = Message::new_human_message("Why does water boil at 100 degrees?");
+        let mut stream = ollama.stream(&vec![message]).await.unwrap();
+        let mut stdout = tokio::io::stdout();
+        while let Some(res) = stream.next().await {
+            let data = res.unwrap();
+            stdout.write(data.content.as_bytes()).await.unwrap();
+        }
+        stdout.flush().await.unwrap();
     }
 }

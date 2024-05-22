@@ -1,11 +1,9 @@
-use std::sync::Arc;
-
 use crate::{
     language_models::{llm::LLM, GenerateResult, LLMError, TokenUsage},
     schemas::{Message, MessageType, StreamData},
 };
 use async_trait::async_trait;
-use futures::Stream;
+use futures::{Stream, TryStreamExt};
 use ollama_rs::{
     error::OllamaError,
     generation::{
@@ -14,8 +12,8 @@ use ollama_rs::{
     },
     Ollama as OllamaClient,
 };
-
 use std::pin::Pin;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Ollama {
@@ -115,16 +113,47 @@ impl LLM for Ollama {
         let request = self.generate_request(messages);
         let result = self.client.send_chat_messages_stream(request).await?;
 
-        // Err(OllamaError::from("Stream error".to_string()).into())
-        // let stream = result
-        //     .map(|data| {
-        //         data.map(|d| StreamData {
-        //             content: "???".to_string(),
-        //             value: serde_json::Value::default(),
-        //         })
-        //     })
-        //     .collect();
+        let stream = result
+            .map_ok(|data| StreamData {
+                // value: serde_json::to_value(data).map_err(LLMError::from),
+                value: serde_json::Value::default(),
+                content: data.message.unwrap().content,
+            })
+            .map_err(|_| OllamaError::from("Ollama stream error".to_string()).into());
 
-        todo!("not sure about how to map the stream")
+        Ok(Box::pin(stream))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::AsyncWriteExt;
+    use tokio_stream::StreamExt;
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_generate() {
+        let ollama = Ollama::default().with_model("llama3");
+        let response = ollama
+            .invoke("Explain what Rayleigh scattering is.")
+            .await
+            .unwrap();
+        println!("{}", response);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_stream() {
+        let ollama = Ollama::default().with_model("llama3");
+
+        let message = Message::new_human_message("Why does water boil at 100 degrees?");
+        let mut stream = ollama.stream(&vec![message]).await.unwrap();
+        let mut stdout = tokio::io::stdout();
+        while let Some(res) = stream.next().await {
+            let data = res.unwrap();
+            stdout.write(data.content.as_bytes()).await.unwrap();
+        }
+        stdout.flush().await.unwrap();
     }
 }
