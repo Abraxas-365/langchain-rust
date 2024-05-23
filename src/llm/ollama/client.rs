@@ -3,7 +3,7 @@ use crate::{
     schemas::{Message, MessageType, StreamData},
 };
 use async_trait::async_trait;
-use futures::{Stream, TryStreamExt};
+use futures::Stream;
 use ollama_rs::{
     error::OllamaError,
     generation::{
@@ -115,11 +115,12 @@ impl LLM for Ollama {
         let result = self.client.send_chat_messages_stream(request).await?;
 
         let stream = result.map(|data| match data {
-            Ok(data) => match data.message {
+            Ok(data) => match data.message.clone() {
                 Some(message) => Ok(StreamData::new(
-                    serde_json::to_value(message.clone()).unwrap_or_default(),
+                    serde_json::to_value(data).unwrap_or_default(),
                     message.content,
                 )),
+                // TODO: no need to return error, see https://github.com/Abraxas-365/langchain-rust/issues/140
                 None => Err(LLMError::ContentNotFound(
                     "No message in response".to_string(),
                 )),
