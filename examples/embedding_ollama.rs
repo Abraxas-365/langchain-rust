@@ -6,7 +6,7 @@ use langchain_rust::embedding::{
 async fn main() {
     let ollama = OllamaEmbedder::default().with_model("nomic-embed-text");
 
-    let response = ollama.embed_query("What is the sky blue?").await.unwrap();
+    let response = ollama.embed_query("Why is the sky blue?").await.unwrap();
 
     println!("{:?}", response);
 }

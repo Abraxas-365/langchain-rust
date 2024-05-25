@@ -1,4 +1,6 @@
 use async_openai::error::OpenAIError;
+#[cfg(feature = "ollama")]
+use ollama_rs::error::OllamaError;
 use reqwest::{Error as ReqwestError, StatusCode};
 use thiserror::Error;
 
@@ -21,4 +23,8 @@ pub enum EmbedderError {
 
     #[error("FastEmbed error: {0}")]
     FastEmbedError(String),
+
+    #[cfg(feature = "ollama")]
+    #[error("Ollama error: {0}")]
+    OllamaError(#[from] OllamaError),
 }
