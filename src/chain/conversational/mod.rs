@@ -52,7 +52,7 @@ pub struct ConversationalChain {
 
 //Conversational Chain is a simple chain to interact with ai as a string of messages
 impl ConversationalChain {
-    pub fn pompt_builder(&self) -> ConversationalChainPromptBuilder {
+    pub fn prompt_builder(&self) -> ConversationalChainPromptBuilder {
         ConversationalChainPromptBuilder::new()
     }
 }
