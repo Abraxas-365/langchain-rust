@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use langchain_rust::tools::{SpeechStorage, Text2SpeechOpenAI, Tool};
 
+#[allow(dead_code)]
 struct XStorage {}
 
 //You can add save te result to s3 or other storage using
