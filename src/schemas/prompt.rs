@@ -26,4 +26,8 @@ impl PromptValue {
     pub fn to_chat_messages(&self) -> Vec<Message> {
         self.messages.clone()
     }
+
+    pub fn add_message(&mut self, message: Message) {
+        self.messages.push(message);
+    }
 }
