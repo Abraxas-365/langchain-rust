@@ -1,3 +1,5 @@
+// cargo run --example embedding_ollama --features=ollama
+
 use langchain_rust::embedding::{
     embedder_trait::Embedder, ollama::ollama_embedder::OllamaEmbedder,
 };
