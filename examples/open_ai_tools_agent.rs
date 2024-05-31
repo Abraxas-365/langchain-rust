@@ -7,7 +7,7 @@ use langchain_rust::{
     llm::openai::OpenAI,
     memory::SimpleMemory,
     prompt_args,
-    tools::{CommandExecutor, SerpApi, Tool},
+    tools::{CommandExecutor, DuckDuckGoSearchResults, SerpApi, Tool},
 };
 
 use serde_json::Value;
@@ -31,6 +31,7 @@ async fn main() {
     let llm = OpenAI::default();
     let memory = SimpleMemory::new();
     let serpapi_tool = SerpApi::default();
+    let duckduckgo_tool = DuckDuckGoSearchResults::default();
     let tool_calc = Date {};
     let command_executor = CommandExecutor::default();
     let agent = OpenAiToolAgentBuilder::new()
@@ -38,6 +39,7 @@ async fn main() {
             Arc::new(serpapi_tool),
             Arc::new(tool_calc),
             Arc::new(command_executor),
+            Arc::new(duckduckgo_tool),
         ])
         .options(ChainCallOptions::new().with_max_tokens(1000))
         .build(llm)
