@@ -1,4 +1,5 @@
 // To run this example execute: cargo run --example vector_store_postgres --features postgres
+// To start pgvector docker run ./scripts/run-pgvector
 
 #[cfg(feature = "postgres")]
 use langchain_rust::{
@@ -23,7 +24,7 @@ async fn main() {
     let store = StoreBuilder::new()
         .embedder(embedder)
         .pre_delete_collection(true)
-        .connection_url("postgresql://postgres:postgres@localhost:5432/postgres")
+        .connection_url("postgresql://username:password@localhost:5432/langchain-rust")
         .vector_dimensions(1536)
         .build()
         .await
