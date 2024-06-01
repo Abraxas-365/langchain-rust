@@ -4,7 +4,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::Stream;
-use ollama_rs::{
+pub use ollama_rs::{
     error::OllamaError,
     generation::{
         chat::{request::ChatMessageRequest, ChatMessage, MessageRole},
