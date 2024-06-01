@@ -1,9 +1,7 @@
 use async_trait::async_trait;
 
-extern crate fastembed as ext_fastembed;
-pub use ext_fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
-
 use crate::embedding::{Embedder, EmbedderError};
+use fastembed::TextEmbedding;
 
 pub struct FastEmbed {
     model: TextEmbedding,
