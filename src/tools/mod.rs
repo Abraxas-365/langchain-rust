@@ -10,6 +10,9 @@ pub use scraper::*;
 mod sql;
 pub use sql::*;
 
+mod duckduckgo;
+pub use duckduckgo::*;
+
 mod serpapi;
 pub use serpapi::*;
 
