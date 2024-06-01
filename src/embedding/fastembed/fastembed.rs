@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-pub use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+
+extern crate fastembed as ext_fastembed;
+pub use ext_fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
 use crate::embedding::{Embedder, EmbedderError};
 
