@@ -1,7 +1,7 @@
 workspace = { members = ["examples/vector_store_surrealdb"] }
 [package]
 name = "langchain-rust"
-version = "4.5.0"
+version = "4.1.4"
 edition = "2021"
 publish = true
 repository = "https://github.com/Abraxas-365/langchain-rust"
