@@ -73,7 +73,7 @@ tree-sitter-go = { version = "0.21", optional = true }
 tree-sitter-python = { version = "0.21", optional = true }
 tree-sitter-typescript = { version = "0.21", optional = true }
 qdrant-client = { version = "1.8.0", optional = true }
-ollama-rs = { version = "0.1.9", optional = true, features = [
+ollama-rs = { version = "0.2.0", optional = true, features = [
     "stream",
     "chat-history",
 ] }
