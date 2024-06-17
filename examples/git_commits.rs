@@ -1,7 +1,7 @@
 // To run this example execute: cargo run --example git_commits --features sqlite,git -- /path/to/git/repo
 // Make sure vector0 and vss0 libraries are installed in the system or the path of the executable.
 // Download the libraries from https://github.com/asg017/sqlite-vss
-// For static compliation of sqlite-vss extension refer to the following link:
+// For static compilation of sqlite-vss extension refer to the following link:
 // https://github.com/launchbadge/sqlx/issues/3147.
 
 #[cfg(feature = "sqlite")]
@@ -38,7 +38,7 @@ async fn main() {
         .await
         .unwrap();
 
-    // Intialize the tables in the database. This is required to be done only once.
+    // Initialize the tables in the database. This is required to be done only once.
     store.initialize().await.unwrap();
 
     let git_commit_loader = GitCommitLoader::from_path(repo_path).unwrap();

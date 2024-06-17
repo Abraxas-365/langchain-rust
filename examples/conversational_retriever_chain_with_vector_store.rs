@@ -37,7 +37,7 @@ async fn main() {
         )),
         Document::new(format!(
             "\nQuestion: {}\nAnswer: {}\n",
-            "Whts his favorite food", "Pan con chicharron"
+            "Whats his favorite food", "Pan con chicharron"
         )),
     ];
 
@@ -76,8 +76,8 @@ Helpful Answer:
         .rephrase_question(true)
         .memory(SimpleMemory::new().into())
         .retriever(Retriever::new(store, 5))
-        //If you want to sue the default prompt remove the .prompt()
-        //Keep in mind if you want to change the prmpt; this chain need the {{context}} variable
+        //If you want to use the default prompt remove the .prompt()
+        //Keep in mind if you want to change the prompt; this chain need the {{context}} variable
         .prompt(prompt)
         .build()
         .expect("Error building ConversationalChain");

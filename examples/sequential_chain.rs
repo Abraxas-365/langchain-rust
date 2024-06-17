@@ -22,7 +22,7 @@ async fn main() {
         .unwrap();
 
     let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
-        "Dame un slogan para el sigiente nombre: {{name}}",
+        "Dame un slogan para el siguiente nombre: {{name}}",
         "name"
     ));
     let get_slogan_chain = LLMChainBuilder::new()

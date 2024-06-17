@@ -16,8 +16,8 @@ use langchain_rust::{
 #[tokio::main]
 async fn main() {
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
-    //We initialise a simple memory,by default conveational chain have this memory, but we
-    //initiliase it as an example, if you dont want to have memory use DummyMemory
+    //We initialise a simple memory. By default conversational chain have this memory, but we
+    //initialise it as an example, if you dont want to have memory use DummyMemory
     let memory = SimpleMemory::new();
 
     let chain = ConversationalChainBuilder::new()
@@ -49,7 +49,7 @@ async fn main() {
     while let Some(result) = stream.next().await {
         match result {
             Ok(data) => {
-                //If you junt want to print to stdout, you can use data.to_stdout().unwrap();
+                //If you just want to print to stdout, you can use data.to_stdout().unwrap();
                 print!("{}", data.content);
                 stdout().flush().unwrap();
             }
