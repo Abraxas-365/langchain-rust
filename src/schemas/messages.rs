@@ -112,7 +112,7 @@ impl Message {
     }
 
     pub fn messages_from_value(value: &Value) -> Result<Vec<Message>, serde_json::error::Error> {
-        serde_json::from_value(value.clone()).map_err(|e| e.into())
+        serde_json::from_value(value.clone())
     }
 
     pub fn messages_to_string(messages: &[Message]) -> String {

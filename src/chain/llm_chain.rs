@@ -93,7 +93,7 @@ pub struct LLMChain {
 #[async_trait]
 impl Chain for LLMChain {
     fn get_input_keys(&self) -> Vec<String> {
-        return self.prompt.get_input_variables();
+        self.prompt.get_input_variables()
     }
 
     fn get_output_keys(&self) -> Vec<String> {

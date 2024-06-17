@@ -91,7 +91,7 @@ impl SQLDatabaseChainBuilder {
                 .output_key(self.output_key.unwrap_or_else(|| DEFAULT_OUTPUT_KEY.into()))
                 .llm(llm);
 
-            let mut options = self.options.unwrap_or_else(ChainCallOptions::default);
+            let mut options = self.options.unwrap_or_default();
             options = options.with_stop_words(vec![STOP_WORD.to_string()]);
             builder = builder.options(options);
 

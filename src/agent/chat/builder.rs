@@ -51,7 +51,7 @@ impl ConversationalAgentBuilder {
     }
 
     pub fn build<L: LLM + 'static>(self, llm: L) -> Result<ConversationalAgent, AgentError> {
-        let tools = self.tools.unwrap_or_else(Vec::new);
+        let tools = self.tools.unwrap_or_default();
         let prefix = self.prefix.unwrap_or_else(|| PREFIX.to_string());
         let suffix = self.suffix.unwrap_or_else(|| SUFFIX.to_string());
 

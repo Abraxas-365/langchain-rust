@@ -105,7 +105,7 @@ impl Claude {
 
         let generation = res
             .content
-            .get(0)
+            .first()
             .map(|c| c.text.clone())
             .unwrap_or_default();
 
@@ -123,7 +123,7 @@ impl Claude {
             model: self.model.clone(),
             messages: messages
                 .iter()
-                .map(|m| ClaudeMessage::from_message(m))
+                .map(ClaudeMessage::from_message)
                 .collect::<Vec<_>>(),
             max_tokens: self.options.max_tokens.unwrap_or(1024),
             stream: None,

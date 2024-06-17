@@ -41,7 +41,7 @@ impl OpenAiToolAgentBuilder {
     }
 
     pub fn build<L: LLM + 'static>(self, llm: L) -> Result<OpenAiToolAgent, AgentError> {
-        let tools = self.tools.unwrap_or_else(Vec::new);
+        let tools = self.tools.unwrap_or_default();
         let prefix = self.prefix.unwrap_or_else(|| PREFIX.to_string());
         let mut llm = llm;
 
@@ -49,7 +49,7 @@ impl OpenAiToolAgentBuilder {
         let default_options = ChainCallOptions::default().with_max_tokens(1000);
         let functions = tools
             .iter()
-            .map(|tool| FunctionDefinition::from_langchain_tool(tool))
+            .map(FunctionDefinition::from_langchain_tool)
             .collect::<Vec<FunctionDefinition>>();
         llm.add_options(CallOptions::new().with_functions(functions));
         let chain = Box::new(

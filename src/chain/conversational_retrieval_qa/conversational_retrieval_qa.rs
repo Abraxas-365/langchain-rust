@@ -50,7 +50,7 @@ impl ConversationalRetrieverChain {
                     .call(
                         CondenseQuestionPromptBuilder::new()
                             .question(input)
-                            .chat_history(&history)
+                            .chat_history(history)
                             .build(),
                     )
                     .await?;
@@ -113,7 +113,7 @@ impl Chain for ConversationalRetrieverChain {
         match &output.tokens {
             Some(tokens) => {
                 if let Some(mut token_usage) = token_usage {
-                    token_usage.add(&tokens);
+                    token_usage.add(tokens);
                     output.tokens = Some(token_usage)
                 }
             }
@@ -196,7 +196,7 @@ impl Chain for ConversationalRetrieverChain {
                         yield Ok(data);
                     },
                     Err(e) => {
-                        yield Err(e.into());
+                        yield Err(e);
                     }
                 }
             }
@@ -210,7 +210,7 @@ impl Chain for ConversationalRetrieverChain {
     }
 
     fn get_input_keys(&self) -> Vec<String> {
-        return vec![self.input_key.clone()];
+        vec![self.input_key.clone()]
     }
 
     fn get_output_keys(&self) -> Vec<String> {
@@ -226,7 +226,7 @@ impl Chain for ConversationalRetrieverChain {
         keys.push(self.output_key.clone());
         keys.push(DEFAULT_RESULT_KEY.to_string());
 
-        return keys;
+        keys
     }
 }
 

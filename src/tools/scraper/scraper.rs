@@ -52,7 +52,7 @@ async fn scrape_url(url: &str) -> Result<String, Box<dyn Error>> {
     }
 
     let joined_text = text.join(" ");
-    let cleaned_text = joined_text.replace("\n", " ").replace("\t", " ");
+    let cleaned_text = joined_text.replace(['\n', '\t'], " ");
     let re = Regex::new(r"\s+").unwrap();
     let final_text = re.replace_all(&cleaned_text, " ");
     Ok(final_text.to_string())

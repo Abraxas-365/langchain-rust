@@ -40,7 +40,7 @@ impl From<Pod> for String {
         let subpods_str: Vec<String> = pod
             .subpods
             .into_iter()
-            .map(|subpod| String::from(subpod))
+            .map(String::from)
             .filter(|s| !s.is_empty())
             .collect();
 
@@ -149,7 +149,7 @@ impl Tool for Wolfram {
         } else if !response.queryresult.success {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Wolfram Error invalid query input: The query requested can not be processed by Wolfram"),
+                "Wolfram Error invalid query input: The query requested can not be processed by Wolfram".to_string(),
             )));
         }
 
@@ -158,7 +158,7 @@ impl Tool for Wolfram {
             .pods
             .unwrap_or_default()
             .into_iter()
-            .map(|s| String::from(s))
+            .map(String::from)
             .filter(|s| !s.is_empty())
             .collect();
 
@@ -173,7 +173,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_wolfram() {
-        let wolfram = Wolfram::default().with_excludes(&vec!["Plot"]);
+        let wolfram = Wolfram::default().with_excludes(&["Plot"]);
         let input = "Solve x^2 - 2x + 1 = 0";
         let result = wolfram.call(input).await;
 

@@ -4,21 +4,11 @@ use tokio::fs;
 
 use super::LoaderError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DirLoaderOptions {
     pub glob: Option<String>,
     pub suffixes: Option<Vec<String>>,
     pub exclude: Option<Vec<String>>,
-}
-
-impl Default for DirLoaderOptions {
-    fn default() -> Self {
-        Self {
-            glob: None,
-            suffixes: None,
-            exclude: None,
-        }
-    }
 }
 
 /// Recursively list all files in a directory
@@ -56,7 +46,7 @@ pub async fn find_files_with_extension(folder_path: &str, opts: &DirLoaderOption
     let folder_path = Path::new(folder_path);
 
     let mut all_files: Vec<String> = Vec::new();
-    list_files_in_path(&folder_path, &mut all_files)
+    list_files_in_path(folder_path, &mut all_files)
         .await
         .unwrap();
 
@@ -133,7 +123,7 @@ mod tests {
         // Write some content to the files
         for path in &file_paths {
             let content = "Hello, world!";
-            std::fs::write(&path, content).expect("Failed to write file");
+            std::fs::write(path, content).expect("Failed to write file");
         }
 
         // Call the function to find files with the ".txt" extension

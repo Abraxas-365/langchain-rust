@@ -49,7 +49,7 @@ impl Chain for SequentialChain {
             //Get the oput key for the chain result
             let output_key = chain
                 .get_output_keys()
-                .get(0)
+                .first()
                 .unwrap_or(&DEFAULT_OUTPUT_KEY.to_string())
                 .clone();
             //Get the ouput complete result
@@ -69,7 +69,7 @@ impl Chain for SequentialChain {
             if let Some(token) = &result.tokens {
                 match final_token_usage {
                     Some(token_usage) => {
-                        final_token_usage = Some(token_usage.sum(&token));
+                        final_token_usage = Some(token_usage.sum(token));
                     }
                     None => {
                         final_token_usage = Some(token.clone());

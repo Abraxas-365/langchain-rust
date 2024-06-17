@@ -119,7 +119,7 @@ pub trait Chain: Sync + Send {
         let mut output = HashMap::new();
         let output_key = self
             .get_output_keys()
-            .get(0)
+            .first()
             .unwrap_or(&DEFAULT_OUTPUT_KEY.to_string())
             .clone();
         output.insert(output_key, json!(result.generation));
@@ -183,15 +183,15 @@ pub trait Chain: Sync + Send {
     // Get the input keys of the prompt
     fn get_input_keys(&self) -> Vec<String> {
         log::info!("Using defualt implementation");
-        return vec![];
+        vec![]
     }
 
     fn get_output_keys(&self) -> Vec<String> {
         log::info!("Using defualt implementation");
-        return vec![
+        vec![
             String::from(DEFAULT_OUTPUT_KEY),
             String::from(DEFAULT_RESULT_KEY),
-        ];
+        ]
     }
 }
 
