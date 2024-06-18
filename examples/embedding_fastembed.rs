@@ -1,6 +1,7 @@
-// cargo run --example embedding_fastembed --features=fastembed
+#[cfg(feature = "fastembed")]
 use langchain_rust::embedding::{Embedder, EmbeddingModel, FastEmbed, InitOptions, TextEmbedding};
 
+#[cfg(feature = "fastembed")]
 #[tokio::main]
 async fn main() {
     // With default model
@@ -29,4 +30,11 @@ async fn main() {
         .unwrap();
 
     println!("Len: {:?}", embeddings.len());
+}
+
+#[cfg(not(feature = "fastembed"))]
+fn main() {
+    println!("This example requires the 'fastembed' feature to be enabled.");
+    println!("Please run the command as follows:");
+    println!("cargo run --example embedding_fastembed --features=fastembed");
 }
