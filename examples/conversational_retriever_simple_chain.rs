@@ -36,7 +36,7 @@ impl Retriever for RetrieverMock {
             )),
             Document::new(format!(
                 "\nQuestion: {}\nAnswer: {}\n",
-                "Whts his favorite food", "Pan con chicharron"
+                "Whats his favorite food", "Pan con chicharron"
             )),
         ])
     }
@@ -64,8 +64,8 @@ Helpful Answer:
         .rephrase_question(true)
         .retriever(RetrieverMock {})
         .memory(SimpleMemory::new().into())
-        //If you want to sue the default prompt remove the .prompt()
-        //Keep in mind if you want to change the prmpt; this chain need the {{context}} variable
+        //If you want to use the default prompt remove the .prompt()
+        //Keep in mind if you want to change the prompt; this chain need the {{context}} variable
         .prompt(prompt)
         .build()
         .expect("Error building ConversationalChain");

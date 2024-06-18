@@ -28,7 +28,7 @@ async fn main() {
         "question"=>"How old is luis and whats his favorite text editor"
     };
 
-    let ouput = chain.invoke(input).await.unwrap();
+    let output = chain.invoke(input).await.unwrap();
 
-    println!("{}", ouput);
+    println!("{}", output);
 }

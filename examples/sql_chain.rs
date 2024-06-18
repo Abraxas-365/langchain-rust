@@ -50,7 +50,7 @@ fn main() {
     println!("cargo run --example sql_chain --features postgres");
 }
 
-//You can use this docker migrations for example, you can ask , whats the phone numnber of John
+//You can use this docker migrations for example, you can ask , whats the phone number of John
 
 // -- Migrations file
 //

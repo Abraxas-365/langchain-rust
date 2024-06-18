@@ -9,7 +9,7 @@ async fn main() {
     let response = open_ai.invoke("hola").await.unwrap();
     println!("{}", response);
 
-    //or whe can set config as
+    //or we can set config as
     let open_ai = OpenAI::default().with_config(
         OpenAIConfig::default()
             .with_api_base("xxx") //if you want to specify base url

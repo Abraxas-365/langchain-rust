@@ -5,11 +5,11 @@ use langchain_rust::{
 
 #[tokio::main]
 async fn main() {
-    let captial_route = Router::new(
-        "captial",
+    let capital_route = Router::new(
+        "capital",
         &[
             "Capital of France is Paris.",
-            "What is the captial of France?",
+            "What is the capital of France?",
         ],
     );
     let weather_route = Router::new(
@@ -22,7 +22,7 @@ async fn main() {
     );
     let router_layer = RouteLayerBuilder::default()
         .embedder(OpenAiEmbedder::default())
-        .add_route(captial_route)
+        .add_route(capital_route)
         .add_route(weather_route)
         .aggregation_method(AggregationMethod::Sum)
         .threshold(0.82)
