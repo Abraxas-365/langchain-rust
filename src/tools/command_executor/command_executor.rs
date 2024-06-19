@@ -46,20 +46,20 @@ impl Tool for CommandExecutor {
         String::from("Command_Executor")
     }
     fn description(&self) -> String {
-        String::from(format!(
+        format!(
             r#""This tool let you run command on the terminal"
-            "The input should be an array with comands for the following platform: {}"
+            "The input should be an array with commands for the following platform: {}"
             "examle of input: [{{ "cmd": "ls", "args": [] }},{{"cmd":"mkdir","args":["test"]}}]"
-            "Should be a comma separeted comands"
+            "Should be a comma separated commands"
             "#,
             self.platform
-        ))
+        )
     }
 
     fn parameters(&self) -> Value {
         let prompt = format!(
             "This tool let you run command on the terminal.
-        The input should be an array with comands for the following platform: {}",
+        The input should be an array with commands for the following platform: {}",
             self.platform
         );
         json!(

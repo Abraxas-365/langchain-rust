@@ -45,7 +45,7 @@ pub struct RouteLayer {
 
 impl RouteLayer {
     pub async fn add_routes(&mut self, routers: &mut [Router]) -> Result<(), RouteLayerError> {
-        for router in routers.into_iter() {
+        for router in routers.iter_mut() {
             if router.embedding.is_none() {
                 let embeddigns = self.embedder.embed_documents(&router.utterances).await?;
                 router.embedding = Some(embeddigns);
@@ -86,7 +86,7 @@ impl RouteLayer {
         for (route_name, score) in similar_routes {
             scores_by_route
                 .entry(route_name.to_owned())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(*score);
         }
 
@@ -160,7 +160,7 @@ impl RouteLayer {
         &self,
         embedding: &[f64],
     ) -> Result<Option<RouteChoise>, RouteLayerError> {
-        let similar_routes = self.filter_similar_routes(&embedding).await?;
+        let similar_routes = self.filter_similar_routes(embedding).await?;
 
         if similar_routes.is_empty() {
             return Ok(None);

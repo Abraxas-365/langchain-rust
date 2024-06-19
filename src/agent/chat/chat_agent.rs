@@ -66,7 +66,7 @@ impl ConversationalAgent {
             ),
             MessageOrTemplate::MessagesPlaceholder("agent_scratchpad".to_string()),
         ];
-        return Ok(formatter);
+        Ok(formatter)
     }
 
     fn construct_scratchpad(
@@ -74,7 +74,7 @@ impl ConversationalAgent {
         intermediate_steps: &[(AgentAction, String)],
     ) -> Result<Vec<Message>, AgentError> {
         let mut thoughts: Vec<Message> = Vec::new();
-        for (action, observation) in intermediate_steps.into_iter() {
+        for (action, observation) in intermediate_steps.iter() {
             thoughts.push(Message::new_ai_message(&action.log));
             let tool_response = template_jinja2!(TEMPLATE_TOOL_RESPONSE, "observation")
                 .format(prompt_args!("observation"=>observation))?;
@@ -91,7 +91,7 @@ impl Agent for ConversationalAgent {
         intermediate_steps: &[(AgentAction, String)],
         inputs: PromptArgs,
     ) -> Result<AgentEvent, AgentError> {
-        let scratchpad = self.construct_scratchpad(&intermediate_steps)?;
+        let scratchpad = self.construct_scratchpad(intermediate_steps)?;
         let mut inputs = inputs.clone();
         inputs.insert("agent_scratchpad".to_string(), json!(scratchpad));
         let output = self.chain.call(inputs.clone()).await?.generation;

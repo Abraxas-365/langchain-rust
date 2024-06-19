@@ -6,13 +6,13 @@ pub trait BaseMemory: Send + Sync {
     // Use a trait object for Display instead of a generic type
     fn add_user_message(&mut self, message: &dyn std::fmt::Display) {
         // Convert the Display trait object to a String and pass it to the constructor
-        self.add_message(Message::new_human_message(&message.to_string()));
+        self.add_message(Message::new_human_message(message.to_string()));
     }
 
     // Use a trait object for Display instead of a generic type
     fn add_ai_message(&mut self, message: &dyn std::fmt::Display) {
         // Convert the Display trait object to a String and pass it to the constructor
-        self.add_message(Message::new_ai_message(&message.to_string()));
+        self.add_message(Message::new_ai_message(message.to_string()));
     }
 
     fn add_message(&mut self, message: Message);

@@ -115,7 +115,7 @@ impl Chain for ConversationalChain {
                         yield Ok(data);
                     },
                     Err(e) => {
-                        yield Err(e.into());
+                        yield Err(e);
                     }
                 }
             }

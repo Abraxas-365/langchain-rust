@@ -11,9 +11,9 @@ pub struct MemoryIndex {
 }
 impl MemoryIndex {
     pub fn new() -> Self {
-        return Self {
+        Self {
             routers: HashMap::new(),
-        };
+        }
     }
 }
 

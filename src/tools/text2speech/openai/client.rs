@@ -77,18 +77,17 @@ impl<C: Config + Send + Sync> Tool for Text2SpeechOpenAI<C> {
     }
 
     fn description(&self) -> String {
-        format!(
-            r#"A wrapper around OpenAI Text2Speech. "
+        r#"A wrapper around OpenAI Text2Speech. "
         "Useful for when you need to convert text to speech. "
         "It supports multiple languages, including English, German, Polish, "
         "Spanish, Italian, French, Portuguese""#
-        )
+            .to_string()
     }
 
     async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
         let input = input.as_str().ok_or("Invalid input")?;
         let client = Client::new();
-        let response_format: SpeechResponseFormat = self.response_format.clone().into();
+        let response_format: SpeechResponseFormat = self.response_format;
 
         let request = CreateSpeechRequestArgs::default()
             .input(input)

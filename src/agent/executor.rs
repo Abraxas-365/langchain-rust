@@ -91,9 +91,7 @@ where
                 .agent
                 .plan(&steps, input_variables.clone())
                 .await
-                .map_err(|e| {
-                    ChainError::AgentError(format!("Error in agent planning: {}", e.to_string()))
-                })?;
+                .map_err(|e| ChainError::AgentError(format!("Error in agent planning: {}", e)))?;
             match agent_event {
                 AgentEvent::Action(actions) => {
                     for action in actions {
@@ -119,10 +117,7 @@ where
                                         AgentError::ToolError(err.to_string()).to_string(),
                                     ));
                                 } else {
-                                    format!(
-                                        "The tool return the following error: {}",
-                                        err.to_string()
-                                    )
+                                    format!("The tool return the following error: {}", err)
                                 }
                             }
                         };

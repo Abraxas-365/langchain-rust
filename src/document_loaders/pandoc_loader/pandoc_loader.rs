@@ -68,7 +68,7 @@ impl<R: AsyncRead + Send + Sync + Unpin + 'static> PandocLoader<R> {
     }
 
     pub fn new_from_reader<S: Into<String>>(input_format: S, input: R) -> Self {
-        PandocLoader::new("pandoc".into(), input_format.into(), input.into())
+        PandocLoader::new("pandoc".into(), input_format.into(), input)
     }
 
     pub fn with_pandoc_path<S: Into<String>>(mut self, pandoc_path: S) -> Self {
@@ -135,10 +135,7 @@ impl<R: AsyncRead + Send + Sync + Unpin + 'static> Loader for PandocLoader<R> {
         let _exit_status = process.wait().await?;
         let stdout_result = stdout_task.await?.unwrap();
         let stdout_string = String::from_utf8(stdout_result).map_err(|e| {
-            LoaderError::OtherError(format!(
-                "Failed to convert to utf8 string: {}",
-                e.to_string()
-            ))
+            LoaderError::OtherError(format!("Failed to convert to utf8 string: {}", e))
         })?;
 
         let doc = Document::new(stdout_string);
