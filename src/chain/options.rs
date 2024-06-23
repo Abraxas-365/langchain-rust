@@ -4,7 +4,7 @@ use std::pin::Pin;
 use crate::language_models::options::CallOptions;
 
 pub struct ChainCallOptions {
-    pub max_tokens: Option<u16>,
+    pub max_tokens: Option<u32>,
     pub temperature: Option<f32>,
     pub stop_words: Option<Vec<String>>,
     pub streaming_func: Option<
@@ -76,7 +76,7 @@ impl ChainCallOptions {
         llm_option
     }
 
-    pub fn with_max_tokens(mut self, max_tokens: u16) -> Self {
+    pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }

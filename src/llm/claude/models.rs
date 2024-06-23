@@ -29,7 +29,7 @@ impl ClaudeMessage {
 pub(crate) struct Payload {
     pub model: String,
     pub messages: Vec<ClaudeMessage>,
-    pub max_tokens: u16,
+    pub max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
