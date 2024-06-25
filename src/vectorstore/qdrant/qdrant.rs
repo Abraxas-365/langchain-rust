@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use qdrant_client::client::Payload;
 use qdrant_client::qdrant::{Filter, PointStruct, SearchPoints};
 use serde_json::json;
 use std::error::Error;
@@ -47,7 +48,7 @@ impl VectorStore for Store {
 
         for (id, (vector, payload)) in ids.clone().zip(vectors.zip(payloads)) {
             let vector: Vec<f32> = vector.into_iter().map(|f| f as f32).collect();
-            let point = PointStruct::new(id, vector, payload.try_into().unwrap());
+            let point = PointStruct::new(id, vector, Payload::try_from(payload).unwrap());
             points.push(point);
         }
 
