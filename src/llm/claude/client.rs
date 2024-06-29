@@ -15,6 +15,7 @@ pub enum ClaudeModel {
     Claude3pus20240229,
     Claude3sonnet20240229,
     Claude3haiku20240307,
+    Claude3_5sonnet20240620,
 }
 
 impl ToString for ClaudeModel {
@@ -23,6 +24,7 @@ impl ToString for ClaudeModel {
             ClaudeModel::Claude3pus20240229 => "claude-3-opus-20240229".to_string(),
             ClaudeModel::Claude3sonnet20240229 => "claude-3-sonnet-20240229".to_string(),
             ClaudeModel::Claude3haiku20240307 => "claude-3-haiku-20240307".to_string(),
+            ClaudeModel::Claude3_5sonnet20240620 => "claude-3-5-sonnet-20240620".to_string(),
         }
     }
 }
