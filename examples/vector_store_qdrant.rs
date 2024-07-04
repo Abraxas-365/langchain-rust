@@ -4,7 +4,7 @@
 use langchain_rust::{
     embedding::openai::openai_embedder::OpenAiEmbedder,
     schemas::Document,
-    vectorstore::qdrant::{QdrantClient, StoreBuilder},
+    vectorstore::qdrant::{Qdrant, StoreBuilder},
     vectorstore::VectorStore,
 };
 #[cfg(feature = "qdrant")]
@@ -20,12 +20,10 @@ async fn main() {
     // Requires OpenAI API key to be set in the environment variable OPENAI_API_KEY
     let embedder = OpenAiEmbedder::default();
 
-    // Initialize the qdrant_client::QdrantClient
+    // Initialize the qdrant_client::Qdrant
     // Ensure Qdrant is running at localhost, with gRPC port at 6334
     // docker run -p 6334:6334 qdrant/qdrant
-    let client = QdrantClient::from_url("http://localhost:6334")
-        .build()
-        .unwrap();
+    let client = Qdrant::from_url("http://localhost:6334").build().unwrap();
 
     let store = StoreBuilder::new()
         .embedder(embedder)
