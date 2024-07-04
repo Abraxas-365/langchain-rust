@@ -7,6 +7,10 @@ use std::sync::Arc;
 
 pub use qdrant_client::Qdrant;
 
+// Re-export now deprecated client with old name to prevent breakage for users
+#[deprecated(note = "use `Qdrant` instead")]
+pub use qdrant_client::Qdrant as QdrantClient;
+
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
