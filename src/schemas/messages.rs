@@ -54,6 +54,7 @@ pub struct Message {
     pub message_type: MessageType,
     pub id: Option<String>,
     pub tool_calls: Option<Value>,
+    pub images: Option<Vec<String>>,
 }
 
 impl Message {
@@ -64,6 +65,7 @@ impl Message {
             message_type: MessageType::HumanMessage,
             id: None,
             tool_calls: None,
+            images: None,
         }
     }
 
@@ -74,6 +76,7 @@ impl Message {
             message_type: MessageType::SystemMessage,
             id: None,
             tool_calls: None,
+            images: None,
         }
     }
 
@@ -84,6 +87,7 @@ impl Message {
             message_type: MessageType::AIMessage,
             id: None,
             tool_calls: None,
+            images: None,
         }
     }
 
@@ -94,6 +98,7 @@ impl Message {
             message_type: MessageType::ToolMessage,
             id: Some(id.into()),
             tool_calls: None,
+            images: None,
         }
     }
 

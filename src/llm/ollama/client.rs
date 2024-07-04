@@ -4,6 +4,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::Stream;
+use ollama_rs::generation::images::Image;
 pub use ollama_rs::{
     error::OllamaError,
     generation::{
@@ -57,9 +58,19 @@ impl Ollama {
 
 impl From<&Message> for ChatMessage {
     fn from(message: &Message) -> Self {
+        let images = match message.images.clone() {
+            Some(images) => {
+                let images = images
+                    .iter()
+                    .map(|image| Image::from_base64(image.as_str()))
+                    .collect();
+                Some(images)
+            }
+            None => None,
+        };
         ChatMessage {
             content: message.content.clone(),
-            images: None,
+            images,
             role: message.message_type.clone().into(),
         }
     }
