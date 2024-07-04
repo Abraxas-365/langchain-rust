@@ -1,11 +1,15 @@
 use async_trait::async_trait;
 use qdrant_client::client::Payload;
-use qdrant_client::qdrant::{Filter, PointStruct, SearchPoints};
+use qdrant_client::qdrant::{Filter, PointStruct, SearchPointsBuilder, UpsertPointsBuilder};
 use serde_json::json;
 use std::error::Error;
 use std::sync::Arc;
 
-pub use qdrant_client::client::QdrantClient;
+pub use qdrant_client::Qdrant;
+
+// Re-export now deprecated client with old name to prevent breakage for users
+#[deprecated(note = "use `Qdrant` instead")]
+pub use qdrant_client::Qdrant as QdrantClient;
 
 use crate::{
     embedding::embedder_trait::Embedder,
@@ -15,7 +19,7 @@ use crate::{
 use uuid::Uuid;
 
 pub struct Store {
-    pub client: QdrantClient,
+    pub client: Qdrant,
     pub embedder: Arc<dyn Embedder>,
     pub collection_name: String,
     pub content_field: String,
@@ -53,7 +57,7 @@ impl VectorStore for Store {
         }
 
         self.client
-            .upsert_points_blocking(self.collection_name.clone(), None, points, None)
+            .upsert_points(UpsertPointsBuilder::new(&self.collection_name, points).wait(true))
             .await?;
 
         Ok(ids.collect())
@@ -87,18 +91,16 @@ impl VectorStore for Store {
             .map(|f| f as f32)
             .collect();
 
-        let results = self
-            .client
-            .search_points(&SearchPoints {
-                collection_name: self.collection_name.clone(),
-                vector: query_vector,
-                limit: limit as u64,
-                with_payload: Some(true.into()),
-                score_threshold: opt.score_threshold,
-                filter: self.search_filter.clone(),
-                ..Default::default()
-            })
-            .await?;
+        let mut operation =
+            SearchPointsBuilder::new(&self.collection_name, query_vector, limit as u64)
+                .with_payload(true);
+        if let Some(score_threshold) = opt.score_threshold {
+            operation = operation.score_threshold(score_threshold);
+        }
+        if let Some(filter) = &self.search_filter {
+            operation = operation.filter(filter.clone());
+        }
+        let results = self.client.search_points(operation).await?;
 
         let documents = results
             .result

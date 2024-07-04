@@ -1,13 +1,12 @@
 use crate::embedding::Embedder;
 use crate::vectorstore::qdrant::Store;
-use qdrant_client::client::QdrantClient;
-use qdrant_client::qdrant::vectors_config::Config;
-use qdrant_client::qdrant::{CreateCollection, Distance, Filter, VectorParams, VectorsConfig};
+use qdrant_client::qdrant::{CreateCollectionBuilder, Distance, Filter, VectorParamsBuilder};
+use qdrant_client::Qdrant;
 use std::error::Error;
 use std::sync::Arc;
 
 pub struct StoreBuilder {
-    client: Option<QdrantClient>,
+    client: Option<Qdrant>,
     embedder: Option<Arc<dyn Embedder>>,
     collection_name: Option<String>,
     content_field: String,
@@ -36,8 +35,8 @@ impl StoreBuilder {
         }
     }
 
-    /// An instance of `qdrant_client::QdrantClient` for the Store. REQUIRED.
-    pub fn client(mut self, client: QdrantClient) -> Self {
+    /// An instance of [`qdrant_client::Qdrant`] for the Store. REQUIRED.
+    pub fn client(mut self, client: Qdrant) -> Self {
         self.client = Some(client);
         self
     }
@@ -113,17 +112,11 @@ impl StoreBuilder {
             let embeddings_dimension = embeddings.len() as u64;
 
             client
-                .create_collection(&CreateCollection {
-                    collection_name: collection_name.clone(),
-                    vectors_config: Some(VectorsConfig {
-                        config: Some(Config::Params(VectorParams {
-                            size: embeddings_dimension,
-                            distance: Distance::Cosine.into(),
-                            ..Default::default()
-                        })),
-                    }),
-                    ..Default::default()
-                })
+                .create_collection(
+                    CreateCollectionBuilder::new(&collection_name).vectors_config(
+                        VectorParamsBuilder::new(embeddings_dimension, Distance::Cosine),
+                    ),
+                )
                 .await?;
         }
 
