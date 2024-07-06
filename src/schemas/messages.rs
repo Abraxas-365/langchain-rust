@@ -11,7 +11,7 @@ use serde_json::Value;
 /// let ai_message_type = MessageType::AIMessage;
 /// let human_message_type = MessageType::HumanMessage;
 /// ```
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
 pub enum MessageType {
     #[serde(rename = "system")]
     SystemMessage,
