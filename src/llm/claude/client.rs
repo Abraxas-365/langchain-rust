@@ -1,7 +1,7 @@
 use crate::{
     language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
     llm::AnthropicError,
-    schemas::{Message, StreamData},
+    schemas::{Message, MessageType, StreamData},
 };
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
@@ -121,10 +121,14 @@ impl Claude {
     }
 
     fn build_payload(&self, messages: &[Message], stream: bool) -> Payload {
+        let (system_message, other_messages): (Vec<_>, Vec<_>) = messages
+            .into_iter()
+            .partition(|m| m.message_type.clone() as u8 == 0);
         let mut payload = Payload {
             model: self.model.clone(),
-            messages: messages
-                .iter()
+            system: system_message.get(0).map(|m| m.content.clone()),
+            messages: other_messages
+                .into_iter()
                 .map(ClaudeMessage::from_message)
                 .collect::<Vec<_>>(),
             max_tokens: self.options.max_tokens.unwrap_or(1024),
