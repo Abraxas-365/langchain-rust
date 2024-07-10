@@ -274,7 +274,6 @@ impl<C: Config> OpenAI<C> {
                 FunctionCallBehavior::Auto => request_builder.function_call("auto"),
                 FunctionCallBehavior::None => request_builder.function_call("none"),
                 FunctionCallBehavior::Function(name) => request_builder.function_call(name),
-
             };
         }
         request_builder.messages(messages);
