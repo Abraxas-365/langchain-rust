@@ -269,11 +269,11 @@ impl<C: Config> OpenAI<C> {
             request_builder.tools(functions);
         }
 
-        if let Some(behavior) = self.options.function_call_behavior {
+        if let Some(behavior) = &self.options.function_call_behavior {
             match behavior {
-                FunctionCallBehavior::Auto => request_builder.function_call("auto"),
-                FunctionCallBehavior::None => request_builder.function_call("none"),
-                FunctionCallBehavior::Function(name) => request_builder.function_call(name),
+                FunctionCallBehavior::Auto => request_builder.tool_choice("auto"),
+                FunctionCallBehavior::None => request_builder.tool_choice("none"),
+                FunctionCallBehavior::Named(name) => request_builder.tool_choice(name.as_str()),
             };
         }
         request_builder.messages(messages);

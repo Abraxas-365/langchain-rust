@@ -5,11 +5,11 @@ use serde_json::Value;
 
 use crate::tools::Tool;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum FunctionCallBehavior {
     None,
     Auto,
-    Function(&'static str),
+    Named(String),
 }
 
 #[derive(Clone, Debug)]
