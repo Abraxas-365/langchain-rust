@@ -9,6 +9,7 @@ use crate::tools::Tool;
 pub enum FunctionCallBehavior {
     None,
     Auto,
+    Function(&'static str),
 }
 
 #[derive(Clone, Debug)]
