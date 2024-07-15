@@ -42,7 +42,7 @@ text-splitter = { version = "0.14", features = ["tiktoken-rs", "markdown"] }
 surrealdb = { version = "1.4.2", optional = true, default-features = false }
 csv = "1.3.0"
 urlencoding = "2.1.3"
-lopdf = { version = "0.33.0", features = ["pom", "pom_parser"] }
+lopdf = { version = "0.33.0", features = ["pom", "pom_parser"], optional = true }
 thiserror = "1.0.59"
 futures-util = "0.3.30"
 async-stream = "0.3.5"
@@ -80,7 +80,15 @@ ollama-rs = { version = "0.2.0", optional = true, features = [
 
 [features]
 default = []
+fastembed = ["dep:fastembed"]
+git = ["gix", "flume"]
+lopdf = ["dep:lopdf"]
+ollama = ["ollama-rs"]
+opensearch = ["dep:opensearch", "aws-config"]
 postgres = ["pgvector", "sqlx", "uuid"]
+qdrant = ["qdrant-client", "uuid"]
+sqlite = ["sqlx"]
+surrealdb = ["dep:surrealdb"]
 tree-sitter = [
     "cc",
     "dep:tree-sitter",
@@ -92,13 +100,6 @@ tree-sitter = [
     "dep:tree-sitter-python",
     "dep:tree-sitter-typescript",
 ]
-surrealdb = ["dep:surrealdb"]
-sqlite = ["sqlx"]
-git = ["gix", "flume"]
-opensearch = ["dep:opensearch", "aws-config"]
-qdrant = ["qdrant-client", "uuid"]
-ollama = ["ollama-rs"]
-fastembed = ["dep:fastembed"]
 
 [dev-dependencies]
 tokio-test = "0.4.4"
