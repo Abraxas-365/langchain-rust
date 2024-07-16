@@ -167,7 +167,7 @@ impl CallOptions {
         self.presence_penalty = incoming_options.presence_penalty.or(self.presence_penalty);
         self.function_call_behavior = incoming_options
             .function_call_behavior
-            .or(self.function_call_behavior);
+            .or(self.function_call_behavior.clone());
 
         // For `Vec<String>`, merge if both are Some; prefer incoming if only incoming is Some
         if let Some(mut new_stop_words) = incoming_options.stop_words {
