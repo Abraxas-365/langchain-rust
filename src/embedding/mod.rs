@@ -15,3 +15,8 @@ pub use error::*;
 mod fastembed;
 #[cfg(feature = "fastembed")]
 pub use fastembed::*;
+
+#[cfg(feature = "mistralai")]
+pub mod mistralai;
+#[cfg(feature = "mistralai")]
+pub use mistralai::*;

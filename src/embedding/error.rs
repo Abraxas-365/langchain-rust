@@ -1,4 +1,6 @@
 use async_openai::error::OpenAIError;
+#[cfg(feature = "mistralai")]
+use mistralai_client::v1::error::{ApiError, ClientError};
 #[cfg(feature = "ollama")]
 use ollama_rs::error::OllamaError;
 use reqwest::{Error as ReqwestError, StatusCode};
@@ -27,4 +29,12 @@ pub enum EmbedderError {
     #[cfg(feature = "ollama")]
     #[error("Ollama error: {0}")]
     OllamaError(#[from] OllamaError),
+
+    #[cfg(feature = "mistralai")]
+    #[error("MistralAI Client error: {0}")]
+    MistralAIClientError(#[from] ClientError),
+
+    #[cfg(feature = "mistralai")]
+    #[error("MistralAI API error: {0}")]
+    MistralAIApiError(#[from] ApiError),
 }
