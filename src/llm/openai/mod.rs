@@ -28,6 +28,7 @@ pub enum OpenAIModel {
     Gpt4,
     Gpt4Turbo,
     Gpt4o,
+    Gpt4oMini,
 }
 
 impl ToString for OpenAIModel {
@@ -37,6 +38,7 @@ impl ToString for OpenAIModel {
             OpenAIModel::Gpt4 => "gpt-4".to_string(),
             OpenAIModel::Gpt4Turbo => "gpt-4-turbo-preview".to_string(),
             OpenAIModel::Gpt4o => "gpt-4o".to_string(),
+            OpenAIModel::Gpt4oMini => "gpt-4o-mini".to_string(),
         }
     }
 }
