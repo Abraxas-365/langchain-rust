@@ -77,11 +77,13 @@ ollama-rs = { version = "0.2.0", optional = true, features = [
     "stream",
     "chat-history",
 ] }
+mistralai-client = { version = "0.12.0", optional = true }
 
 [features]
 default = []
 fastembed = ["dep:fastembed"]
 git = ["gix", "flume"]
+mistralai = ["mistralai-client"]
 lopdf = ["dep:lopdf"]
 ollama = ["ollama-rs"]
 opensearch = ["dep:opensearch", "aws-config"]
