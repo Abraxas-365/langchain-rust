@@ -80,6 +80,7 @@ ollama-rs = { version = "0.2.0", optional = true, features = [
 ] }
 mistralai-client = { version = "0.14.0", optional = true }
 
+
 [features]
 default = []
 fastembed = ["dep:fastembed"]
@@ -91,7 +92,8 @@ ollama = ["ollama-rs"]
 opensearch = ["dep:opensearch", "aws-config"]
 postgres = ["pgvector", "sqlx", "uuid"]
 qdrant = ["qdrant-client", "uuid"]
-sqlite = ["sqlx"]
+sqlite-vss = ["sqlx"]
+sqlite-vec = ["sqlx"]
 surrealdb = ["dep:surrealdb"]
 tree-sitter = [
     "cc",
