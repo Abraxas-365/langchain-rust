@@ -62,6 +62,7 @@ aws-config = { version = "1.2", optional = true, features = [
     "behavior-version-latest",
 ] }
 glob = "0.3.1"
+strum = "0.26.3"
 strum_macros = "0.26.2"
 async-recursion = "1.1.0"
 tree-sitter = { version = "0.22", optional = true }

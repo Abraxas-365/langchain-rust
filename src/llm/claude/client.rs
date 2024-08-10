@@ -8,9 +8,11 @@ use futures::{Stream, StreamExt};
 use reqwest::Client;
 use serde_json::Value;
 use std::{collections::HashMap, pin::Pin};
+use strum_macros::EnumIter;
 
 use super::models::{ApiResponse, ClaudeMessage, Payload};
 
+#[derive(Clone, EnumIter)]
 pub enum ClaudeModel {
     Claude3pus20240229,
     Claude3sonnet20240229,

@@ -1,4 +1,5 @@
 use std::pin::Pin;
+use strum_macros::EnumIter;
 
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
@@ -22,7 +23,7 @@ use crate::{
     },
 };
 
-#[derive(Clone)]
+#[derive(Clone, EnumIter)]
 pub enum OpenAIModel {
     Gpt35,
     Gpt4,
