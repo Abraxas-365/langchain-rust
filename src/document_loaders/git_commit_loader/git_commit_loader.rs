@@ -1,33 +1,68 @@
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::pin::Pin;
 
 use crate::document_loaders::{process_doc_stream, LoaderError};
 use crate::{document_loaders::Loader, schemas::Document, text_splitter::TextSplitter};
 use async_trait::async_trait;
 use futures::Stream;
+use gix::revision::walk::Info;
 use gix::ThreadSafeRepository;
 use serde_json::Value;
 
 #[derive(Clone)]
-pub struct GitCommitLoader {
+pub struct GitCommitLoader<F, M, T> {
     repo: ThreadSafeRepository,
+    filter: Option<F>,
+    map: Option<M>,
+    resource_type: PhantomData<T>,
 }
 
-impl GitCommitLoader {
+impl<F, M, T> GitCommitLoader<F, M, T> {
     pub fn new(repo: ThreadSafeRepository) -> Self {
-        Self { repo }
+        Self {
+            repo,
+            filter: None,
+            map: None,
+            resource_type: PhantomData::<T>,
+        }
     }
 
     pub fn from_path<P: AsRef<std::path::Path>>(directory: P) -> Result<Self, LoaderError> {
         let repo = ThreadSafeRepository::discover(directory)?;
         Ok(Self::new(repo))
     }
+
+    pub fn with_filter(mut self, filter: F) -> Self
+    where
+        F: Fn(&Info) -> bool,
+    {
+        self.filter = Some(filter);
+        self
+    }
+
+    pub fn with_map(mut self, map: M) -> Self
+    where
+        M: Fn(&Info) -> Result<Document, LoaderError>,
+    {
+        self.map = Some(map);
+        self
+    }
 }
 
 #[async_trait]
-impl Loader for GitCommitLoader {
+impl<
+        F: Send + Sync + 'static + Copy + for<'a, 'b> Fn(&'a Info<'b>) -> bool,
+        M: Send
+            + Sync
+            + 'static
+            + Copy
+            + for<'a, 'b> Fn(&'a Info<'b>) -> Result<Document, LoaderError>,
+        T: Send + Sync,
+    > Loader<F, M, T> for GitCommitLoader<F, M, T>
+{
     async fn load(
-        mut self,
+        self,
     ) -> Result<
         Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
         LoaderError,
@@ -42,23 +77,34 @@ impl Loader for GitCommitLoader {
                 .rev_walk(Some(repo.head_id().unwrap().detach()))
                 .all()
                 .unwrap()
-                .filter_map(Result::ok)
+                .map(|x| x.unwrap())
+                .filter(|x| {
+                    if let Some(f) = self.filter {
+                        f(&x)
+                    } else {
+                        true
+                    }
+                })
                 .map(|oid| {
-                    let commit = oid.object().unwrap();
-                    let commit_id = commit.id;
-                    let author = commit.author().unwrap();
-                    let email = author.email.to_string();
-                    let name = author.name.to_string();
-                    let message = format!("{}", commit.message().unwrap().title);
+                    if let Some(m) = self.map {
+                        m(&oid)
+                    } else {
+                        let commit = oid.object().unwrap();
+                        let commit_id = commit.id;
+                        let author = commit.author().unwrap();
+                        let email = author.email.to_string();
+                        let name = author.name.to_string();
+                        let message = format!("{}", commit.message().unwrap().title);
 
-                    let mut document = Document::new(format!(
-                        "commit {commit_id}\nAuthor: {name} <{email}>\n\n    {message}"
-                    ));
-                    let mut metadata = HashMap::new();
-                    metadata.insert("commit".to_string(), Value::from(commit_id.to_string()));
+                        let mut document = Document::new(format!(
+                            "commit {commit_id}\nAuthor: {name} <{email}>\n\n    {message}"
+                        ));
+                        let mut metadata = HashMap::new();
+                        metadata.insert("commit".to_string(), Value::from(commit_id.to_string()));
 
-                    document.metadata = metadata;
-                    Ok(document)
+                        document.metadata = metadata;
+                        Ok(document)
+                    }
                 });
 
             for document in commits_iter {
@@ -94,7 +140,10 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn git_commit_loader() {
-        let git_commit_loader = GitCommitLoader::from_path("/code/langchain-rust").unwrap();
+        let username = "langchain".to_string();
+        let git_commit_loader = GitCommitLoader::from_path("/code/langchain-rust")
+            .unwrap()
+            .with_filter(move |info| info.object().unwrap().author().unwrap().name == username);
 
         let documents = git_commit_loader
             .load()
