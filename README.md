@@ -77,7 +77,8 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
     async fn main() {
         let path = "./src/document_loaders/test_data/sample.pdf";
 
-        let loader = LoPdfLoader::from_path(path).expect("Failed to create PdfLoader");
+        let loader = PdfExtractLoader::from_path(path).expect("Failed to create PdfExtractLoader");
+        // let loader = LoPdfLoader::from_path(path).expect("Failed to create LoPdfLoader");
 
         let docs = loader
             .load()

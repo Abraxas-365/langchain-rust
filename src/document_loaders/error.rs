@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, string::FromUtf8Error};
 
 use thiserror::Error;
 
@@ -16,11 +16,18 @@ pub enum LoaderError {
     IOError(#[from] io::Error),
 
     #[error(transparent)]
+    FromUtf8Error(#[from] FromUtf8Error),
+
+    #[error(transparent)]
     CSVError(#[from] csv::Error),
 
     #[cfg(feature = "lopdf")]
     #[error(transparent)]
     LoPdfError(#[from] lopdf::Error),
+
+    #[cfg(feature = "pdf-extract")]
+    #[error(transparent)]
+    PdfExtractOutputError(#[from] pdf_extract::OutputError),
 
     #[error(transparent)]
     ReadabilityError(#[from] readability::error::Error),
