@@ -61,7 +61,7 @@ impl<C: Config> OpenAI<C> {
         Self {
             config,
             options: CallOptions::default(),
-            model: OpenAIModel::Gpt35.to_string(),
+            model: OpenAIModel::Gpt4oMini.to_string(),
         }
     }
 
