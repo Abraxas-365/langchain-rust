@@ -10,13 +10,18 @@ use crate::{schemas::Document, text_splitter::TextSplitter};
 use super::LoaderError;
 
 #[async_trait]
-pub trait Loader: Send + Sync {
+pub trait Loader<F, M, T>: Send + Sync {
     async fn load(
         self,
     ) -> Result<
         Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
         LoaderError,
-    >;
+    >
+    where
+        F: Fn(&T) -> bool + Send + Sync,
+        M: Fn(&T) -> Result<Document, LoaderError> + Send + Sync,
+        T: Send + Sync;
+
     async fn load_and_split<TS: TextSplitter + 'static>(
         self,
         splitter: TS,

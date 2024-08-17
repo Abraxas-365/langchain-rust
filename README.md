@@ -168,7 +168,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
         let path = "/path/to/git/repo";
         let git_commit_loader = GitCommitLoader::from_path(path).expect("Failed to create git commit loader");
 
-        let documents = csv_loader
+        let documents = git_commit_loader
             .load()
             .await
             .unwrap()
