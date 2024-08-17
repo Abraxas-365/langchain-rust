@@ -10,6 +10,10 @@
     {
       "matchPackagePatterns": ["tokio", "tokio-test"],
       "groupName": "tokio"
+    },
+    {
+      "matchPackagePatterns": ["pgvector", "sqlx"],
+      "groupName": "sqlx"
     }
   ]
 }
