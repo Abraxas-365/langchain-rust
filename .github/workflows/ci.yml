@@ -12,6 +12,8 @@ on:
       - 'v0.[0-9]+.[0-9]+'
       - 'v0.[0-9]+.[0-9]+-beta.[0-9]+'
       - 'v0.[0-9]+.[0-9]+-alpha.[0-9]+'
+    paths-ignore:
+      - 'renovate.json'
 
 jobs:
   build:
