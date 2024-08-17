@@ -1,9 +1,9 @@
-use std::{collections::HashMap, io::Read, path::Path, pin::Pin};
+use std::{io::Read, path::Path, pin::Pin};
 
 use async_stream::stream;
 use async_trait::async_trait;
 use futures::Stream;
-use serde_json::Value;
+use pdf_extract::{output_doc, PlainTextOutput};
 
 use crate::{
     document_loaders::{process_doc_stream, Loader, LoaderError},
@@ -12,11 +12,11 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct LoPdfLoader {
+pub struct PdfExtractLoader {
     document: lopdf::Document,
 }
 
-impl LoPdfLoader {
+impl PdfExtractLoader {
     /// Creates a new PdfLoader from anything that implements the Read trait.
     /// This is a generic constructor which can be used with any type of reader.
     ///
@@ -25,7 +25,7 @@ impl LoPdfLoader {
     /// ```rust,ignore
     /// use std::io::Cursor;
     /// let data = Cursor::new(vec![...] /* some PDF data */);
-    /// let loader = LoPdfLoader::new(data)?;
+    /// let loader = PdfExtractLoader::new(data)?;
     /// ```
     ///
     pub fn new<R: Read>(reader: R) -> Result<Self, LoaderError> {
@@ -38,7 +38,7 @@ impl LoPdfLoader {
     /// # Example
     ///
     /// ```rust,ignore
-    /// let loader = LoPdfLoader::from_path("/path/to/my.pdf")?;
+    /// let loader = PdfExtractLoader::from_path("/path/to/my.pdf")?;
     /// ```
     ///
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, LoaderError> {
@@ -48,24 +48,20 @@ impl LoPdfLoader {
 }
 
 #[async_trait]
-impl Loader for LoPdfLoader {
+impl Loader for PdfExtractLoader {
     async fn load(
         mut self,
     ) -> Result<
         Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
         LoaderError,
     > {
-        let stream = stream! {
-            let pages = self.document.get_pages();
-            for (i, _) in pages.iter().enumerate() {
-                let page_number = (i + 1) as u32;
-                let text = self.document.extract_text(&[page_number])?;
-                let mut metadata = HashMap::new();
-                metadata.insert("page_number".to_string(), Value::from(page_number));
-                let doc=Document::new(text).with_metadata(metadata);
-                yield Ok(doc);
+        let mut buffer: Vec<u8> = Vec::new();
+        let mut output = PlainTextOutput::new(&mut buffer as &mut dyn std::io::Write);
+        output_doc(&self.document, &mut output)?;
+        let doc = Document::new(String::from_utf8(buffer)?);
 
-            }
+        let stream = stream! {
+            yield Ok(doc);
         };
 
         Ok(Box::pin(stream))
@@ -96,7 +92,7 @@ mod tests {
     async fn test_lo_pdf_loader() {
         let path = "./src/document_loaders/test_data/sample.pdf";
 
-        let loader = LoPdfLoader::from_path(path).expect("Failed to create LoPdfLoader");
+        let loader = PdfExtractLoader::from_path(path).expect("Failed to create PdfExtractLoader");
 
         let docs = loader
             .load()
@@ -106,11 +102,8 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert_eq!(
-            docs[0].page_content,
-            "Sample PDF Document Robert Maron Grzegorz Grudzi · nski February 20, 1999 \n"
-        );
-        assert_eq!(docs.len(), 10);
+        assert_eq!(&docs[0].page_content[..100], "\n\nSample PDF Document\n\nRobert Maron\nGrzegorz Grudzi´nski\n\nFebruary 20, 1999\n\n2\n\nContents\n\n1 Templat");
+        assert_eq!(docs.len(), 1);
     }
 
     #[tokio::test]
@@ -121,7 +114,7 @@ mod tests {
         file.read_to_end(&mut buffer).unwrap();
         let reader = Cursor::new(buffer);
 
-        let loader = LoPdfLoader::new(reader).expect("Failed to create LoPdfLoader");
+        let loader = PdfExtractLoader::new(reader).expect("Failed to create PdfExtractLoader");
 
         let docs = loader
             .load()
@@ -131,10 +124,7 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert_eq!(
-            docs[0].page_content,
-            "Sample PDF Document Robert Maron Grzegorz Grudzi · nski February 20, 1999 \n"
-        );
-        assert_eq!(docs.len(), 10);
+        assert_eq!(&docs[0].page_content[..100], "\n\nSample PDF Document\n\nRobert Maron\nGrzegorz Grudzi´nski\n\nFebruary 20, 1999\n\n2\n\nContents\n\n1 Templat");
+        assert_eq!(docs.len(), 1);
     }
 }
