@@ -140,7 +140,8 @@ mod tests {
             &DirLoaderOptions {
                 glob: None,
                 suffixes: Some(vec![".txt".to_string()]),
-                exclude: None,
+                exclude_dirs: None,
+                exclude_files: None
             },
         )
             .await
