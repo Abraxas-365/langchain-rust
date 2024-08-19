@@ -1,6 +1,7 @@
 use async_recursion::async_recursion;
 use std::{path::Path, pin::Pin};
 use tokio::fs;
+use regex::Regex;
 
 use super::LoaderError;
 
@@ -8,7 +9,8 @@ use super::LoaderError;
 pub struct DirLoaderOptions {
     pub glob: Option<String>,
     pub suffixes: Option<Vec<String>>,
-    pub exclude: Option<Vec<String>>,
+    pub exclude_files: Option<Vec<Regex>>,
+    pub exclude_dirs: Option<Vec<Regex>>,
 }
 
 /// Recursively list all files in a directory
@@ -16,6 +18,7 @@ pub struct DirLoaderOptions {
 pub async fn list_files_in_path(
     dir_path: &Path,
     files: &mut Vec<String>,
+    opts: &DirLoaderOptions
 ) -> Result<Pin<Box<()>>, LoaderError> {
     if dir_path.is_file() {
         files.push(dir_path.to_string_lossy().to_string());
@@ -30,11 +33,19 @@ pub async fn list_files_in_path(
     let mut reader = fs::read_dir(dir_path).await.unwrap();
     while let Some(entry) = reader.next_entry().await.unwrap() {
         let path = entry.path();
-
         if path.is_file() {
             files.push(path.to_string_lossy().to_string());
         } else if path.is_dir() {
-            list_files_in_path(&path, files).await.unwrap();
+            let file_name = path.file_name().unwrap().to_str().unwrap_or("Invalid UTF-8");
+            if let Some(exclude_list) = &opts.exclude_dirs {
+                // Check if the path matches any of the regex patterns
+                let is_excluded = exclude_list.iter().any(|regex| regex.is_match(file_name));
+                if is_excluded {
+                    continue;
+                }
+            }
+
+            list_files_in_path(&path, files, opts).await.unwrap();
         }
     }
     Ok(Box::pin(()))
@@ -44,9 +55,9 @@ pub async fn list_files_in_path(
 pub async fn find_files_with_extension(folder_path: &str, opts: &DirLoaderOptions) -> Vec<String> {
     let mut matching_files = Vec::new();
     let folder_path = Path::new(folder_path);
-
     let mut all_files: Vec<String> = Vec::new();
-    list_files_in_path(folder_path, &mut all_files)
+
+    list_files_in_path(folder_path, &mut all_files, &opts.clone())
         .await
         .unwrap();
 
@@ -67,18 +78,15 @@ pub async fn find_files_with_extension(folder_path: &str, opts: &DirLoaderOption
             }
         }
 
-        if let Some(exclude_list) = &opts.exclude {
-            let mut is_excluded = false;
-            for exclude_pattern in exclude_list {
-                if path_str.contains(exclude_pattern) {
-                    is_excluded = true;
-                    break;
-                }
-            }
+        if let Some(exclude_list) = &opts.exclude_files {
+            // Check if the path matches any of the regex patterns
+            let is_excluded = exclude_list.iter().any(|regex| regex.is_match(&path_str));
+
             if is_excluded {
-                continue;
+                continue;  // Skip this path if it matches any of the regex patterns
             }
         }
+
         // check if the file matches the glob pattern
         if let Some(glob_pattern) = &opts.glob {
             let glob = glob::Pattern::new(glob_pattern).unwrap();
@@ -135,9 +143,9 @@ mod tests {
                 exclude: None,
             },
         )
-        .await
-        .into_iter()
-        .collect::<Vec<_>>();
+            .await
+            .into_iter()
+            .collect::<Vec<_>>();
 
         // Expecting to find 3 files with ".txt" extension
         assert_eq!(found_files.len(), 3);

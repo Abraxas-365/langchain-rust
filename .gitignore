@@ -3,3 +3,4 @@ Cargo.lock
 .DS_Store
 .fastembed_cache
 .vscode
+.idea
