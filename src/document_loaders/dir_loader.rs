@@ -36,7 +36,7 @@ pub async fn list_files_in_path(
         if path.is_file() {
             files.push(path.to_string_lossy().to_string());
         } else if path.is_dir() {
-            let file_name = path.file_name().unwrap().to_str().unwrap_or("Invalid UTF-8");
+            let file_name = path.file_name().unwrap().to_str().unwrap_or("Invalid dir name");
             if let Some(exclude_list) = &opts.exclude_dirs {
                 // Check if the path matches any of the regex patterns
                 let is_excluded = exclude_list.iter().any(|regex| regex.is_match(file_name));
