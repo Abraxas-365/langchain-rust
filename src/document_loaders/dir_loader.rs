@@ -1,16 +1,39 @@
 use async_recursion::async_recursion;
-use std::{path::Path, pin::Pin};
+use std::{fmt, path::Path, pin::Pin};
+use std::sync::Arc;
 use tokio::fs;
-use regex::Regex;
 
 use super::LoaderError;
+
+pub struct DirFilter(Arc<dyn Fn(&str) -> bool + Send + Sync>);
+
+impl DirFilter {
+    pub fn new<F>(f: F) -> Self
+    where
+        F: Fn(&str) -> bool + Send + Sync + 'static,
+    {
+        DirFilter(Arc::new(f))
+    }
+}
+
+impl fmt::Debug for DirFilter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Filter")
+    }
+}
+
+impl Clone for DirFilter {
+    fn clone(&self) -> Self {
+        DirFilter(Arc::clone(&self.0))
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct DirLoaderOptions {
     pub glob: Option<String>,
     pub suffixes: Option<Vec<String>>,
-    pub exclude_files: Option<Vec<Regex>>,
-    pub exclude_dirs: Option<Vec<Regex>>,
+    pub file_filter: Option<DirFilter>,
+    pub directory_filter: Option<DirFilter>,
 }
 
 /// Recursively list all files in a directory
@@ -37,12 +60,8 @@ pub async fn list_files_in_path(
             files.push(path.to_string_lossy().to_string());
         } else if path.is_dir() {
             let file_name = path.file_name().unwrap().to_str().unwrap_or("Invalid dir name");
-            if let Some(exclude_list) = &opts.exclude_dirs {
-                // Check if the path matches any of the regex patterns
-                let is_excluded = exclude_list.iter().any(|regex| regex.is_match(file_name));
-                if is_excluded {
-                    continue;
-                }
+            if opts.directory_filter.as_ref().map_or(false, |f| f.0(file_name)) {
+                continue;
             }
 
             list_files_in_path(&path, files, opts).await.unwrap();
@@ -78,13 +97,8 @@ pub async fn find_files_with_extension(folder_path: &str, opts: &DirLoaderOption
             }
         }
 
-        if let Some(exclude_list) = &opts.exclude_files {
-            // Check if the path matches any of the regex patterns
-            let is_excluded = exclude_list.iter().any(|regex| regex.is_match(&path_str));
-
-            if is_excluded {
-                continue;  // Skip this path if it matches any of the regex patterns
-            }
+        if opts.file_filter.as_ref().map_or(false, |f| f.0(&path_str)) {
+            continue;  // Skip this path if the filter returns true
         }
 
         // check if the file matches the glob pattern
@@ -140,8 +154,8 @@ mod tests {
             &DirLoaderOptions {
                 glob: None,
                 suffixes: Some(vec![".txt".to_string()]),
-                exclude_dirs: None,
-                exclude_files: None
+                directory_filter: None,
+                file_filter: None
             },
         )
             .await
