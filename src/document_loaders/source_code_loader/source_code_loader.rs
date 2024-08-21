@@ -135,7 +135,7 @@ mod tests {
                     glob: None,
                     suffixes: Some(vec!["rs".to_string()]),
                     exclude_dirs: None,
-                    exclude_files: None
+                    exclude_files: None,
                 });
 
         let stream = loader_with_dir.load().await.unwrap();

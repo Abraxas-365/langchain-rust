@@ -1,30 +1,30 @@
 use async_recursion::async_recursion;
-use std::{fmt, path::Path, pin::Pin};
 use std::sync::Arc;
+use std::{fmt, path::Path, pin::Pin};
 use tokio::fs;
 
 use super::LoaderError;
 
-pub struct DirFilter(Arc<dyn Fn(&str) -> bool + Send + Sync>);
+pub struct PathFilter(Arc<dyn Fn(&Path) -> bool + Send + Sync>);
 
-impl DirFilter {
+impl PathFilter {
     pub fn new<F>(f: F) -> Self
     where
-        F: Fn(&str) -> bool + Send + Sync + 'static,
+        F: Fn(&Path) -> bool + Send + Sync + 'static,
     {
-        DirFilter(Arc::new(f))
+        PathFilter(Arc::new(f))
     }
 }
 
-impl fmt::Debug for DirFilter {
+impl fmt::Debug for PathFilter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Filter")
     }
 }
 
-impl Clone for DirFilter {
+impl Clone for PathFilter {
     fn clone(&self) -> Self {
-        DirFilter(Arc::clone(&self.0))
+        PathFilter(Arc::clone(&self.0))
     }
 }
 
@@ -32,8 +32,7 @@ impl Clone for DirFilter {
 pub struct DirLoaderOptions {
     pub glob: Option<String>,
     pub suffixes: Option<Vec<String>>,
-    pub file_filter: Option<DirFilter>,
-    pub directory_filter: Option<DirFilter>,
+    pub path_filter: Option<PathFilter>,
 }
 
 /// Recursively list all files in a directory
@@ -41,7 +40,7 @@ pub struct DirLoaderOptions {
 pub async fn list_files_in_path(
     dir_path: &Path,
     files: &mut Vec<String>,
-    opts: &DirLoaderOptions
+    opts: &DirLoaderOptions,
 ) -> Result<Pin<Box<()>>, LoaderError> {
     if dir_path.is_file() {
         files.push(dir_path.to_string_lossy().to_string());
@@ -59,8 +58,11 @@ pub async fn list_files_in_path(
         if path.is_file() {
             files.push(path.to_string_lossy().to_string());
         } else if path.is_dir() {
-            let file_name = path.file_name().unwrap().to_str().unwrap_or("Invalid dir name");
-            if opts.directory_filter.as_ref().map_or(false, |f| f.0(file_name)) {
+            if opts
+                .path_filter
+                .as_ref()
+                .map_or(false, |f| f.0(path.as_path()))
+            {
                 continue;
             }
 
@@ -81,7 +83,7 @@ pub async fn find_files_with_extension(folder_path: &str, opts: &DirLoaderOption
         .unwrap();
 
     for file_name in all_files {
-        let path_str = file_name;
+        let path_str = file_name.clone();
 
         // check if the file has the required extension
         if let Some(suffixes) = &opts.suffixes {
@@ -97,8 +99,12 @@ pub async fn find_files_with_extension(folder_path: &str, opts: &DirLoaderOption
             }
         }
 
-        if opts.file_filter.as_ref().map_or(false, |f| f.0(&path_str)) {
-            continue;  // Skip this path if the filter returns true
+        if opts
+            .path_filter
+            .as_ref()
+            .map_or(false, |f| f.0(&Path::new(&file_name)))
+        {
+            continue; // Skip this path if the filter returns true
         }
 
         // check if the file matches the glob pattern
@@ -154,13 +160,12 @@ mod tests {
             &DirLoaderOptions {
                 glob: None,
                 suffixes: Some(vec![".txt".to_string()]),
-                directory_filter: None,
-                file_filter: None
+                path_filter: None,
             },
         )
-            .await
-            .into_iter()
-            .collect::<Vec<_>>();
+        .await
+        .into_iter()
+        .collect::<Vec<_>>();
 
         // Expecting to find 3 files with ".txt" extension
         assert_eq!(found_files.len(), 3);
