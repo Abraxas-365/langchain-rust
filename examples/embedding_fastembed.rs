@@ -15,11 +15,9 @@ async fn main() {
     println!("Embeddings: {:?}", embeddings);
 
     // With custom model
-    let model = TextEmbedding::try_new(InitOptions {
-        model_name: EmbeddingModel::AllMiniLML6V2,
-        show_download_progress: true,
-        ..Default::default()
-    })
+    let model = TextEmbedding::try_new(
+        InitOptions::new(EmbeddingModel::AllMiniLML6V2).with_show_download_progress(true),
+    )
     .unwrap();
 
     let fastembed = FastEmbed::from(model);
