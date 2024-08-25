@@ -15,9 +15,9 @@ pub use git_commit_loader::*;
 mod pandoc_loader;
 pub use pandoc_loader::*;
 
-#[cfg(any(feature = "lopdf", feature = "pdf_extract"))]
+#[cfg(any(feature = "lopdf", feature = "pdf-extract"))]
 mod pdf_loader;
-#[cfg(any(feature = "lopdf", feature = "pdf_extract"))]
+#[cfg(any(feature = "lopdf", feature = "pdf-extract"))]
 pub use pdf_loader::*;
 
 mod html_loader;
