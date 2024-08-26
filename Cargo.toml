@@ -43,7 +43,7 @@ surrealdb = { version = "1.4.2", optional = true, default-features = false }
 csv = "1.3.0"
 urlencoding = "2.1.3"
 lopdf = { version = "0.33.0", features = ["nom_parser"], optional = true }
-pdf-extract = { version = "0.7.7", optional = true  }
+pdf-extract = { version = "0.7.8", optional = true  }
 thiserror = "1.0.59"
 futures-util = "0.3.30"
 async-stream = "0.3.5"

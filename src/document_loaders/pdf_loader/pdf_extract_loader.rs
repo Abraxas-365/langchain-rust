@@ -13,7 +13,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct PdfExtractLoader {
-    document: lopdf::Document,
+    document: pdf_extract::Document,
 }
 
 impl PdfExtractLoader {
@@ -29,7 +29,7 @@ impl PdfExtractLoader {
     /// ```
     ///
     pub fn new<R: Read>(reader: R) -> Result<Self, LoaderError> {
-        let document = lopdf::Document::load_from(reader)?;
+        let document = pdf_extract::Document::load_from(reader)?;
         Ok(Self { document })
     }
     /// Creates a new PdfLoader from a path to a PDF file.
@@ -42,7 +42,7 @@ impl PdfExtractLoader {
     /// ```
     ///
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, LoaderError> {
-        let document = lopdf::Document::load(path)?;
+        let document = pdf_extract::Document::load(path)?;
         Ok(Self { document })
     }
 }
