@@ -95,10 +95,17 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
         match &self.options.streaming_func {
             Some(func) => {
                 let mut stream = client.chat().create_stream(request).await?;
-                let mut complete_response = String::new();
+                let mut generate_result = GenerateResult::default();
                 while let Some(result) = stream.next().await {
                     match result {
                         Ok(response) => {
+                            if let Some(usage) = response.usage {
+                                generate_result.tokens = Some(TokenUsage {
+                                    prompt_tokens: usage.prompt_tokens,
+                                    completion_tokens: usage.completion_tokens,
+                                    total_tokens: usage.total_tokens,
+                                });
+                            }
                             for chat_choice in response.choices.iter() {
                                 let chat_choice: ChatChoiceStream = chat_choice.clone();
                                 {
@@ -109,7 +116,7 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
                                     .await;
                                 }
                                 if let Some(content) = chat_choice.delta.content {
-                                    complete_response.push_str(&content);
+                                    generate_result.generation.push_str(&content);
                                 }
                             }
                         }
@@ -118,8 +125,6 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
                         }
                     }
                 }
-                let mut generate_result = GenerateResult::default();
-                generate_result.generation = complete_response;
                 Ok(generate_result)
             }
             None => {
@@ -167,6 +172,11 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
         let new_stream = original_stream.map(|result| match result {
             Ok(completion) => {
                 let value_completion = serde_json::to_value(completion).map_err(LLMError::from)?;
+                if let Some(usage) = value_completion.pointer("/usage") {
+                    let usage = serde_json::from_value::<TokenUsage>(usage.clone())
+                        .map_err(LLMError::from)?;
+                    return Ok(StreamData::new(value_completion, Some(usage), ""));
+                }
                 let content = value_completion
                     .pointer("/choices/0/delta/content")
                     .ok_or(LLMError::ContentNotFound(
@@ -176,6 +186,7 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
 
                 Ok(StreamData::new(
                     value_completion,
+                    None,
                     content.as_str().unwrap_or(""),
                 ))
             }
