@@ -28,6 +28,7 @@ pub struct AgentFinish {
     pub output: String,
 }
 
+#[derive(Debug)]
 pub enum AgentEvent {
     Action(Vec<AgentAction>),
     Finish(AgentFinish),
