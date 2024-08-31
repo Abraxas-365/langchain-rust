@@ -149,8 +149,8 @@ impl CallOptions {
         self
     }
 
-    pub fn with_include_usage_on_stream(mut self, include_usage_on_stream: bool) -> Self {
-        self.stream_usage = Some(include_usage_on_stream);
+    pub fn with_stream_usage(mut self, stream_usage: bool) -> Self {
+        self.stream_usage = Some(stream_usage);
         self
     }
 
