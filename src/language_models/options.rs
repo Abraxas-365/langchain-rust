@@ -26,6 +26,7 @@ pub struct CallOptions {
     pub presence_penalty: Option<f32>,
     pub functions: Option<Vec<FunctionDefinition>>,
     pub function_call_behavior: Option<FunctionCallBehavior>,
+    pub stream_usage: Option<bool>,
 }
 
 impl Default for CallOptions {
@@ -52,6 +53,7 @@ impl CallOptions {
             presence_penalty: None,
             functions: None,
             function_call_behavior: None,
+            stream_usage: None,
         }
     }
 
@@ -147,6 +149,11 @@ impl CallOptions {
         self
     }
 
+    pub fn with_include_usage_on_stream(mut self, include_usage_on_stream: bool) -> Self {
+        self.stream_usage = Some(include_usage_on_stream);
+        self
+    }
+
     pub fn merge_options(&mut self, incoming_options: CallOptions) {
         // For simple scalar types wrapped in Option, prefer incoming option if it is Some
         self.candidate_count = incoming_options.candidate_count.or(self.candidate_count);
@@ -168,6 +175,7 @@ impl CallOptions {
         self.function_call_behavior = incoming_options
             .function_call_behavior
             .or(self.function_call_behavior.clone());
+        self.stream_usage = incoming_options.stream_usage.or(self.stream_usage);
 
         // For `Vec<String>`, merge if both are Some; prefer incoming if only incoming is Some
         if let Some(mut new_stop_words) = incoming_options.stop_words {

@@ -6,8 +6,8 @@ use async_openai::{
         ChatChoiceStream, ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs,
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
         ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
-        ChatCompletionToolArgs, ChatCompletionToolType, CreateChatCompletionRequest,
-        CreateChatCompletionRequestArgs, FunctionObjectArgs,
+        ChatCompletionStreamOptions, ChatCompletionToolArgs, ChatCompletionToolType,
+        CreateChatCompletionRequest, CreateChatCompletionRequestArgs, FunctionObjectArgs,
     },
     Client,
 };
@@ -247,6 +247,9 @@ impl<C: Config> OpenAI<C> {
         let mut request_builder = CreateChatCompletionRequestArgs::default();
         if let Some(max_tokens) = self.options.max_tokens {
             request_builder.max_tokens(max_tokens);
+        }
+        if let Some(include_usage) = self.options.stream_usage {
+            request_builder.stream_options(ChatCompletionStreamOptions { include_usage });
         }
         request_builder.model(self.model.to_string());
         if let Some(stop_words) = &self.options.stop_words {
