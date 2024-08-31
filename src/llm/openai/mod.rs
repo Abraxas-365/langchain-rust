@@ -91,7 +91,7 @@ impl Default for OpenAI<OpenAIConfig> {
 impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
     async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, LLMError> {
         let client = Client::with_config(self.config.clone());
-        let request = self.generate_request(prompt)?;
+        let request = self.generate_request(prompt, self.options.streaming_func.is_some())?;
         match &self.options.streaming_func {
             Some(func) => {
                 let mut stream = client.chat().create_stream(request).await?;
@@ -160,7 +160,7 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
         messages: &[Message],
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
         let client = Client::with_config(self.config.clone());
-        let request = self.generate_request(messages)?;
+        let request = self.generate_request(messages, true)?;
 
         let original_stream = client.chat().create_stream(request).await?;
 
@@ -242,14 +242,17 @@ impl<C: Config> OpenAI<C> {
     fn generate_request(
         &self,
         messages: &[Message],
+        stream: bool,
     ) -> Result<CreateChatCompletionRequest, LLMError> {
         let messages: Vec<ChatCompletionRequestMessage> = self.to_openai_messages(messages)?;
         let mut request_builder = CreateChatCompletionRequestArgs::default();
         if let Some(max_tokens) = self.options.max_tokens {
             request_builder.max_tokens(max_tokens);
         }
-        if let Some(include_usage) = self.options.stream_usage {
-            request_builder.stream_options(ChatCompletionStreamOptions { include_usage });
+        if stream {
+            if let Some(include_usage) = self.options.stream_usage {
+                request_builder.stream_options(ChatCompletionStreamOptions { include_usage });
+            }
         }
         request_builder.model(self.model.to_string());
         if let Some(stop_words) = &self.options.stop_words {
