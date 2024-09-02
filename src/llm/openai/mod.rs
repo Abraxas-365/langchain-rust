@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    async fn test_ivoke() {
+    async fn test_invoke() {
         let message_complete = Arc::new(Mutex::new(String::new()));
 
         // Define the streaming function
