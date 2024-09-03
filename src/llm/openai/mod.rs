@@ -2,12 +2,14 @@ use std::pin::Pin;
 
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
+    error::OpenAIError,
     types::{
         ChatChoiceStream, ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs,
-        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestMessage, ChatCompletionRequestMessageContentPart,
+        ChatCompletionRequestMessageContentPartImageArgs, ChatCompletionRequestSystemMessageArgs,
         ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
-        ChatCompletionToolArgs, ChatCompletionToolType, CreateChatCompletionRequest,
-        CreateChatCompletionRequestArgs, FunctionObjectArgs,
+        ChatCompletionRequestUserMessageContent, ChatCompletionToolArgs, ChatCompletionToolType,
+        CreateChatCompletionRequest, CreateChatCompletionRequestArgs, FunctionObjectArgs,
     },
     Client,
 };
@@ -213,12 +215,34 @@ impl<C: Config> OpenAI<C> {
                         .build()?
                         .into(),
                 }),
-                MessageType::HumanMessage => openai_messages.push(
-                    ChatCompletionRequestUserMessageArgs::default()
-                        .content(m.content.clone())
-                        .build()?
-                        .into(),
-                ),
+                MessageType::HumanMessage => {
+                    let content: ChatCompletionRequestUserMessageContent = match m.images.clone() {
+                        Some(images) => {
+                            let content: Result<
+                                Vec<ChatCompletionRequestMessageContentPart>,
+                                OpenAIError,
+                            > = images
+                                .into_iter()
+                                .map(|image| {
+                                    Ok(ChatCompletionRequestMessageContentPartImageArgs::default()
+                                        .image_url(image.image_url)
+                                        .build()?
+                                        .into())
+                                })
+                                .collect();
+
+                            content?.into()
+                        }
+                        None => m.content.clone().into(),
+                    };
+
+                    openai_messages.push(
+                        ChatCompletionRequestUserMessageArgs::default()
+                            .content(content)
+                            .build()?
+                            .into(),
+                    )
+                }
                 MessageType::SystemMessage => openai_messages.push(
                     ChatCompletionRequestSystemMessageArgs::default()
                         .content(m.content.clone())
@@ -435,5 +459,24 @@ mod tests {
             .await
             .unwrap();
         println!("{}", response)
+    }
+
+    #[test]
+    #[ignore]
+    async fn test_generate_with_image_message() {
+        // Setup the OpenAI client with the necessary options
+        let open_ai =
+            OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt4o.to_string());
+
+        // Define a set of messages to send to the generate function
+        let image_urls = vec!["https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/ISS053-E-325560_-_View_of_Earth.jpg/1024px-ISS053-E-325560_-_View_of_Earth.jpg"];
+        let messages = vec![
+            Message::new_human_message("Describe this image"),
+            Message::new_human_message_with_images(image_urls),
+        ];
+
+        // Call the generate function
+        let response = open_ai.generate(&messages).await.unwrap();
+        println!("Response: {:?}", response);
     }
 }
