@@ -23,7 +23,7 @@ regex = "1.10.4"
 log = "0.4.21"
 html-escape = "0.2.13"
 reqwest-eventsource = "0.6.0"
-async-openai = "0.23.0"
+async-openai = "0.24.0"
 mockito = "1.4.0"
 tiktoken-rs = "0.5.8"
 sqlx = { version = "0.8.0", default-features = false, features = [
@@ -42,7 +42,7 @@ text-splitter = { version = "0.15", features = ["tiktoken-rs", "markdown"] }
 surrealdb = { version = "1.4.2", optional = true, default-features = false }
 csv = "1.3.0"
 urlencoding = "2.1.3"
-lopdf = { version = "0.33.0", features = ["nom_parser"], optional = true }
+lopdf = { version = "0.34.0", features = ["nom_parser"], optional = true }
 pdf-extract = { version = "0.7.8", optional = true  }
 thiserror = "1.0.59"
 futures-util = "0.3.30"
