@@ -85,7 +85,7 @@ impl Message {
         }
     }
 
-    pub fn new_human_message_with_images<T: Into::<ImageContent>>(images: Vec<T>) -> Self {
+    pub fn new_human_message_with_images<T: Into<ImageContent>>(images: Vec<T>) -> Self {
         Message {
             content: String::default(),
             message_type: MessageType::HumanMessage,
