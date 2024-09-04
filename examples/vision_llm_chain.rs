@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use langchain_rust::chain::{Chain, LLMChainBuilder};
 use langchain_rust::llm::OpenAI;
 use langchain_rust::prompt::HumanMessagePromptTemplate;
@@ -6,13 +7,17 @@ use langchain_rust::{fmt_message, fmt_template, message_formatter, prompt_args, 
 
 #[tokio::main]
 async fn main() {
-    // Or can be a base64 encoded string of the image
-    let image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg";
+    // Convert image to base64. Can also pass a link to an image instead.
+    let image = std::fs::read("./src/llm/test_data/example.jpg").unwrap();
+    let image_base64 = BASE64_STANDARD.encode(image);
+
     let prompt = message_formatter![
         fmt_template!(HumanMessagePromptTemplate::new(template_fstring!(
             "{input}", "input"
         ))),
-        fmt_message!(Message::new_human_message_with_images(vec![image_url])),
+        fmt_message!(Message::new_human_message_with_images(vec![format!(
+            "data:image/jpeg;base64,{image_base64}"
+        )])),
     ];
 
     let open_ai = OpenAI::default();

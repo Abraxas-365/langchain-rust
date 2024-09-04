@@ -312,6 +312,8 @@ mod tests {
     use crate::schemas::FunctionDefinition;
 
     use super::*;
+
+    use base64::prelude::*;
     use serde_json::json;
     use std::sync::Arc;
     use tokio::sync::Mutex;
@@ -468,8 +470,12 @@ mod tests {
         let open_ai =
             OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt4o.to_string());
 
+        // Convert image to base64
+        let image = std::fs::read("./src/llm/test_data/example.jpg").unwrap();
+        let image_base64 = BASE64_STANDARD.encode(image);
+
         // Define a set of messages to send to the generate function
-        let image_urls = vec!["https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/ISS053-E-325560_-_View_of_Earth.jpg/1024px-ISS053-E-325560_-_View_of_Earth.jpg"];
+        let image_urls = vec![format!("data:image/jpeg;base64,{image_base64}")];
         let messages = vec![
             Message::new_human_message("Describe this image"),
             Message::new_human_message_with_images(image_urls),
