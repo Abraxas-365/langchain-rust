@@ -62,7 +62,7 @@ impl From<&Message> for ChatMessage {
             Some(images) => {
                 let images = images
                     .iter()
-                    .map(|image| Image::from_base64(image.as_str()))
+                    .map(|image| Image::from_base64(&image.image_url))
                     .collect();
                 Some(images)
             }
