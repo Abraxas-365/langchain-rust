@@ -60,19 +60,14 @@ impl Embedder for OllamaEmbedder {
             .client
             .generate_embeddings(GenerateEmbeddingsRequest::new(
                 self.model.clone(),
-                EmbeddingsInput::Multiple(documents.iter().map(|doc| doc.clone()).collect()),
+                EmbeddingsInput::Multiple(documents.to_vec()),
             ))
             .await?;
 
         let embeddings = response
             .embeddings
             .into_iter()
-            .map(|embedding| {
-                embedding
-                    .into_iter()
-                    .map(|x| x as f64)
-                    .collect::<Vec<f64>>()
-            })
+            .map(|embedding| embedding.into_iter().map(f64::from).collect())
             .collect();
 
         Ok(embeddings)
