@@ -81,7 +81,7 @@ ollama-rs = { version = "0.2.0", optional = true, features = [
 mistralai-client = { version = "0.13.0", optional = true }
 
 [features]
-default = ["ollama"]
+default = []
 fastembed = ["dep:fastembed"]
 git = ["gix", "flume"]
 mistralai = ["mistralai-client"]

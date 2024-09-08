@@ -20,9 +20,9 @@ async fn main() {
         )])),
     ];
 
-    let open_ai = OpenAI::new(langchain_rust::llm::ollama::openai::OllamaConfig::default())
-        .with_model("llava");
-    // let open_ai = OpenAI::default();
+    // let open_ai = OpenAI::new(langchain_rust::llm::ollama::openai::OllamaConfig::default())
+    //     .with_model("llava");
+    let open_ai = OpenAI::default();
     let chain = LLMChainBuilder::new()
         .prompt(prompt)
         .llm(open_ai)
