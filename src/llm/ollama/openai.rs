@@ -18,12 +18,23 @@ const OLLAMA_API_BASE: &str = "http://localhost:11434/v1";
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
 pub struct OllamaConfig {
+    api_base: String,
     api_key: Secret<String>,
 }
 
 impl OllamaConfig {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_api_key<S: Into<String>>(mut self, api_key: S) -> Self {
+        self.api_key = Secret::from(api_key.into());
+        self
+    }
+
+    pub fn with_api_base<S: Into<String>>(mut self, api_base: S) -> Self {
+        self.api_base = api_base.into();
+        self
     }
 }
 
@@ -33,7 +44,7 @@ impl Config for OllamaConfig {
     }
 
     fn api_base(&self) -> &str {
-        OLLAMA_API_BASE
+        &self.api_base
     }
 
     fn headers(&self) -> HeaderMap {
@@ -52,6 +63,7 @@ impl Config for OllamaConfig {
 impl Default for OllamaConfig {
     fn default() -> Self {
         Self {
+            api_base: OLLAMA_API_BASE.to_string(),
             api_key: Secret::new("ollama".to_string()),
         }
     }
