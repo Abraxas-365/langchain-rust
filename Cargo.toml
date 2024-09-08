@@ -107,7 +107,7 @@ tree-sitter = [
 
 [dev-dependencies]
 tokio-test = "0.4.4"
-testcontainers = "0.21"
+testcontainers = "0.22"
 
 [build-dependencies]
 cc = { version = "1", optional = true }
