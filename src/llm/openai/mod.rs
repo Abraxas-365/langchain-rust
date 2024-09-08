@@ -5,7 +5,7 @@ use async_openai::{
     error::OpenAIError,
     types::{
         ChatChoiceStream, ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs,
-        ChatCompletionRequestMessage, ChatCompletionRequestMessageContentPart,
+        ChatCompletionRequestMessage, ChatCompletionRequestUserMessageContentPart,
         ChatCompletionRequestMessageContentPartImageArgs, ChatCompletionRequestSystemMessageArgs,
         ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
         ChatCompletionRequestUserMessageContent, ChatCompletionToolArgs, ChatCompletionToolType,
@@ -219,7 +219,7 @@ impl<C: Config> OpenAI<C> {
                     let content: ChatCompletionRequestUserMessageContent = match m.images.clone() {
                         Some(images) => {
                             let content: Result<
-                                Vec<ChatCompletionRequestMessageContentPart>,
+                                Vec<ChatCompletionRequestUserMessageContentPart>,
                                 OpenAIError,
                             > = images
                                 .into_iter()
