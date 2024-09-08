@@ -40,6 +40,22 @@ impl MessageType {
     }
 }
 
+/// Struct `ImageContent` represents an image provided to an LLM.
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct ImageContent {
+    pub image_url: String,
+    pub detail: Option<String>,
+}
+
+impl<S: AsRef<str>> From<S> for ImageContent {
+    fn from(image_url: S) -> Self {
+        ImageContent {
+            image_url: image_url.as_ref().into(),
+            detail: None,
+        }
+    }
+}
+
 /// Struct `Message` represents a message with its content and type.
 ///
 /// # Usage
@@ -54,7 +70,7 @@ pub struct Message {
     pub message_type: MessageType,
     pub id: Option<String>,
     pub tool_calls: Option<Value>,
-    pub images: Option<Vec<String>>,
+    pub images: Option<Vec<ImageContent>>,
 }
 
 impl Message {
@@ -66,6 +82,16 @@ impl Message {
             id: None,
             tool_calls: None,
             images: None,
+        }
+    }
+
+    pub fn new_human_message_with_images<T: Into<ImageContent>>(images: Vec<T>) -> Self {
+        Message {
+            content: String::default(),
+            message_type: MessageType::HumanMessage,
+            id: None,
+            tool_calls: None,
+            images: Some(images.into_iter().map(|i| i.into()).collect()),
         }
     }
 
