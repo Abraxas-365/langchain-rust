@@ -89,15 +89,17 @@ pub fn get_language_by_filename(name: &String) -> Language {
 fn get_language_parser(language: &Language) -> Parser {
     let mut parser = Parser::new();
     let lang = match language {
-        Language::Rust => tree_sitter_rust::language(),
-        Language::C => tree_sitter_c::language(),
-        Language::Cpp => tree_sitter_cpp::language(),
-        Language::Javascript => tree_sitter_javascript::language(),
-        Language::Typescript => tree_sitter_typescript::language_typescript(),
-        Language::Go => tree_sitter_go::language(),
-        Language::Python => tree_sitter_python::language(),
+        Language::Rust => tree_sitter_rust::LANGUAGE,
+        Language::C => tree_sitter_c::LANGUAGE,
+        Language::Cpp => tree_sitter_cpp::LANGUAGE,
+        Language::Javascript => tree_sitter_javascript::LANGUAGE,
+        Language::Typescript => tree_sitter_typescript::LANGUAGE_TSX,
+        Language::Go => tree_sitter_go::LANGUAGE,
+        Language::Python => tree_sitter_python::LANGUAGE,
     };
-    parser.set_language(&lang).expect("Error loading grammar");
+    parser
+        .set_language(&lang.into())
+        .expect("Error loading grammar");
     parser
 }
 
