@@ -9,7 +9,6 @@ use ollama_rs::{
     },
     Ollama as OllamaClient,
 };
-use reqwest::Response;
 
 #[derive(Debug)]
 pub struct OllamaEmbedder {
