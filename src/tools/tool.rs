@@ -1,6 +1,5 @@
 use std::error::Error;
 use std::string::String;
-
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
@@ -77,4 +76,11 @@ pub trait Tool: Send + Sync {
             Err(_) => Value::String(input.to_string()),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum ToolCallBehavior {
+    None,
+    Auto,
+    Named(String),
 }

@@ -113,6 +113,7 @@ impl Default for Wolfram {
     }
 }
 
+
 #[async_trait]
 impl Tool for Wolfram {
     fn name(&self) -> String {

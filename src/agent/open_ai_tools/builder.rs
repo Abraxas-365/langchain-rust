@@ -4,7 +4,6 @@ use crate::{
     agent::AgentError,
     chain::{options::ChainCallOptions, LLMChainBuilder},
     language_models::{llm::LLM, options::CallOptions},
-    schemas::FunctionDefinition,
     tools::Tool,
 };
 
@@ -47,11 +46,7 @@ impl OpenAiToolAgentBuilder {
 
         let prompt = OpenAiToolAgent::create_prompt(&prefix)?;
         let default_options = ChainCallOptions::default().with_max_tokens(1000);
-        let functions = tools
-            .iter()
-            .map(FunctionDefinition::from_langchain_tool)
-            .collect::<Vec<FunctionDefinition>>();
-        llm.add_options(CallOptions::new().with_functions(functions));
+        llm.add_options(CallOptions::new().with_functions(tools.clone()));
         let chain = Box::new(
             LLMChainBuilder::new()
                 .prompt(prompt)

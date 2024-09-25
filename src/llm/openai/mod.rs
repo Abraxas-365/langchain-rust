@@ -1,7 +1,7 @@
 use std::pin::Pin;
 
-pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
+    Client,
     error::OpenAIError,
     types::{
         ChatChoiceStream, ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs,
@@ -12,18 +12,19 @@ use async_openai::{
         ChatCompletionToolType, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
         FunctionObjectArgs,
     },
-    Client,
 };
+pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
+    language_models::{GenerateResult, llm::LLM, LLMError, options::CallOptions, TokenUsage},
     schemas::{
-        messages::{Message, MessageType},
-        FunctionCallBehavior, StreamData,
+        messages::{Message, MessageType}, StreamData,
     },
 };
+use crate::schemas::FunctionDefinition;
+use crate::tools::ToolCallBehavior;
 
 #[derive(Clone)]
 pub enum OpenAIModel {
@@ -68,18 +69,8 @@ impl<C: Config> OpenAI<C> {
         }
     }
 
-    pub fn with_model<S: Into<String>>(mut self, model: S) -> Self {
-        self.model = model.into();
-        self
-    }
-
     pub fn with_config(mut self, config: C) -> Self {
         self.config = config;
-        self
-    }
-
-    pub fn with_options(mut self, options: CallOptions) -> Self {
-        self.options = options;
         self
     }
 }
@@ -92,6 +83,10 @@ impl Default for OpenAI<OpenAIConfig> {
 
 #[async_trait]
 impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
+    fn add_options(&mut self, options: CallOptions) {
+        self.options.merge_options(options)
+    }
+
     async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, LLMError> {
         let client = Client::with_config(self.config.clone());
         let request = self.generate_request(prompt)?;
@@ -152,12 +147,6 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
         }
     }
 
-    async fn invoke(&self, prompt: &str) -> Result<String, LLMError> {
-        self.generate(&[Message::new_human_message(prompt)])
-            .await
-            .map(|res| res.generation)
-    }
-
     async fn stream(
         &self,
         messages: &[Message],
@@ -187,13 +176,19 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
 
         Ok(Box::pin(new_stream))
     }
-
-    fn add_options(&mut self, options: CallOptions) {
-        self.options.merge_options(options)
-    }
 }
 
 impl<C: Config> OpenAI<C> {
+    pub fn with_options(mut self, options: CallOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    pub fn with_model<S: Into<String>>(mut self, model: S) -> Self {
+        self.model = model.into();
+        self
+    }
+
     fn to_openai_messages(
         &self,
         messages: &[Message],
@@ -270,17 +265,37 @@ impl<C: Config> OpenAI<C> {
     ) -> Result<CreateChatCompletionRequest, LLMError> {
         let messages: Vec<ChatCompletionRequestMessage> = self.to_openai_messages(messages)?;
         let mut request_builder = CreateChatCompletionRequestArgs::default();
+        request_builder.messages(messages);
+        request_builder.model(self.model.to_string());
+        if let Some(frequency_penalty) = self.options.frequency_penalty {
+            request_builder.frequency_penalty(frequency_penalty);
+        }
         if let Some(max_tokens) = self.options.max_tokens {
             request_builder.max_tokens(max_tokens);
         }
-        request_builder.model(self.model.to_string());
+        if let Some(n) = self.options.n {
+            request_builder.n(n as u8);
+        }
+        if let Some(presence_penalty) = self.options.presence_penalty {
+            request_builder.presence_penalty(presence_penalty);
+        }
+        if let Some(seed) = self.options.seed {
+            request_builder.seed(seed as i64);
+        }
         if let Some(stop_words) = &self.options.stop_words {
             request_builder.stop(stop_words);
+        }
+        if let Some(temperature) = self.options.temperature {
+            request_builder.temperature(temperature);
+        }
+        if let Some(top_p) = self.options.top_p {
+            request_builder.top_p(top_p);
         }
 
         if let Some(behavior) = &self.options.functions {
             let mut functions = Vec::new();
-            for f in behavior.iter() {
+            for f in behavior.into_iter() {
+                let f = FunctionDefinition::from_langchain_tool(f);
                 let tool = FunctionObjectArgs::default()
                     .name(f.name.clone())
                     .description(f.description.clone())
@@ -298,27 +313,27 @@ impl<C: Config> OpenAI<C> {
 
         if let Some(behavior) = &self.options.function_call_behavior {
             match behavior {
-                FunctionCallBehavior::Auto => request_builder.tool_choice("auto"),
-                FunctionCallBehavior::None => request_builder.tool_choice("none"),
-                FunctionCallBehavior::Named(name) => request_builder.tool_choice(name.as_str()),
+                ToolCallBehavior::Auto => request_builder.tool_choice("auto"),
+                ToolCallBehavior::None => request_builder.tool_choice("none"),
+                ToolCallBehavior::Named(name) => request_builder.tool_choice(name.as_str()),
             };
         }
-        request_builder.messages(messages);
         Ok(request_builder.build()?)
     }
 }
 #[cfg(test)]
 mod tests {
-
-    use crate::schemas::FunctionDefinition;
-
-    use super::*;
+    use std::error::Error;
+    use std::sync::Arc;
 
     use base64::prelude::*;
-    use serde_json::json;
-    use std::sync::Arc;
+    use serde_json::{json, Value};
     use tokio::sync::Mutex;
     use tokio::test;
+
+    use crate::tools::Tool;
+
+    use super::*;
 
     #[test]
     #[ignore]
@@ -437,11 +452,20 @@ mod tests {
     #[test]
     #[ignore]
     async fn test_function() {
-        let mut functions = Vec::new();
-        functions.push(FunctionDefinition {
-            name: "cli".to_string(),
-            description: "Use the Ubuntu command line to preform any action you wish.".to_string(),
-            parameters: json!({
+        let mut functions: Vec<Arc<dyn Tool>> = Vec::new();
+
+        struct CliFunction {}
+        impl Tool for CliFunction {
+            fn name(&self) -> String {
+                "cli".to_string()
+            }
+
+            fn description(&self) -> String {
+                "Use the Ubuntu command line to preform any action you wish.".to_string()
+            }
+
+            fn parameters(&self) -> Value {
+                json!({
                 "type": "object",
                 "properties": {
                     "command": {
@@ -450,8 +474,15 @@ mod tests {
                     }
                 },
                 "required": ["command"]
-            }),
-        });
+            })
+            }
+
+            async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
+                unimplemented!()
+            }
+        }
+
+        functions.push(Arc::new(CliFunction {}));
 
         let llm = OpenAI::default()
             .with_model(OpenAIModel::Gpt35)

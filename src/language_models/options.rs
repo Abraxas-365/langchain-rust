@@ -1,11 +1,20 @@
 use futures::Future;
 use std::{pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
-
-use crate::schemas::{FunctionCallBehavior, FunctionDefinition};
+use crate::tools::{Tool, ToolCallBehavior};
 
 #[derive(Clone)]
 pub struct CallOptions {
+    pub mirostat: Option<u8>,
+    pub mirostat_eta: Option<f32>,
+    pub mirostat_tau: Option<f32>,
+    pub num_ctx: Option<u32>,
+    pub num_gqa: Option<u32>,
+    pub num_gpu: Option<u32>,
+    pub num_thread: Option<u32>,
+    pub repeat_last_n: Option<i32>,
+    pub tfs_z: Option<f32>,
+    pub num_predict: Option<i32>,
     pub candidate_count: Option<usize>,
     pub max_tokens: Option<u32>,
     pub temperature: Option<f32>,
@@ -24,8 +33,8 @@ pub struct CallOptions {
     pub repetition_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
-    pub functions: Option<Vec<FunctionDefinition>>,
-    pub function_call_behavior: Option<FunctionCallBehavior>,
+    pub functions: Option<Vec<Arc<dyn Tool>>>,
+    pub function_call_behavior: Option<ToolCallBehavior>,
 }
 
 impl Default for CallOptions {
@@ -36,6 +45,16 @@ impl Default for CallOptions {
 impl CallOptions {
     pub fn new() -> Self {
         CallOptions {
+            mirostat: None,
+            mirostat_eta: None,
+            mirostat_tau: None,
+            num_ctx: None,
+            num_gqa: None,
+            num_gpu: None,
+            num_thread: None,
+            repeat_last_n: None,
+            tfs_z: None,
+            num_predict: None,
             candidate_count: None,
             max_tokens: None,
             temperature: None,
@@ -53,6 +72,56 @@ impl CallOptions {
             functions: None,
             function_call_behavior: None,
         }
+    }
+
+    pub fn with_mirostat(mut self, mirostat: u8) -> Self {
+        self.mirostat = Some(mirostat);
+        self
+    }
+
+    pub fn with_mirostat_eta(mut self, mirostat_eta: f32) -> Self {
+        self.mirostat_eta = Some(mirostat_eta);
+        self
+    }
+
+    pub fn with_mirostat_tau(mut self, mirostat_tau: f32) -> Self {
+        self.mirostat_tau = Some(mirostat_tau);
+        self
+    }
+
+    pub fn with_num_ctx(mut self, num_ctx: u32) -> Self {
+        self.num_ctx = Some(num_ctx);
+        self
+    }
+
+    pub fn with_num_gqa(mut self, num_gqa: u32) -> Self {
+        self.num_gqa = Some(num_gqa);
+        self
+    }
+
+    pub fn with_num_gpu(mut self, num_gpu: u32) -> Self {
+        self.num_gpu = Some(num_gpu);
+        self
+    }
+
+    pub fn with_num_thread(mut self, num_thread: u32) -> Self {
+        self.num_thread = Some(num_thread);
+        self
+    }
+
+    pub fn with_repeat_last_n(mut self, repeat_last_n: i32) -> Self {
+        self.repeat_last_n = Some(repeat_last_n);
+        self
+    }
+
+    pub fn with_tfs_z(mut self, tfs_z: f32) -> Self {
+        self.tfs_z = Some(tfs_z);
+        self
+    }
+
+    pub fn with_num_predict(mut self, num_predict: i32) -> Self {
+        self.num_predict = Some(num_predict);
+        self
     }
 
     // Refactored "with" functions as methods of CallOptions
@@ -137,12 +206,12 @@ impl CallOptions {
         self
     }
 
-    pub fn with_functions(mut self, functions: Vec<FunctionDefinition>) -> Self {
+    pub fn with_functions(mut self, functions: Vec<Arc<dyn Tool>>) -> Self {
         self.functions = Some(functions);
         self
     }
 
-    pub fn with_function_call_behavior(mut self, behavior: FunctionCallBehavior) -> Self {
+    pub fn with_function_call_behavior(mut self, behavior: ToolCallBehavior) -> Self {
         self.function_call_behavior = Some(behavior);
         self
     }

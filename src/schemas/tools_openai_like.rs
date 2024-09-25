@@ -1,9 +1,7 @@
-use std::ops::Deref;
-
+use crate::tools::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use crate::tools::Tool;
+use std::ops::Deref;
 
 #[derive(Clone, Debug)]
 pub enum FunctionCallBehavior {
