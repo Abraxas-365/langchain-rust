@@ -283,6 +283,9 @@ impl<C: Config> OpenAI<C> {
     ) -> Result<CreateChatCompletionRequest, LLMError> {
         let messages: Vec<ChatCompletionRequestMessage> = self.to_openai_messages(messages)?;
         let mut request_builder = CreateChatCompletionRequestArgs::default();
+        if let Some(temperature) = self.options.temperature {
+            request_builder.temperature(temperature);
+        }
         if let Some(max_tokens) = self.options.max_tokens {
             request_builder.max_tokens(max_tokens);
         }
