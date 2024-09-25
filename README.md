@@ -275,8 +275,8 @@ async fn main() {
     //     .with_config(
     //         OpenAIConfig::default()
     //             .with_api_key("<your_key>"),
-    //     ).with_model(OpenAIModel::Gpt35.to_string());
-    let open_ai = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
+    //     ).with_model(OpenAIModel::Gpt4oMini.to_string());
+    let open_ai = OpenAI::default().with_model(OpenAIModel::Gpt4oMini.to_string());
 
 
     //Once you've installed and initialized the LLM of your choice, we can try using it! Let's ask it what LangSmith is - this is something that wasn't present in the training data so it shouldn't have a very good response.

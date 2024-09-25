@@ -2,12 +2,15 @@ use std::pin::Pin;
 
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
+    error::OpenAIError,
     types::{
         ChatChoiceStream, ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs,
-        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
-        ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
-        ChatCompletionStreamOptions, ChatCompletionToolArgs, ChatCompletionToolType,
-        CreateChatCompletionRequest, CreateChatCompletionRequestArgs, FunctionObjectArgs,
+        ChatCompletionRequestMessage, ChatCompletionRequestMessageContentPartImageArgs,
+        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
+        ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
+        ChatCompletionRequestUserMessageContentPart, ChatCompletionStreamOptions,
+        ChatCompletionToolArgs, ChatCompletionToolType, CreateChatCompletionRequest,
+        CreateChatCompletionRequestArgs, FunctionObjectArgs,
     },
     Client,
 };
@@ -225,12 +228,34 @@ impl<C: Config> OpenAI<C> {
                         .build()?
                         .into(),
                 }),
-                MessageType::HumanMessage => openai_messages.push(
-                    ChatCompletionRequestUserMessageArgs::default()
-                        .content(m.content.clone())
-                        .build()?
-                        .into(),
-                ),
+                MessageType::HumanMessage => {
+                    let content: ChatCompletionRequestUserMessageContent = match m.images.clone() {
+                        Some(images) => {
+                            let content: Result<
+                                Vec<ChatCompletionRequestUserMessageContentPart>,
+                                OpenAIError,
+                            > = images
+                                .into_iter()
+                                .map(|image| {
+                                    Ok(ChatCompletionRequestMessageContentPartImageArgs::default()
+                                        .image_url(image.image_url)
+                                        .build()?
+                                        .into())
+                                })
+                                .collect();
+
+                            content?.into()
+                        }
+                        None => m.content.clone().into(),
+                    };
+
+                    openai_messages.push(
+                        ChatCompletionRequestUserMessageArgs::default()
+                            .content(content)
+                            .build()?
+                            .into(),
+                    )
+                }
                 MessageType::SystemMessage => openai_messages.push(
                     ChatCompletionRequestSystemMessageArgs::default()
                         .content(m.content.clone())
@@ -306,6 +331,8 @@ mod tests {
     use crate::schemas::FunctionDefinition;
 
     use super::*;
+
+    use base64::prelude::*;
     use serde_json::json;
     use std::sync::Arc;
     use tokio::sync::Mutex;
@@ -313,7 +340,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    async fn test_ivoke() {
+    async fn test_invoke() {
         let message_complete = Arc::new(Mutex::new(String::new()));
 
         // Define the streaming function
@@ -453,5 +480,28 @@ mod tests {
             .await
             .unwrap();
         println!("{}", response)
+    }
+
+    #[test]
+    #[ignore]
+    async fn test_generate_with_image_message() {
+        // Setup the OpenAI client with the necessary options
+        let open_ai =
+            OpenAI::new(OpenAIConfig::default()).with_model(OpenAIModel::Gpt4o.to_string());
+
+        // Convert image to base64
+        let image = std::fs::read("./src/llm/test_data/example.jpg").unwrap();
+        let image_base64 = BASE64_STANDARD.encode(image);
+
+        // Define a set of messages to send to the generate function
+        let image_urls = vec![format!("data:image/jpeg;base64,{image_base64}")];
+        let messages = vec![
+            Message::new_human_message("Describe this image"),
+            Message::new_human_message_with_images(image_urls),
+        ];
+
+        // Call the generate function
+        let response = open_ai.generate(&messages).await.unwrap();
+        println!("Response: {:?}", response);
     }
 }
