@@ -129,7 +129,7 @@ impl<C: Connection> VectorStore for Store<C> {
                             }}
                             RETURN meta::id(id) as id"#
                         ))
-                        .bind(("text", &doc.page_content))
+                        .bind(("text", doc.page_content.to_owned()))
                         .bind(("embedding", vector.to_owned()))
                         .bind(("metadata", metadata.to_owned()))
                         .await?
@@ -150,9 +150,9 @@ impl<C: Connection> VectorStore for Store<C> {
                             }}
                             RETURN meta::id(id) as id"#
                         ))
-                        .bind(("text", &doc.page_content))
+                        .bind(("text", doc.page_content.to_owned()))
                         .bind(("embedding", vector.to_owned()))
-                        .bind(("metadata", &doc.metadata))
+                        .bind(("metadata", doc.metadata.to_owned()))
                         .await?
                         .check()?;
 

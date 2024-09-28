@@ -55,7 +55,7 @@ impl<C: Connection> StoreBuilder<C> {
     /// async fn main() {
     ///     let surrealdb_config = surrealdb::opt::Config::new()
     ///         .set_strict(true)
-    ///         .capabilities(surrealdb::dbs::Capabilities::all())
+    ///         .capabilities(surrealdb::opt::capabilities::Capabilities::all())
     ///         .user(surrealdb::opt::auth::Root {
     ///             username: "username".into(),
     ///             password: "password".into()

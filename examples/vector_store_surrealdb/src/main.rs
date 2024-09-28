@@ -16,7 +16,7 @@ async fn main() {
 
     let surrealdb_config = surrealdb::opt::Config::new()
         .set_strict(true)
-        .capabilities(surrealdb::dbs::Capabilities::all());
+        .capabilities(surrealdb::opt::capabilities::Capabilities::all());
     //  Uncomment the following lines to enable authentication
     //  .user(surrealdb::opt::auth::Root {
     //      username: "root".into(),
