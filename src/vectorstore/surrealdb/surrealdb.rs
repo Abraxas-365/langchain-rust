@@ -130,8 +130,8 @@ impl<C: Connection> VectorStore for Store<C> {
                             RETURN meta::id(id) as id"#
                         ))
                         .bind(("text", &doc.page_content))
-                        .bind(("embedding", &vector))
-                        .bind(("metadata", &metadata))
+                        .bind(("embedding", vector.to_owned()))
+                        .bind(("metadata", metadata.to_owned()))
                         .await?
                         .check()?;
 
@@ -151,7 +151,7 @@ impl<C: Connection> VectorStore for Store<C> {
                             RETURN meta::id(id) as id"#
                         ))
                         .bind(("text", &doc.page_content))
-                        .bind(("embedding", &vector))
+                        .bind(("embedding", vector.to_owned()))
                         .bind(("metadata", &doc.metadata))
                         .await?
                         .check()?;
@@ -192,11 +192,11 @@ impl<C: Connection> VectorStore for Store<C> {
         ORDER BY similarity DESC LIMIT $k
             "#
             ))
-            .bind(("collection_name", &collection_name))
-            .bind(("collection_metadata_key", &self.get_collection_metdata_key()))
+            .bind(("collection_name", collection_name.to_owned()))
+            .bind(("collection_metadata_key", self.get_collection_metdata_key().to_owned()))
             .bind(("score_threshold", opt.score_threshold.unwrap_or(0.0)))
             .bind(("k", limit))
-            .bind(("embedding", &query_vector))
+            .bind(("embedding", query_vector.to_owned()))
             .await?
             .check()?;
 
