@@ -59,11 +59,11 @@ impl<C: Connection> Store<C> {
                 self.db
                     .query(format!(
                         r#"
-                            DEFINE TABLE {collection_table_name} SCHEMAFULL;
-                            DEFINE FIELD text                      ON {collection_table_name} TYPE string;
-                            DEFINE FIELD embedding                 ON {collection_table_name} TYPE array ASSERT (array::len($value) = {vector_dimensions}) || (array::len($value) = 0);
-                            DEFINE FIELD embedding.*               ON {collection_table_name} TYPE float;
-                            DEFINE FIELD metadata                  ON {collection_table_name} FLEXIBLE TYPE option<object>;"#
+                            DEFINE TABLE IF NOT EXISTS {collection_table_name} SCHEMAFULL;
+                            DEFINE FIELD IF NOT EXISTS text                      ON {collection_table_name} TYPE string;
+                            DEFINE FIELD IF NOT EXISTS embedding                 ON {collection_table_name} TYPE array ASSERT (array::len($value) = {vector_dimensions}) || (array::len($value) = 0);
+                            DEFINE FIELD IF NOT EXISTS embedding.*               ON {collection_table_name} TYPE float;
+                            DEFINE FIELD IF NOT EXISTS metadata                  ON {collection_table_name} FLEXIBLE TYPE option<object>;"#
                     ))
                     .await?
                     .check()?;
@@ -74,11 +74,11 @@ impl<C: Connection> Store<C> {
                 self.db
                     .query(format!(
                         r#"
-                            DEFINE TABLE {collection_table_name} SCHEMAFULL;
-                            DEFINE FIELD text              ON {collection_table_name} TYPE string;
-                            DEFINE FIELD embedding         ON {collection_table_name} TYPE array ASSERT (array::len($value) = {vector_dimensions}) || (array::len($value) = 0);
-                            DEFINE FIELD embedding.*       ON {collection_table_name} TYPE float;
-                            DEFINE FIELD metadata          ON {collection_table_name} FLEXIBLE TYPE option<object>;"#
+                            DEFINE TABLE IF NOT EXISTS {collection_table_name} SCHEMAFULL;
+                            DEFINE FIELD IF NOT EXISTS text              ON {collection_table_name} TYPE string;
+                            DEFINE FIELD IF NOT EXISTS embedding         ON {collection_table_name} TYPE array ASSERT (array::len($value) = {vector_dimensions}) || (array::len($value) = 0);
+                            DEFINE FIELD IF NOT EXISTS embedding.*       ON {collection_table_name} TYPE float;
+                            DEFINE FIELD IF NOT EXISTS metadata          ON {collection_table_name} FLEXIBLE TYPE option<object>;"#
                     ))
                     .await?
                     .check()?;
@@ -127,7 +127,7 @@ impl<C: Connection> VectorStore for Store<C> {
                                 embedding: $embedding,
                                 metadata: $metadata,
                             }}
-                            RETURN meta::id(id) as id"#
+                            RETURN record::id(id) as id"#
                         ))
                         .bind(("text", doc.page_content.to_owned()))
                         .bind(("embedding", vector.to_owned()))
@@ -148,7 +148,7 @@ impl<C: Connection> VectorStore for Store<C> {
                                 embedding: $embedding,
                                 metadata: $metadata,
                             }}
-                            RETURN meta::id(id) as id"#
+                            RETURN record::id(id) as id"#
                         ))
                         .bind(("text", doc.page_content.to_owned()))
                         .bind(("embedding", vector.to_owned()))
@@ -185,7 +185,7 @@ impl<C: Connection> VectorStore for Store<C> {
             .db
             .query(format!(
                 r#"
-        SELECT meta::id(id) as id, text, metadata,
+        SELECT record::id(id) as id, text, metadata,
         vector::similarity::cosine(embedding, $embedding) as similarity
         FROM {collection_table_name}
         WHERE vector::similarity::cosine(embedding, $embedding) >= $score_threshold {collection_predicate}
