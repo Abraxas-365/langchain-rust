@@ -4,7 +4,7 @@ use langchain_rust::{language_models::llm::LLM, llm::ollama::client::Ollama};
 #[cfg(feature = "ollama")]
 #[tokio::main]
 async fn main() {
-    let ollama = Ollama::default().with_model("llama3");
+    let ollama = Ollama::default().with_model("llama3.2");
 
     let response = ollama.invoke("Hi").await.unwrap();
     println!("{}", response);
