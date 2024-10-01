@@ -24,8 +24,8 @@ pub struct Ollama {
     pub(crate) options: Option<GenerationOptions>,
 }
 
-/// [llama3](https://ollama.com/library/llama3) is a 8B parameters, 4.7GB model.
-const DEFAULT_MODEL: &str = "llama3";
+/// [llama3.2](https://ollama.com/library/llama3.2) is a 3B parameters, 2.0GB model.
+const DEFAULT_MODEL: &str = "llama3.2";
 
 impl Ollama {
     pub fn new<S: Into<String>>(
@@ -153,7 +153,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_generate() {
-        let ollama = Ollama::default().with_model("llama3");
+        let ollama = Ollama::default().with_model("llama3.2");
         let response = ollama.invoke("Hey Macarena, ay").await.unwrap();
         println!("{}", response);
     }
@@ -161,7 +161,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_stream() {
-        let ollama = Ollama::default().with_model("llama3");
+        let ollama = Ollama::default().with_model("llama3.2");
 
         let message = Message::new_human_message("Why does water boil at 100 degrees?");
         let mut stream = ollama.stream(&vec![message]).await.unwrap();
