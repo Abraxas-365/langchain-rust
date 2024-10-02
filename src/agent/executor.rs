@@ -128,7 +128,6 @@ where
                 AgentEvent::Finish(finish) => {
                     if let Some(memory) = &self.memory {
                         let mut memory = memory.lock().await;
-                        memory.add_user_message(&input_variables["input"]);
                         memory.add_ai_message(&finish.output);
                     }
                     return Ok(GenerateResult {
