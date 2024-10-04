@@ -1,7 +1,7 @@
 use std::pin::Pin;
 
+pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
-    Client,
     error::OpenAIError,
     types::{
         ChatChoiceStream, ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs,
@@ -12,19 +12,20 @@ use async_openai::{
         ChatCompletionToolType, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
         FunctionObjectArgs,
     },
+    Client,
 };
-pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 
-use crate::{
-    language_models::{GenerateResult, llm::LLM, LLMError, options::CallOptions, TokenUsage},
-    schemas::{
-        messages::{Message, MessageType}, StreamData,
-    },
-};
 use crate::schemas::FunctionDefinition;
 use crate::tools::ToolCallBehavior;
+use crate::{
+    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
+    schemas::{
+        messages::{Message, MessageType},
+        StreamData,
+    },
+};
 
 #[derive(Clone)]
 pub enum OpenAIModel {
@@ -466,15 +467,15 @@ mod tests {
 
             fn parameters(&self) -> Value {
                 json!({
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The raw command you want executed"
-                    }
-                },
-                "required": ["command"]
-            })
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "The raw command you want executed"
+                        }
+                    },
+                    "required": ["command"]
+                })
             }
 
             async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {

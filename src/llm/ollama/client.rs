@@ -1,5 +1,4 @@
 use crate::language_models::options::CallOptions;
-use ollama_rs::generation::functions::tools::Tool as OllamaTool;
 use crate::tools::Tool;
 use crate::{
     language_models::{llm::LLM, GenerateResult, LLMError, TokenUsage},
@@ -7,6 +6,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::Stream;
+use ollama_rs::generation::functions::tools::Tool as OllamaTool;
 use ollama_rs::generation::functions::{FunctionCallRequest, LlamaFunctionCall};
 use ollama_rs::generation::images::Image;
 pub use ollama_rs::{
@@ -26,7 +26,7 @@ enum OllamaRequest {
     FunctionCallRequest(FunctionCallRequest),
 }
 
-pub struct OllamaToolStruct{
+pub struct OllamaToolStruct {
     pub(crate) tool: Arc<dyn Tool>,
 }
 
@@ -137,7 +137,9 @@ impl Ollama {
         if let Some(tools) = self.options.functions.clone() {
             let tools = tools
                 .into_iter()
-                .map(|tool| Arc::new(OllamaToolStruct { tool: tool.clone() }) as Arc<dyn OllamaTool>)
+                .map(|tool| {
+                    Arc::new(OllamaToolStruct { tool: tool.clone() }) as Arc<dyn OllamaTool>
+                })
                 .collect();
             OllamaRequest::FunctionCallRequest(
                 FunctionCallRequest::new(self.model.clone(), tools, mapped_messages)

@@ -1,7 +1,7 @@
+use crate::tools::{Tool, ToolCallBehavior};
 use futures::Future;
 use std::{pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
-use crate::tools::{Tool, ToolCallBehavior};
 
 #[derive(Clone)]
 pub struct CallOptions {
