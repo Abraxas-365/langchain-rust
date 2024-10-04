@@ -82,6 +82,11 @@ impl Ollama {
         self
     }
 
+    pub fn with_client(mut self, client: Arc<OllamaClient>) -> Self {
+        self.client = client;
+        self
+    }
+
     fn generate_options(&self) -> GenerationOptions {
         let mut options = GenerationOptions::default();
         if let Some(mirostat) = self.options.mirostat {
