@@ -48,7 +48,7 @@ impl OllamaTool for OllamaToolStruct {
 
     async fn run(&self, _input: serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
         // This should not be called since this only used for function definition
-        !warn!("Function call not supported");
+        warn!("Function call not supported");
         Ok("".to_string())
     }
 }
