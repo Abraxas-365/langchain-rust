@@ -30,6 +30,7 @@ pub struct OllamaToolStruct{
     pub(crate) tool: Arc<dyn Tool>,
 }
 
+#[async_trait]
 impl OllamaTool for OllamaToolStruct {
     fn name(&self) -> String {
         self.tool.name()
@@ -55,8 +56,8 @@ pub struct Ollama {
     pub(crate) options: CallOptions,
 }
 
-/// [llama3](https://ollama.com/library/llama3) is a 8B parameters, 4.7GB model.
-const DEFAULT_MODEL: &str = "llama3";
+/// [llama3.2](https://ollama.com/library/llama3.2) is a 3B parameters, 2.0GB model.
+const DEFAULT_MODEL: &str = "llama3.2";
 
 impl Ollama {
     pub fn new<S: Into<String>>(client: Arc<OllamaClient>, model: S, options: CallOptions) -> Self {
@@ -266,7 +267,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_generate() {
-        let ollama = Ollama::default().with_model("llama3");
+        let ollama = Ollama::default().with_model("llama3.2");
         let response = ollama.invoke("Hey Macarena, ay").await.unwrap();
         println!("{}", response);
     }
@@ -274,7 +275,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_stream() {
-        let ollama = Ollama::default().with_model("llama3");
+        let ollama = Ollama::default().with_model("llama3.2");
 
         let message = Message::new_human_message("Why does water boil at 100 degrees?");
         let mut stream = ollama.stream(&vec![message]).await.unwrap();
