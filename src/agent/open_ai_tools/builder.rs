@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
+use super::{prompt::PREFIX, OpenAiToolAgent};
+use crate::schemas::FunctionDefinition;
 use crate::{
     agent::AgentError,
     chain::{options::ChainCallOptions, LLMChainBuilder},
     language_models::{llm::LLM, options::CallOptions},
     tools::Tool,
 };
-
-use super::{prompt::PREFIX, OpenAiToolAgent};
 
 pub struct OpenAiToolAgentBuilder {
     tools: Option<Vec<Arc<dyn Tool>>>,
@@ -46,7 +46,11 @@ impl OpenAiToolAgentBuilder {
 
         let prompt = OpenAiToolAgent::create_prompt(&prefix)?;
         let default_options = ChainCallOptions::default().with_max_tokens(1000);
-        llm.add_options(CallOptions::new().with_functions(tools.clone()));
+        let functions = tools
+            .iter()
+            .map(|tool| FunctionDefinition::from_langchain_tool(tool))
+            .collect();
+        llm.add_options(CallOptions::new().with_functions(functions));
         let chain = Box::new(
             LLMChainBuilder::new()
                 .prompt(prompt)

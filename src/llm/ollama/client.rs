@@ -1,4 +1,5 @@
 use crate::language_models::options::CallOptions;
+use crate::schemas::FunctionDefinition;
 use crate::tools::Tool;
 use crate::{
     language_models::{llm::LLM, GenerateResult, LLMError, TokenUsage},
@@ -6,6 +7,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::Stream;
+use log::warn;
 use ollama_rs::generation::functions::tools::Tool as OllamaTool;
 use ollama_rs::generation::functions::{FunctionCallRequest, LlamaFunctionCall};
 use ollama_rs::generation::images::Image;
@@ -27,25 +29,27 @@ enum OllamaRequest {
 }
 
 pub struct OllamaToolStruct {
-    pub(crate) tool: Arc<dyn Tool>,
+    pub(crate) tool: FunctionDefinition,
 }
 
 #[async_trait]
 impl OllamaTool for OllamaToolStruct {
     fn name(&self) -> String {
-        self.tool.name()
+        self.tool.name.clone()
     }
 
     fn description(&self) -> String {
-        self.tool.description()
+        self.tool.description.clone()
     }
 
     fn parameters(&self) -> serde_json::Value {
-        self.tool.parameters()
+        self.tool.parameters.clone()
     }
 
-    async fn run(&self, input: serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
-        self.tool.run(input).await
+    async fn run(&self, _input: serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
+        // This should not be called since this only used for function definition
+        !warn!("Function call not supported");
+        Ok("".to_string())
     }
 }
 

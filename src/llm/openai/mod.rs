@@ -17,8 +17,7 @@ use async_openai::{
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 
-use crate::schemas::FunctionDefinition;
-use crate::tools::ToolCallBehavior;
+use crate::schemas::FunctionCallBehavior;
 use crate::{
     language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
     schemas::{
@@ -296,7 +295,6 @@ impl<C: Config> OpenAI<C> {
         if let Some(behavior) = &self.options.functions {
             let mut functions = Vec::new();
             for f in behavior.into_iter() {
-                let f = FunctionDefinition::from_langchain_tool(f);
                 let tool = FunctionObjectArgs::default()
                     .name(f.name.clone())
                     .description(f.description.clone())
@@ -314,9 +312,9 @@ impl<C: Config> OpenAI<C> {
 
         if let Some(behavior) = &self.options.function_call_behavior {
             match behavior {
-                ToolCallBehavior::Auto => request_builder.tool_choice("auto"),
-                ToolCallBehavior::None => request_builder.tool_choice("none"),
-                ToolCallBehavior::Named(name) => request_builder.tool_choice(name.as_str()),
+                FunctionCallBehavior::Auto => request_builder.tool_choice("auto"),
+                FunctionCallBehavior::None => request_builder.tool_choice("none"),
+                FunctionCallBehavior::Named(name) => request_builder.tool_choice(name.as_str()),
             };
         }
         Ok(request_builder.build()?)
@@ -324,17 +322,14 @@ impl<C: Config> OpenAI<C> {
 }
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
     use std::sync::Arc;
 
+    use super::*;
+    use crate::schemas::FunctionDefinition;
     use base64::prelude::*;
-    use serde_json::{json, Value};
+    use serde_json::json;
     use tokio::sync::Mutex;
     use tokio::test;
-
-    use crate::tools::Tool;
-
-    use super::*;
 
     #[test]
     #[ignore]
@@ -453,37 +448,21 @@ mod tests {
     #[test]
     #[ignore]
     async fn test_function() {
-        let mut functions: Vec<Arc<dyn Tool>> = Vec::new();
-
-        struct CliFunction {}
-        impl Tool for CliFunction {
-            fn name(&self) -> String {
-                "cli".to_string()
-            }
-
-            fn description(&self) -> String {
-                "Use the Ubuntu command line to preform any action you wish.".to_string()
-            }
-
-            fn parameters(&self) -> Value {
-                json!({
-                    "type": "object",
-                    "properties": {
-                        "command": {
-                            "type": "string",
-                            "description": "The raw command you want executed"
-                        }
-                    },
-                    "required": ["command"]
-                })
-            }
-
-            async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
-                unimplemented!()
-            }
-        }
-
-        functions.push(Arc::new(CliFunction {}));
+        let mut functions = Vec::new();
+        functions.push(FunctionDefinition {
+            name: "cli".to_string(),
+            description: "Use the Ubuntu command line to preform any action you wish.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The raw command you want executed"
+                    }
+                },
+                "required": ["command"]
+            }),
+        });
 
         let llm = OpenAI::default()
             .with_model(OpenAIModel::Gpt35)

@@ -1,4 +1,4 @@
-use crate::tools::{Tool, ToolCallBehavior};
+use crate::schemas::{FunctionCallBehavior, FunctionDefinition};
 use futures::Future;
 use std::{pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
@@ -33,8 +33,8 @@ pub struct CallOptions {
     pub repetition_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
-    pub functions: Option<Vec<Arc<dyn Tool>>>,
-    pub function_call_behavior: Option<ToolCallBehavior>,
+    pub functions: Option<Vec<FunctionDefinition>>,
+    pub function_call_behavior: Option<FunctionCallBehavior>,
 }
 
 impl Default for CallOptions {
@@ -206,12 +206,12 @@ impl CallOptions {
         self
     }
 
-    pub fn with_functions(mut self, functions: Vec<Arc<dyn Tool>>) -> Self {
+    pub fn with_functions(mut self, functions: Vec<FunctionDefinition>) -> Self {
         self.functions = Some(functions);
         self
     }
 
-    pub fn with_function_call_behavior(mut self, behavior: ToolCallBehavior) -> Self {
+    pub fn with_function_call_behavior(mut self, behavior: FunctionCallBehavior) -> Self {
         self.function_call_behavior = Some(behavior);
         self
     }

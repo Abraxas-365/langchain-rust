@@ -77,10 +77,3 @@ pub trait Tool: Send + Sync {
         }
     }
 }
-
-#[derive(Clone, Debug)]
-pub enum ToolCallBehavior {
-    None,
-    Auto,
-    Named(String),
-}
