@@ -8,9 +8,9 @@ use async_openai::{
         ChatCompletionRequestMessage, ChatCompletionRequestMessageContentPartImageArgs,
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
         ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
-        ChatCompletionRequestUserMessageContentPart, ChatCompletionToolArgs,
-        ChatCompletionToolType, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
-        FunctionObjectArgs,
+        ChatCompletionRequestUserMessageContentPart, ChatCompletionStreamOptions,
+        ChatCompletionToolArgs, ChatCompletionToolType, CreateChatCompletionRequest,
+        CreateChatCompletionRequestArgs, FunctionObjectArgs,
     },
     Client,
 };
@@ -94,14 +94,21 @@ impl Default for OpenAI<OpenAIConfig> {
 impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
     async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, LLMError> {
         let client = Client::with_config(self.config.clone());
-        let request = self.generate_request(prompt)?;
+        let request = self.generate_request(prompt, self.options.streaming_func.is_some())?;
         match &self.options.streaming_func {
             Some(func) => {
                 let mut stream = client.chat().create_stream(request).await?;
-                let mut complete_response = String::new();
+                let mut generate_result = GenerateResult::default();
                 while let Some(result) = stream.next().await {
                     match result {
                         Ok(response) => {
+                            if let Some(usage) = response.usage {
+                                generate_result.tokens = Some(TokenUsage {
+                                    prompt_tokens: usage.prompt_tokens,
+                                    completion_tokens: usage.completion_tokens,
+                                    total_tokens: usage.total_tokens,
+                                });
+                            }
                             for chat_choice in response.choices.iter() {
                                 let chat_choice: ChatChoiceStream = chat_choice.clone();
                                 {
@@ -112,7 +119,7 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
                                     .await;
                                 }
                                 if let Some(content) = chat_choice.delta.content {
-                                    complete_response.push_str(&content);
+                                    generate_result.generation.push_str(&content);
                                 }
                             }
                         }
@@ -121,8 +128,6 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
                         }
                     }
                 }
-                let mut generate_result = GenerateResult::default();
-                generate_result.generation = complete_response;
                 Ok(generate_result)
             }
             None => {
@@ -163,13 +168,19 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
         messages: &[Message],
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
         let client = Client::with_config(self.config.clone());
-        let request = self.generate_request(messages)?;
+        let request = self.generate_request(messages, true)?;
 
         let original_stream = client.chat().create_stream(request).await?;
 
         let new_stream = original_stream.map(|result| match result {
             Ok(completion) => {
                 let value_completion = serde_json::to_value(completion).map_err(LLMError::from)?;
+                let usage = value_completion.pointer("/usage");
+                if usage.is_some() && !usage.unwrap().is_null() {
+                    let usage = serde_json::from_value::<TokenUsage>(usage.unwrap().clone())
+                        .map_err(LLMError::from)?;
+                    return Ok(StreamData::new(value_completion, Some(usage), ""));
+                }
                 let content = value_completion
                     .pointer("/choices/0/delta/content")
                     .ok_or(LLMError::ContentNotFound(
@@ -179,6 +190,7 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
 
                 Ok(StreamData::new(
                     value_completion,
+                    None,
                     content.as_str().unwrap_or(""),
                 ))
             }
@@ -267,11 +279,20 @@ impl<C: Config> OpenAI<C> {
     fn generate_request(
         &self,
         messages: &[Message],
+        stream: bool,
     ) -> Result<CreateChatCompletionRequest, LLMError> {
         let messages: Vec<ChatCompletionRequestMessage> = self.to_openai_messages(messages)?;
         let mut request_builder = CreateChatCompletionRequestArgs::default();
+        if let Some(temperature) = self.options.temperature {
+            request_builder.temperature(temperature);
+        }
         if let Some(max_tokens) = self.options.max_tokens {
             request_builder.max_tokens(max_tokens);
+        }
+        if stream {
+            if let Some(include_usage) = self.options.stream_usage {
+                request_builder.stream_options(ChatCompletionStreamOptions { include_usage });
+            }
         }
         request_builder.model(self.model.to_string());
         if let Some(stop_words) = &self.options.stop_words {

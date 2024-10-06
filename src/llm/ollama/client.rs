@@ -129,6 +129,7 @@ impl LLM for Ollama {
             Ok(data) => match data.message.clone() {
                 Some(message) => Ok(StreamData::new(
                     serde_json::to_value(data).unwrap_or_default(),
+                    None,
                     message.content,
                 )),
                 // TODO: no need to return error, see https://github.com/Abraxas-365/langchain-rust/issues/140

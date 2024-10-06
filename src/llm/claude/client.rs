@@ -195,9 +195,10 @@ impl LLM for Claude {
                         if value["type"].as_str().unwrap_or("") == "content_block_delta" {
                             let content = value["delta"]["text"].clone();
                             // Return StreamData based on the parsed content
-                            Ok(StreamData::new(value, content.as_str().unwrap_or("")))
+                            // TODO get tokens from the response
+                            Ok(StreamData::new(value, None, content.as_str().unwrap_or("")))
                         } else {
-                            Ok(StreamData::new(value, ""))
+                            Ok(StreamData::new(value, None, ""))
                         }
                     }
                     Err(e) => Err(LLMError::RequestError(e)),
