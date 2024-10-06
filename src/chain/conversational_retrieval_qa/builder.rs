@@ -33,11 +33,11 @@ const CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_INPUT_KEY: &str = "question";
 ///
 /// let llm = Box::new(OpenAI::default().with_model(OpenAIModel::Gpt35.to_string()));
 /// let combine_documents_chain = StuffDocument::load_stuff_qa(llm.clone_box());
-//  let condense_question_chian = CondenseQuestionGeneratorChain::new(llm.clone_box());
+//  let condense_question_chain = CondenseQuestionGeneratorChain::new(llm.clone_box());
 /// let chain = ConversationalRetrieverChainBuilder::new()
 ///     .rephrase_question(true)
 ///     .combine_documents_chain(Box::new(combine_documents_chain))
-///     .condense_question_chian(Box::new(condense_question_chian))
+///     .condense_question_chain(Box::new(condense_question_chain))
 ///     .retriever(RetrieverMock {})
 ///     .memory(SimpleMemory::new().into())
 ///     .build()
@@ -49,7 +49,7 @@ pub struct ConversationalRetrieverChainBuilder {
     retriever: Option<Box<dyn Retriever>>,
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     combine_documents_chain: Option<Box<dyn Chain>>,
-    condense_question_chian: Option<Box<dyn Chain>>,
+    condense_question_chain: Option<Box<dyn Chain>>,
     prompt: Option<Box<dyn FormatPrompter>>,
     rephrase_question: bool,
     return_source_documents: bool,
@@ -63,7 +63,7 @@ impl ConversationalRetrieverChainBuilder {
             retriever: None,
             memory: None,
             combine_documents_chain: None,
-            condense_question_chian: None,
+            condense_question_chain: None,
             prompt: None,
             rephrase_question: true,
             return_source_documents: true,
@@ -108,11 +108,11 @@ impl ConversationalRetrieverChainBuilder {
     }
 
     ///Chain designed to reformulate the question based on the cat history
-    pub fn condense_question_chian<C: Into<Box<dyn Chain>>>(
+    pub fn condense_question_chain<C: Into<Box<dyn Chain>>>(
         mut self,
-        condense_question_chian: C,
+        condense_question_chain: C,
     ) -> Self {
-        self.condense_question_chian = Some(condense_question_chian.into());
+        self.condense_question_chain = Some(condense_question_chain.into());
         self
     }
 
@@ -135,9 +135,9 @@ impl ConversationalRetrieverChainBuilder {
                 }
                 builder.build()?
             };
-            let condense_question_chian = CondenseQuestionGeneratorChain::new(llm.clone_box());
+            let condense_question_chain = CondenseQuestionGeneratorChain::new(llm.clone_box());
             self.combine_documents_chain = Some(Box::new(combine_documents_chain));
-            self.condense_question_chian = Some(Box::new(condense_question_chian));
+            self.condense_question_chain = Some(Box::new(condense_question_chain));
         }
 
         let retriever = self
@@ -153,7 +153,7 @@ impl ConversationalRetrieverChainBuilder {
                 "Combine documents chain must be set or llm must be set".into(),
             )
         })?;
-        let condense_question_chian = self.condense_question_chian.ok_or_else(|| {
+        let condense_question_chain = self.condense_question_chain.ok_or_else(|| {
             ChainError::MissingObject(
                 "Condense question chain must be set or llm must be set".into(),
             )
@@ -162,7 +162,7 @@ impl ConversationalRetrieverChainBuilder {
             retriever,
             memory,
             combine_documents_chain,
-            condense_question_chian,
+            condense_question_chain,
             rephrase_question: self.rephrase_question,
             return_source_documents: self.return_source_documents,
             input_key: self.input_key,
