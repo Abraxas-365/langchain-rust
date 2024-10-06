@@ -27,7 +27,7 @@ pub struct ConversationalRetrieverChain {
     pub(crate) retriever: Box<dyn Retriever>,
     pub memory: Arc<Mutex<dyn BaseMemory>>,
     pub(crate) combine_documents_chain: Box<dyn Chain>,
-    pub(crate) condense_question_chian: Box<dyn Chain>,
+    pub(crate) condense_question_chain: Box<dyn Chain>,
     pub(crate) rephrase_question: bool,
     pub(crate) return_source_documents: bool,
     pub(crate) input_key: String,  //Default is `question`
@@ -46,7 +46,7 @@ impl ConversationalRetrieverChain {
         let question = match self.rephrase_question {
             true => {
                 let result = self
-                    .condense_question_chian
+                    .condense_question_chain
                     .call(
                         CondenseQuestionPromptBuilder::new()
                             .question(input)
