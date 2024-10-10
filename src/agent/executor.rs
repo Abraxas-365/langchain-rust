@@ -15,7 +15,7 @@ use crate::{
     },
     tools::Tool,
 };
-
+use crate::schemas::{LogTools, Message};
 use super::{agent::Agent, AgentError};
 
 pub struct AgentExecutor<A>
@@ -128,7 +128,20 @@ where
                 AgentEvent::Finish(finish) => {
                     if let Some(memory) = &self.memory {
                         let mut memory = memory.lock().await;
-                        memory.add_user_message(&input_variables["input"]);
+
+                        memory.add_user_message(match &input_variables["input"] {
+                            // This avoids adding extra quotes to the user input in the history.
+                            serde_json::Value::String(s) => s,
+                            x => x, // this the json encoded value.
+                        });
+
+                        for (action, observation) in steps {
+                            let LogTools { tool_id, tools } = serde_json::from_str(&action.log)?;
+                            let tools: serde_json::Value = serde_json::from_str(&tools)?;
+                            memory.add_message(Message::new_ai_message("").with_tool_calls(json!(tools)));
+                            memory.add_message(Message::new_tool_message(observation, tool_id));
+                        }
+
                         memory.add_ai_message(&finish.output);
                     }
                     return Ok(GenerateResult {
