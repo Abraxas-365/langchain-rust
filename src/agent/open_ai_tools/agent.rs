@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -43,15 +44,18 @@ impl OpenAiToolAgent {
     ) -> Result<Vec<Message>, AgentError> {
         let mut thoughts: Vec<Message> = Vec::new();
 
+        let mut tools_ai_message_seen: HashMap<String, ()> = HashMap::default();
         for (action, observation) in intermediate_steps {
             // Deserialize directly and embed in method calls to streamline code.
             // Extract the tool ID and tool calls from the log.
             let LogTools { tool_id, tools } = serde_json::from_str(&action.log)?;
-            let tools: Vec<FunctionCallResponse> = serde_json::from_str(&tools)?;
+            let tools_vec: Vec<FunctionCallResponse> = serde_json::from_str(&tools)?;
 
-            // For the first action, add an AI message with all tools called in this session.
-            if thoughts.is_empty() {
-                thoughts.push(Message::new_ai_message("").with_tool_calls(json!(tools)));
+            // one action can trigger multiple observations.  But make sure we add it to
+            // the scratchpad before the related observations.  There can also be multiple
+            // different actions in the same thought chain.
+            if tools_ai_message_seen.insert(tools, ()).is_none() {
+                thoughts.push(Message::new_ai_message("").with_tool_calls(json!(tools_vec)));
             }
 
             // Add a tool message for each observation. Observation is the ouput of the tool call.
