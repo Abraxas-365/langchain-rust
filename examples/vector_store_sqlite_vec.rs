@@ -1,18 +1,14 @@
 // Make sure vec0 libraries are installed in the system or the path of the executable.
-// And install ollama on system with `nomic-embed-text` embedding model
-// Next run `ollama serve` to start your ollama local server
-// To run this example execute: cargo run --example vector_store_sqlite_vec --features sqlite-vec,ollama
+// To run this example execute: cargo run --example vector_store_sqlite_vec --features sqlite-vec
 // Download the libraries from https://github.com/asg017/sqlite-vec
 
 #[cfg(feature = "sqlite-vec")]
 use langchain_rust::{
+    embedding::openai::openai_embedder::OpenAiEmbedder,
     schemas::Document,
     vectorstore::{sqlite_vec::StoreBuilder, VecStoreOptions, VectorStore},
 };
-#[cfg(feature = "ollama")]
-use langchain_rust::embedding::{
-    ollama::ollama_embedder::OllamaEmbedder,
-};
+
 #[cfg(feature = "sqlite-vec")]
 use std::io::Write;
 
@@ -20,7 +16,7 @@ use std::io::Write;
 #[tokio::main]
 async fn main() {
     // Initialize Embedder
-    let embedder = OllamaEmbedder::default().with_model("nomic-embed-text");
+    let embedder = OpenAiEmbedder::default();
 
     let database_url = std::env::var("DATABASE_URL").unwrap_or("sqlite::memory:".to_string());
 
@@ -77,7 +73,7 @@ async fn main() {
 
 #[cfg(not(feature = "sqlite-vec"))]
 fn main() {
-    println!("This example requires the 'sqlite' feature to be enabled.");
+    println!("This example requires the 'sqlite-vec' feature to be enabled.");
     println!("Please run the command as follows:");
-    println!("cargo run --example vector_store_sqlite --features sqlite");
+    println!("cargo run --example vector_store_sqlite_vec --features sqlite-vec");
 }

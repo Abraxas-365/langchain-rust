@@ -76,5 +76,5 @@ async fn main() {
 fn main() {
     println!("This example requires the 'sqlite-vss' feature to be enabled.");
     println!("Please run the command as follows:");
-    println!("cargo run --example vector_store_sqlite --features sqlite-vss");
+    println!("cargo run --example vector_store_sqlite_vss --features sqlite-vss");
 }
