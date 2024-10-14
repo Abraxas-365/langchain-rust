@@ -3,8 +3,11 @@ mod options;
 #[cfg(feature = "postgres")]
 pub mod pgvector;
 
-#[cfg(feature = "sqlite")]
+#[cfg(feature = "sqlite-vss")]
 pub mod sqlite_vss;
+
+#[cfg(feature = "sqlite-vec")]
+pub mod sqlite_vec;
 
 #[cfg(feature = "surrealdb")]
 pub mod surrealdb;

@@ -219,11 +219,22 @@ cargo add langchain-rust
 
 #### With Sqlite
 
-```bash
-cargo add langchain-rust --features sqlite
-```
+##### sqlite-vss
 
 Download additional sqlite_vss libraries from <https://github.com/asg017/sqlite-vss>
+
+```bash
+cargo add langchain-rust --features sqlite-vss
+```
+
+##### sqlite-vec
+
+Download additional sqlite_vec libraries from <https://github.com/asg017/sqlite-vec>
+
+```bash
+cargo add langchain-rust --features sqlite-vec
+```
+
 
 #### With Postgres
 
