@@ -135,6 +135,27 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
     }
     ```
 
+  - [x] HTML To Markdown
+
+    ```rust
+    use futures_util::StreamExt;
+    use url::Url;
+
+    async fn main() {
+        let path = "./src/document_loaders/test_data/example.html";
+        let html_to_markdown_loader = HtmlToMarkdownLoader::from_path(path, Url::parse("https://example.com/").unwrap(), HtmlToMarkdownOptions::default().with_skip_tags(vec!["figure".to_string()]))
+            .expect("Failed to create html to markdown loader");
+
+        let documents = html_to_markdown_loader
+            .load()
+            .await
+            .unwrap()
+            .map(|x| x.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+    }
+    ```
+
   - [x] CSV
 
     ```rust

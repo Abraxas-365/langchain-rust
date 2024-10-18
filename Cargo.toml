@@ -50,6 +50,7 @@ async-stream = "0.3.5"
 tokio-stream = "0.1.15"
 secrecy = "0.8.0"
 readability = "0.3.0"
+htmd = { version = "0.1", optional = true }
 url = "2.5.0"
 fastembed = { version = "4", optional = true }
 flume = { version = "0.11.0", optional = true }
@@ -84,6 +85,7 @@ mistralai-client = { version = "0.14.0", optional = true }
 default = []
 fastembed = ["dep:fastembed"]
 git = ["gix", "flume"]
+html-to-markdown = ["dep:htmd"]
 mistralai = ["mistralai-client"]
 lopdf = ["dep:lopdf"]
 pdf-extract = ["dep:lopdf", "dep:pdf-extract"]
