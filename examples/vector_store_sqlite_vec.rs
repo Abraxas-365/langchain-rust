@@ -25,7 +25,7 @@ async fn main() {
         .embedder(embedder)
         .connection_url(database_url)
         .table("documents")
-        .vector_dimensions(768)
+        .vector_dimensions(1536)
         .build()
         .await
         .unwrap();
