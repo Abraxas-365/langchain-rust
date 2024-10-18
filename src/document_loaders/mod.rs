@@ -23,6 +23,11 @@ pub use pdf_loader::*;
 mod html_loader;
 pub use html_loader::*;
 
+#[cfg(feature = "html-to-markdown")]
+mod html_to_markdown_loader;
+#[cfg(feature = "html-to-markdown")]
+pub use html_to_markdown_loader::*;
+
 mod error;
 pub use error::*;
 

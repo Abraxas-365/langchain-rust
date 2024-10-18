@@ -84,7 +84,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_html_loader() {
-        // text to represent csv data
         let input = "<p>Hello world!</p>";
 
         let html_loader = HtmlLoader::new(
