@@ -168,7 +168,13 @@ impl VectorStore for Store {
         let filter = self.get_filters(opt)?;
         let mut where_querys = filter
             .iter()
-            .map(|(k, v)| format!("(data.cmetadata ->> '{}') = '{}'", k, v))
+            .map(|(k, v)| {
+                format!(
+                    "(data.cmetadata ->> '{}') = '{}'",
+                    k,
+                    v.to_string().trim_matches('"')
+                )
+            })
             .collect::<Vec<String>>()
             .join(" AND ");
 
