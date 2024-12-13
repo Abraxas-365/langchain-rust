@@ -93,7 +93,7 @@ impl StoreBuilder {
         self
     }
 
-    fn collecion_metadata(mut self, collecion_metadata: HashMap<String, Value>) -> Self {
+    fn collection_metadata(mut self, collecion_metadata: HashMap<String, Value>) -> Self {
         self.collection_metadata = collecion_metadata;
         self
     }
