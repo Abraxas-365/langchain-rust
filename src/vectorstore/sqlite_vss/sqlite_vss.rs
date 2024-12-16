@@ -17,6 +17,8 @@ pub struct Store {
     pub(crate) embedder: Arc<dyn Embedder>,
 }
 
+pub type SqliteVssOptions = VecStoreOptions<Value>;
+
 impl Store {
     pub async fn initialize(&self) -> Result<(), Box<dyn Error>> {
         self.create_table_if_not_exists().await?;
@@ -73,10 +75,12 @@ impl Store {
 
 #[async_trait]
 impl VectorStore for Store {
+    type Options = SqliteVssOptions;
+
     async fn add_documents(
         &self,
         docs: &[Document],
-        opt: &VecStoreOptions,
+        opt: &Self::Options,
     ) -> Result<Vec<String>, Box<dyn Error>> {
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
 
@@ -124,7 +128,7 @@ impl VectorStore for Store {
         &self,
         query: &str,
         limit: usize,
-        _opt: &VecStoreOptions,
+        _opt: &Self::Options,
     ) -> Result<Vec<Document>, Box<dyn Error>> {
         let table = &self.table;
 

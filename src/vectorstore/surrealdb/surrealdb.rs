@@ -91,10 +91,12 @@ impl<C: Connection> Store<C> {
 
 #[async_trait]
 impl<C: Connection> VectorStore for Store<C> {
+    type Options = VecStoreOptions<Value>;
+
     async fn add_documents(
         &self,
         docs: &[Document],
-        opt: &VecStoreOptions,
+        opt: &Self::Options,
     ) -> Result<Vec<String>, Box<dyn Error>> {
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
 
@@ -169,7 +171,7 @@ impl<C: Connection> VectorStore for Store<C> {
         &self,
         query: &str,
         limit: usize,
-        opt: &VecStoreOptions,
+        opt: &Self::Options,
     ) -> Result<Vec<Document>, Box<dyn Error>> {
         let collection_name = &self.collection_name;
         let collection_table_name = self.get_collection_table_name();
