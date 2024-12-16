@@ -16,20 +16,20 @@ use crate::embedding::embedder_trait::Embedder;
 ///     .with_filters(json!({"genre": "Sci-Fi"}))
 ///     .with_embedder(my_embedder);
 /// ```
-pub struct VecStoreOptions {
+pub struct VecStoreOptions<F> {
     pub name_space: Option<String>,
     pub score_threshold: Option<f32>,
-    pub filters: Option<Value>,
+    pub filters: Option<F>,
     pub embedder: Option<Arc<dyn Embedder>>,
 }
 
-impl Default for VecStoreOptions {
+impl Default for VecStoreOptions<Value> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl VecStoreOptions {
+impl<F> VecStoreOptions<F> {
     pub fn new() -> Self {
         VecStoreOptions {
             name_space: None,
@@ -49,7 +49,7 @@ impl VecStoreOptions {
         self
     }
 
-    pub fn with_filters(mut self, filters: Value) -> Self {
+    pub fn with_filters(mut self, filters: F) -> Self {
         self.filters = Some(filters);
         self
     }

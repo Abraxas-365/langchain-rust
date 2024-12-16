@@ -10,22 +10,25 @@ use super::VecStoreOptions;
 // form of vector embeddings.
 #[async_trait]
 pub trait VectorStore: Send + Sync {
+    type Options;
+
     async fn add_documents(
         &self,
         docs: &[Document],
-        opt: &VecStoreOptions,
+        opt: &Self::Options,
     ) -> Result<Vec<String>, Box<dyn Error>>;
 
     async fn similarity_search(
         &self,
         query: &str,
         limit: usize,
-        opt: &VecStoreOptions,
+        opt: &Self::Options,
     ) -> Result<Vec<Document>, Box<dyn Error>>;
 }
-impl<VS> From<VS> for Box<dyn VectorStore>
+
+impl<VS, F> From<VS> for Box<dyn VectorStore<Options = F>>
 where
-    VS: 'static + VectorStore,
+    VS: 'static + VectorStore<Options = F>,
 {
     fn from(vector_store: VS) -> Self {
         Box::new(vector_store)
@@ -57,28 +60,31 @@ macro_rules! similarity_search {
 }
 
 // Retriever is a retriever for vector stores.
-pub struct Retriever {
-    vstore: Box<dyn VectorStore>,
+pub struct Retriever<F> {
+    vstore: Box<dyn VectorStore<Options = VecStoreOptions<F>>>,
     num_docs: usize,
-    options: VecStoreOptions,
+    options: VecStoreOptions<F>,
 }
-impl Retriever {
-    pub fn new<V: Into<Box<dyn VectorStore>>>(vstore: V, num_docs: usize) -> Self {
+impl<F> Retriever<F> {
+    pub fn new<V: Into<Box<dyn VectorStore<Options = VecStoreOptions<F>>>>>(
+        vstore: V,
+        num_docs: usize,
+    ) -> Self {
         Retriever {
             vstore: vstore.into(),
             num_docs,
-            options: VecStoreOptions::default(),
+            options: VecStoreOptions::<F>::new(),
         }
     }
 
-    pub fn with_options(mut self, options: VecStoreOptions) -> Self {
+    pub fn with_options(mut self, options: VecStoreOptions<F>) -> Self {
         self.options = options;
         self
     }
 }
 
 #[async_trait]
-impl schemas::Retriever for Retriever {
+impl<O: Sync + Send> schemas::Retriever for Retriever<O> {
     async fn get_relevant_documents(&self, query: &str) -> Result<Vec<Document>, Box<dyn Error>> {
         self.vstore
             .similarity_search(query, self.num_docs, &self.options)

@@ -23,7 +23,74 @@ pub struct Store {
     pub(crate) pre_delete_collection: bool,
     pub(crate) vector_dimensions: i32,
     pub(crate) hns_index: Option<HNSWIndex>,
-    pub(crate) vstore_options: VecStoreOptions,
+    pub(crate) vstore_options: PgOptions,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PgFilter {
+    Eq(PgLit, PgLit),
+    Cmp(std::cmp::Ordering, PgLit, PgLit),
+    In(PgLit, Vec<String>),
+    And(Vec<PgFilter>),
+    Or(Vec<PgFilter>),
+}
+
+pub type Column = String;
+
+pub type Path = Vec<String>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PgLit {
+    JsonField(Path),
+    LitStr(String),
+    RawJson(Value),
+}
+
+impl ToString for PgLit {
+    fn to_string(&self) -> String {
+        match self {
+            PgLit::LitStr(str) => format!("'{}'", str.clone()),
+            PgLit::JsonField(path) => format!("cmetadata#>>'{{{}}}'", path.join(",")),
+            PgLit::RawJson(value) => serde_json::to_string(value).unwrap_or("null".to_string()),
+        }
+    }
+}
+
+impl ToString for PgFilter {
+    fn to_string(&self) -> String {
+        match self {
+            PgFilter::Eq(a, b) => format!("{} = {}", a.to_string(), b.to_string()),
+            PgFilter::Cmp(ordering, a, b) => {
+                let op = match ordering {
+                    std::cmp::Ordering::Less => "<",
+                    std::cmp::Ordering::Greater => ">",
+                    std::cmp::Ordering::Equal => "=",
+                };
+                format!("{} {} {}", a.to_string(), op, b.to_string())
+            }
+            PgFilter::In(a, values) => {
+                format!(
+                    "{} = ANY(ARRAY[{}])",
+                    a.to_string(),
+                    values
+                        .iter()
+                        .map(|s| format!("'{}'", s))
+                        .collect::<Vec<String>>()
+                        .join(",")
+                )
+            }
+            PgFilter::And(pgfilters) => pgfilters
+                .iter()
+                .map(|pgf| pgf.to_string())
+                .collect::<Vec<String>>()
+                .join(" AND "),
+            PgFilter::Or(pgfilters) => pgfilters
+                .iter()
+                .map(|pgf| pgf.to_string())
+                .collect::<Vec<String>>()
+                .join(" OR "),
+        }
+    }
 }
 
 pub struct HNSWIndex {
@@ -43,28 +110,21 @@ impl HNSWIndex {
 }
 
 impl Store {
-    // getFilters return metadata filters, now only support map[key]value pattern
-    // TODO: should support more types like {"key1": {"key2":"values2"}} or {"key": ["value1", "values2"]}.
-    fn get_filters(&self, opt: &VecStoreOptions) -> Result<HashMap<String, Value>, Box<dyn Error>> {
+    fn get_filters(&self, opt: &PgOptions) -> Result<String, Box<dyn Error>> {
         match &opt.filters {
-            Some(Value::Object(map)) => {
-                // Convert serde_json Map to HashMap<String, Value>
-                let filters = map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-                Ok(filters)
-            }
-            None => Ok(HashMap::new()), // No filters provided
-            _ => Err("Invalid filters format".into()), // Filters provided but not in the expected format
+            Some(pgfilter) => Ok(pgfilter.to_string()),
+            None => Ok("TRUE".to_string()), // No filters provided
         }
     }
 
-    fn get_name_space(&self, opt: &VecStoreOptions) -> String {
+    fn get_name_space(&self, opt: &PgOptions) -> String {
         match &opt.name_space {
             Some(name_space) => name_space.clone(),
             None => self.collection_name.clone(),
         }
     }
 
-    fn get_score_threshold(&self, opt: &VecStoreOptions) -> Result<f32, Box<dyn Error>> {
+    fn get_score_threshold(&self, opt: &PgOptions) -> Result<f32, Box<dyn Error>> {
         match &opt.score_threshold {
             Some(score_threshold) => {
                 if *score_threshold < 0.0 || *score_threshold > 1.0 {
@@ -102,12 +162,28 @@ impl Store {
         Ok(())
     }
 }
+
+pub type PgOptions = VecStoreOptions<PgFilter>;
+
+impl Default for PgOptions {
+    fn default() -> Self {
+        PgOptions {
+            filters: None,
+            score_threshold: None,
+            name_space: None,
+            embedder: None,
+        }
+    }
+}
+
 #[async_trait]
 impl VectorStore for Store {
+    type Options = PgOptions;
+
     async fn add_documents(
         &self,
         docs: &[Document],
-        opt: &VecStoreOptions,
+        opt: &PgOptions,
     ) -> Result<Vec<String>, Box<dyn Error>> {
         if opt.score_threshold.is_some() || opt.filters.is_some() || opt.name_space.is_some() {
             return Err(Box::new(std::io::Error::new(
@@ -162,25 +238,10 @@ impl VectorStore for Store {
         &self,
         query: &str,
         limit: usize,
-        opt: &VecStoreOptions,
+        opt: &PgOptions,
     ) -> Result<Vec<Document>, Box<dyn Error>> {
         let collection_name = self.get_name_space(opt);
-        let filter = self.get_filters(opt)?;
-        let mut where_querys = filter
-            .iter()
-            .map(|(k, v)| {
-                format!(
-                    "(data.cmetadata ->> '{}') = '{}'",
-                    k,
-                    v.to_string().trim_matches('"')
-                )
-            })
-            .collect::<Vec<String>>()
-            .join(" AND ");
-
-        if where_querys.is_empty() {
-            where_querys = "TRUE".to_string();
-        }
+        let where_filter = self.get_filters(opt)?;
 
         let sql = format!(
             r#"WITH filtered_embedding_dims AS MATERIALIZED (
@@ -213,7 +274,7 @@ impl VectorStore for Store {
             self.collection_table_name,
             self.collection_table_name,
             collection_name,
-            where_querys,
+            where_filter,
         );
 
         let query_vector = self.embedder.embed_query(query).await?;

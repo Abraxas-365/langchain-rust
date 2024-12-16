@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use qdrant_client::client::Payload;
 use qdrant_client::qdrant::{Filter, PointStruct, SearchPointsBuilder, UpsertPointsBuilder};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::error::Error;
 use std::sync::Arc;
 
@@ -27,14 +27,18 @@ pub struct Store {
     pub search_filter: Option<Filter>,
 }
 
+type QdrantOptions = VecStoreOptions<Value>;
+
 #[async_trait]
 impl VectorStore for Store {
+    type Options = QdrantOptions;
+
     /// Add documents to the store.
     /// Returns a list of document IDs added to the Qdrant collection.
     async fn add_documents(
         &self,
         docs: &[Document],
-        opt: &VecStoreOptions,
+        opt: &QdrantOptions,
     ) -> Result<Vec<String>, Box<dyn Error>> {
         let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
@@ -69,7 +73,7 @@ impl VectorStore for Store {
         &self,
         query: &str,
         limit: usize,
-        opt: &VecStoreOptions,
+        opt: &QdrantOptions,
     ) -> Result<Vec<Document>, Box<dyn Error>> {
         if opt.name_space.is_some() {
             return Err("Qdrant doesn't support namespaces".into());
