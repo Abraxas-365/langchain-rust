@@ -120,10 +120,10 @@ impl Chain for LLMChain {
         Ok(output)
     }
 
-    async fn stream(
-        &self,
+    async fn stream<'self_life>(
+        &'self_life self,
         input_variables: PromptArgs,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send + 'self_life>>, ChainError>
     {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
         log::debug!("Prompt: {:?}", prompt);

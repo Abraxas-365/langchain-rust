@@ -137,10 +137,10 @@ impl Chain for StuffDocument {
         self.llm_chain.call(input_values).await
     }
 
-    async fn stream(
-        &self,
+    async fn stream<'self_life>(
+        &'self_life self,
         input_variables: PromptArgs,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send + 'self_life>>, ChainError>
     {
         let docs = input_variables
             .get(&self.input_key)
