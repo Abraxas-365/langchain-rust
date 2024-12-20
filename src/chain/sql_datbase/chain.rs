@@ -188,10 +188,10 @@ impl Chain for SQLDatabaseChain {
         Ok(result.generation)
     }
 
-    async fn stream(
-        &self,
+    async fn stream<'self_life>(
+        &'self_life self,
         input_variables: PromptArgs,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send + 'self_life>>, ChainError>
     {
         let (llm_inputs, _) = self.call_builder_chains(&input_variables).await?;
 
