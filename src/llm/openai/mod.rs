@@ -1,6 +1,7 @@
 use std::pin::Pin;
 
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
+
 use async_openai::{
     error::OpenAIError,
     types::{
@@ -9,19 +10,20 @@ use async_openai::{
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
         ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
         ChatCompletionRequestUserMessageContentPart, ChatCompletionStreamOptions,
-        ChatCompletionToolArgs, ChatCompletionToolType, CreateChatCompletionRequest,
-        CreateChatCompletionRequestArgs, FunctionObjectArgs,
+        CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
     },
     Client,
 };
+use async_openai::types::{ChatCompletionToolChoiceOption, ResponseFormat};
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 
+use crate::schemas::convert::{LangchainIntoOpenAI, TryLangchainIntoOpenAI};
 use crate::{
     language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
     schemas::{
         messages::{Message, MessageType},
-        FunctionCallBehavior, StreamData,
+        StreamData,
     },
 };
 
@@ -299,38 +301,25 @@ impl<C: Config> OpenAI<C> {
             request_builder.stop(stop_words);
         }
 
-        if let Some(behavior) = &self.options.functions {
-            let mut functions = Vec::new();
-            for f in behavior.iter() {
-                let tool = FunctionObjectArgs::default()
-                    .name(f.name.clone())
-                    .description(f.description.clone())
-                    .parameters(f.parameters.clone())
-                    .build()?;
-                functions.push(
-                    ChatCompletionToolArgs::default()
-                        .r#type(ChatCompletionToolType::Function)
-                        .function(tool)
-                        .build()?,
-                )
-            }
-            request_builder.tools(functions);
+        if let Some(functions) = &self.options.functions {
+            let functions: Result<Vec<_>, OpenAIError> = functions.clone().into_iter().map(|f| f.try_into_openai()).collect();
+            request_builder.tools(functions?);
         }
 
         if let Some(behavior) = &self.options.function_call_behavior {
-            match behavior {
-                FunctionCallBehavior::Auto => request_builder.tool_choice("auto"),
-                FunctionCallBehavior::None => request_builder.tool_choice("none"),
-                FunctionCallBehavior::Named(name) => request_builder.tool_choice(name.as_str()),
-            };
+            request_builder.tool_choice::<ChatCompletionToolChoiceOption>(behavior.clone().into_openai());
         }
+
+        if let Some(response_format) = &self.options.response_format {
+            request_builder.response_format::<ResponseFormat>(response_format.clone().into_openai());
+        }
+
         request_builder.messages(messages);
         Ok(request_builder.build()?)
     }
 }
 #[cfg(test)]
 mod tests {
-
     use crate::schemas::FunctionDefinition;
 
     use super::*;

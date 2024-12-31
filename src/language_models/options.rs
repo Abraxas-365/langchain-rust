@@ -2,7 +2,7 @@ use futures::Future;
 use std::{pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
-use crate::schemas::{FunctionCallBehavior, FunctionDefinition};
+use crate::schemas::{FunctionCallBehavior, FunctionDefinition, ResponseFormat};
 
 #[derive(Clone)]
 pub struct CallOptions {
@@ -26,6 +26,7 @@ pub struct CallOptions {
     pub presence_penalty: Option<f32>,
     pub functions: Option<Vec<FunctionDefinition>>,
     pub function_call_behavior: Option<FunctionCallBehavior>,
+    pub response_format: Option<ResponseFormat>,
     pub stream_usage: Option<bool>,
 }
 
@@ -53,6 +54,7 @@ impl CallOptions {
             presence_penalty: None,
             functions: None,
             function_call_behavior: None,
+            response_format: None,
             stream_usage: None,
         }
     }
@@ -149,6 +151,11 @@ impl CallOptions {
         self
     }
 
+    pub fn with_response_format(mut self, response_format: ResponseFormat) -> Self {
+        self.response_format = Some(response_format);
+        self
+    }
+
     pub fn with_stream_usage(mut self, stream_usage: bool) -> Self {
         self.stream_usage = Some(stream_usage);
         self
@@ -175,6 +182,9 @@ impl CallOptions {
         self.function_call_behavior = incoming_options
             .function_call_behavior
             .or(self.function_call_behavior.clone());
+        self.response_format = incoming_options
+            .response_format
+            .or(self.response_format.clone());
         self.stream_usage = incoming_options.stream_usage.or(self.stream_usage);
 
         // For `Vec<String>`, merge if both are Some; prefer incoming if only incoming is Some
