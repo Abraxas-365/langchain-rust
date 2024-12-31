@@ -32,7 +32,6 @@ where
     }
 }
 
-
 // Try into and from OpenAI
 
 pub trait TryLangchainIntoOpenAI<T>: Sized {

@@ -2,6 +2,7 @@ use std::pin::Pin;
 
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 
+use async_openai::types::{ChatCompletionToolChoiceOption, ResponseFormat};
 use async_openai::{
     error::OpenAIError,
     types::{
@@ -14,7 +15,6 @@ use async_openai::{
     },
     Client,
 };
-use async_openai::types::{ChatCompletionToolChoiceOption, ResponseFormat};
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 
@@ -302,16 +302,22 @@ impl<C: Config> OpenAI<C> {
         }
 
         if let Some(functions) = &self.options.functions {
-            let functions: Result<Vec<_>, OpenAIError> = functions.clone().into_iter().map(|f| f.try_into_openai()).collect();
+            let functions: Result<Vec<_>, OpenAIError> = functions
+                .clone()
+                .into_iter()
+                .map(|f| f.try_into_openai())
+                .collect();
             request_builder.tools(functions?);
         }
 
         if let Some(behavior) = &self.options.function_call_behavior {
-            request_builder.tool_choice::<ChatCompletionToolChoiceOption>(behavior.clone().into_openai());
+            request_builder
+                .tool_choice::<ChatCompletionToolChoiceOption>(behavior.clone().into_openai());
         }
 
         if let Some(response_format) = &self.options.response_format {
-            request_builder.response_format::<ResponseFormat>(response_format.clone().into_openai());
+            request_builder
+                .response_format::<ResponseFormat>(response_format.clone().into_openai());
         }
 
         request_builder.messages(messages);

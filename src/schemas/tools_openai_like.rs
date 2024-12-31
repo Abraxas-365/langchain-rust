@@ -1,6 +1,9 @@
-use crate::schemas::convert::{ OpenAIFromLangchain, TryOpenAiFromLangchain};
+use crate::schemas::convert::{OpenAIFromLangchain, TryOpenAiFromLangchain};
 use crate::tools::Tool;
-use async_openai::types::{ChatCompletionNamedToolChoice, ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolChoiceOption, ChatCompletionToolType, FunctionName, FunctionObjectArgs};
+use async_openai::types::{
+    ChatCompletionNamedToolChoice, ChatCompletionTool, ChatCompletionToolArgs,
+    ChatCompletionToolChoiceOption, ChatCompletionToolType, FunctionName, FunctionObjectArgs,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::ops::Deref;

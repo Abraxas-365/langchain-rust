@@ -22,7 +22,7 @@ pub use tools_openai_like::*;
 pub mod response_format_openai_like;
 pub use response_format_openai_like::*;
 
-mod stream;
 pub mod convert;
+mod stream;
 
 pub use stream::*;
