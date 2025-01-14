@@ -145,8 +145,10 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
                 if let Some(choice) = &response.choices.first() {
                     generate_result.generation = choice.message.content.clone().unwrap_or_default();
                     if let Some(function) = &choice.message.tool_calls {
-                        generate_result.generation =
-                            serde_json::to_string(&function).unwrap_or_default();
+                        if function.len() >0{
+                            generate_result.generation =
+                                serde_json::to_string(&function).unwrap_or_default();
+                        }
                     }
                 } else {
                     generate_result.generation = "".to_string();
