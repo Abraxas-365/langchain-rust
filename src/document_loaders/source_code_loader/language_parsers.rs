@@ -7,13 +7,17 @@ use tree_sitter::{Parser, Tree};
 
 #[derive(Display, Debug, Clone)]
 pub enum Language {
-    Rust,
     C,
+    CSharp,
     Cpp,
-    Javascript,
-    Typescript,
     Go,
+    Java,
+    Javascript,
+    Kotlin,
     Python,
+    Rust,
+    Scala,
+    Typescript,
 }
 
 pub enum LanguageContentTypes {
@@ -72,16 +76,17 @@ impl Clone for LanguageParser {
 pub fn get_language_by_filename(name: &String) -> Language {
     let extension = name.split('.').last().unwrap();
     match extension.to_lowercase().as_str() {
-        "rs" => Language::Rust,
         "c" => Language::C,
-        "cpp" => Language::Cpp,
-        "h" => Language::C,
-        "hpp" => Language::Cpp,
-        "js" => Language::Javascript,
-        "ts" => Language::Typescript,
-        "tsx" => Language::Typescript,
+        "cs" => Language::CSharp,
+        "cc" | "cpp" | ".h" | "hpp" => Language::Cpp,
         "go" => Language::Go,
+        "java" => Language::Java,
+        "js" => Language::Javascript,
+        "kt" => Language::Kotlin,
         "py" => Language::Python,
+        "rs" => Language::Rust,
+        "scala" | "sc" => Language::Scala,
+        "ts" | "tsx" => Language::Typescript,
         _ => panic!("Unsupported language"),
     }
 }
@@ -89,13 +94,17 @@ pub fn get_language_by_filename(name: &String) -> Language {
 fn get_language_parser(language: &Language) -> Parser {
     let mut parser = Parser::new();
     let lang = match language {
-        Language::Rust => tree_sitter_rust::LANGUAGE,
         Language::C => tree_sitter_c::LANGUAGE,
+        Language::CSharp => tree_sitter_c_sharp::LANGUAGE,
         Language::Cpp => tree_sitter_cpp::LANGUAGE,
-        Language::Javascript => tree_sitter_javascript::LANGUAGE,
-        Language::Typescript => tree_sitter_typescript::LANGUAGE_TSX,
         Language::Go => tree_sitter_go::LANGUAGE,
+        Language::Java => tree_sitter_java::LANGUAGE,
+        Language::Javascript => tree_sitter_javascript::LANGUAGE,
+        Language::Kotlin => tree_sitter_kotlin_ng::LANGUAGE,
         Language::Python => tree_sitter_python::LANGUAGE,
+        Language::Rust => tree_sitter_rust::LANGUAGE,
+        Language::Scala => tree_sitter_scala::LANGUAGE,
+        Language::Typescript => tree_sitter_typescript::LANGUAGE_TSX,
     };
     parser
         .set_language(&lang.into())
