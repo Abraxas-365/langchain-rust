@@ -99,10 +99,12 @@ impl Store {
 
 #[async_trait]
 impl VectorStore for Store {
+    type Options = VecStoreOptions<Value>;
+
     async fn add_documents(
         &self,
         docs: &[Document],
-        opt: &VecStoreOptions,
+        opt: &Self::Options,
     ) -> Result<Vec<String>, Box<dyn Error>> {
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
         let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
@@ -154,7 +156,7 @@ impl VectorStore for Store {
         &self,
         query: &str,
         limit: usize,
-        opt: &VecStoreOptions,
+        opt: &Self::Options,
     ) -> Result<Vec<Document>, Box<dyn Error>> {
         let query_vector = self.embedder.embed_query(query).await?;
         let query = build_similarity_search_query(

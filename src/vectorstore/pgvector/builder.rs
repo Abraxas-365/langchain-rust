@@ -6,7 +6,8 @@ use sqlx::{postgres::PgPoolOptions, Pool, Postgres, Row, Transaction};
 use crate::{embedding::embedder_trait::Embedder, vectorstore::VecStoreOptions};
 
 use super::{
-    HNSWIndex, Store, PG_LOCKID_EXTENSION, PG_LOCK_ID_COLLECTION_TABLE, PG_LOCK_ID_EMBEDDING_TABLE,
+    HNSWIndex, PgFilter, PgOptions, Store, PG_LOCKID_EXTENSION, PG_LOCK_ID_COLLECTION_TABLE,
+    PG_LOCK_ID_EMBEDDING_TABLE,
 };
 
 const DEFAULT_COLLECTION_NAME: &str = "langchain";
@@ -14,7 +15,7 @@ const DEFAULT_PRE_DELETE_COLLECTION: bool = false;
 const DEFAULT_EMBEDDING_STORE_TABLE_NAME: &str = "langchain_pg_embedding";
 const DEFAULT_COLLECTION_STORE_TABLE_NAME: &str = "langchain_pg_collection";
 
-pub struct StoreBuilder {
+pub struct StoreBuilder<F> {
     pool: Option<Pool<Postgres>>,
     embedder: Option<Arc<dyn Embedder>>,
     connection_url: Option<String>,
@@ -25,11 +26,11 @@ pub struct StoreBuilder {
     collection_uuid: String,
     collection_table_name: String,
     collection_metadata: HashMap<String, Value>,
-    vstore_options: VecStoreOptions,
+    vstore_options: VecStoreOptions<F>,
     hns_index: Option<HNSWIndex>,
 }
 
-impl StoreBuilder {
+impl StoreBuilder<PgFilter> {
     // Returns a new StoreBuilder instance with default values for each option
     pub fn new() -> Self {
         StoreBuilder {
@@ -43,7 +44,7 @@ impl StoreBuilder {
             collection_name: DEFAULT_COLLECTION_NAME.into(),
             collection_table_name: DEFAULT_COLLECTION_STORE_TABLE_NAME.into(),
             collection_metadata: HashMap::new(),
-            vstore_options: VecStoreOptions::default(),
+            vstore_options: VecStoreOptions::new(),
             hns_index: None,
         }
     }
@@ -88,12 +89,12 @@ impl StoreBuilder {
         self
     }
 
-    pub fn vstore_options(mut self, vstore_options: VecStoreOptions) -> Self {
+    pub fn vstore_options(mut self, vstore_options: PgOptions) -> Self {
         self.vstore_options = vstore_options;
         self
     }
 
-    fn collecion_metadata(mut self, collecion_metadata: HashMap<String, Value>) -> Self {
+    fn collection_metadata(mut self, collecion_metadata: HashMap<String, Value>) -> Self {
         self.collection_metadata = collecion_metadata;
         self
     }
