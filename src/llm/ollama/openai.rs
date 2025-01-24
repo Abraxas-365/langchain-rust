@@ -77,7 +77,7 @@ mod tests {
     use tokio_stream::StreamExt;
 
     #[tokio::test]
-    #[ignore]
+    // #[ignore]
     async fn test_ollama_openai() {
         let ollama = OpenAI::new(OllamaConfig::default()).with_model("llama2");
         let response = ollama.invoke("hola").await.unwrap();
@@ -85,7 +85,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
+    // #[ignore]
     async fn test_ollama_openai_stream() {
         let ollama = OpenAI::new(OllamaConfig::default()).with_model("phi3");
 

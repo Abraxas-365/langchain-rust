@@ -171,10 +171,10 @@ pub trait Chain: Sync + Send {
     /// # };
     /// ```
     ///
-    async fn stream(
-        &self,
+    async fn stream<'self_life>(
+        &'self_life self,
         _input_variables: PromptArgs,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send + 'self_life>>, ChainError>
     {
         log::warn!("stream not implemented for this chain");
         unimplemented!()
