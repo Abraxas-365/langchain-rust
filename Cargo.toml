@@ -25,7 +25,7 @@ html-escape = "0.2.13"
 reqwest-eventsource = "0.6.0"
 async-openai = "0.26.0"
 mockito = "1.4.0"
-tiktoken-rs = "0.5.8"
+tiktoken-rs = "0.6.0"
 sqlx = { version = "0.8.0", default-features = false, features = [
     "postgres",
     "sqlite",
