@@ -44,7 +44,7 @@ pub trait Tool: Send + Sync {
     ///
     /// This function utilizes `parse_input` to parse the input and then calls `run`.
     /// Its used by the Agent
-    async fn call(&self, input: &str) -> Result<String, Box<dyn Error>> {
+    async fn call(&self, input: &Value) -> Result<String, Box<dyn Error>> {
         let input = self.parse_input(input).await;
         self.run(input).await
     }
@@ -64,17 +64,8 @@ pub trait Tool: Send + Sync {
     ///
     /// Implement this function to extract the parameters needed for your tool. If a simple
     /// string is sufficient, the default implementation can be used.
-    async fn parse_input(&self, input: &str) -> Value {
+    async fn parse_input(&self, input: &Value) -> Value {
         log::info!("Using default implementation: {}", input);
-        match serde_json::from_str::<Value>(input) {
-            Ok(input) => {
-                if input["input"].is_string() {
-                    Value::String(input["input"].as_str().unwrap().to_string())
-                } else {
-                    Value::String(input.to_string())
-                }
-            }
-            Err(_) => Value::String(input.to_string()),
-        }
+        input.clone()
     }
 }

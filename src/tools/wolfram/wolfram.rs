@@ -175,7 +175,7 @@ mod tests {
     async fn test_wolfram() {
         let wolfram = Wolfram::default().with_excludes(&["Plot"]);
         let input = "Solve x^2 - 2x + 1 = 0";
-        let result = wolfram.call(input).await;
+        let result = wolfram.call(&Value::String(input.to_string())).await;
 
         assert!(result.is_ok());
         println!("{}", result.unwrap());

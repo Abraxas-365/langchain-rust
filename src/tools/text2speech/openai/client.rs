@@ -112,13 +112,18 @@ impl<C: Config + Send + Sync> Tool for Text2SpeechOpenAI<C> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Value;
+
     use crate::tools::{Text2SpeechOpenAI, Tool};
 
     #[tokio::test]
     #[ignore]
     async fn openai_speech2text_tool() {
         let openai = Text2SpeechOpenAI::default();
-        let s = openai.call("Hola como estas").await.unwrap();
+        let s = openai
+            .call(&Value::String("Hola como estas".to_string()))
+            .await
+            .unwrap();
         println!("{}", s);
     }
 }

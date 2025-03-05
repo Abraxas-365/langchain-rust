@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::{
     agent::{Agent, AgentError},
@@ -90,7 +90,7 @@ impl Agent for OpenAiToolAgent {
                     };
                     actions.push(AgentAction {
                         tool: tool.function.name.clone(),
-                        tool_input: tool.function.arguments.clone(),
+                        tool_input: Value::String(tool.function.arguments),
                         log: serde_json::to_string(&log)?, //We send this as string to minimise changes
                     });
                 }

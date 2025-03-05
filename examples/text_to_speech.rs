@@ -7,6 +7,7 @@ use langchain_rust::{
     text_splitter::{PlainTextSplitter, PlainTextSplitterOptions, TextSplitter},
     tools::{Text2SpeechOpenAI, Tool},
 };
+use serde_json::Value;
 use tokio::{io::AsyncReadExt, process::Command};
 use url::Url;
 
@@ -59,7 +60,10 @@ async fn main() {
         );
 
         let openai = Text2SpeechOpenAI::default().with_path(format!("chunk_{}.mp3", i));
-        let path = openai.call(&chunk.page_content).await.unwrap();
+        let path = openai
+            .call(&Value::String(chunk.page_content.to_string()))
+            .await
+            .unwrap();
 
         let path = std::path::Path::new(&path).canonicalize().unwrap();
         println!("Chunk file saved at: {:?}\n\n", path);

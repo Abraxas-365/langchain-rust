@@ -99,11 +99,11 @@ impl Tool for CommandExecutor {
                 )
     }
 
-    async fn parse_input(&self, input: &str) -> Value {
+    async fn parse_input(&self, input: &Value) -> Value {
         log::info!("Parsing input: {}", input);
 
         // Attempt to parse input string into CommandsWrapper struct first
-        let wrapper_result = serde_json::from_str::<CommandsWrapper>(input);
+        let wrapper_result = serde_json::from_value::<CommandsWrapper>(input.clone());
 
         if let Ok(wrapper) = wrapper_result {
             // If successful, serialize the `commands` back into a serde_json::Value
@@ -115,7 +115,7 @@ impl Tool for CommandExecutor {
         } else {
             // If the first attempt fails, try parsing it as Vec<CommandInput> directly
             // This works on any llm
-            let commands_result = serde_json::from_str::<Vec<CommandInput>>(input);
+            let commands_result = serde_json::from_value::<Vec<CommandInput>>(input.clone());
 
             commands_result.map_or_else(
                 |err| {
@@ -174,7 +174,7 @@ mod test {
             ]
         });
         println!("{}", &input.to_string());
-        let result = tool.call(&input.to_string()).await.unwrap();
+        let result = tool.call(&Value::String(input.to_string())).await.unwrap();
         println!("Res: {}", result);
     }
 }

@@ -6,6 +6,7 @@ use serde_json::Value;
 
 use crate::{
     agent::AgentError,
+    language_models::LLMError,
     schemas::agent::{AgentAction, AgentEvent, AgentFinish},
 };
 
@@ -14,7 +15,7 @@ use super::prompt::FORMAT_INSTRUCTIONS;
 #[derive(Debug, Deserialize)]
 struct AgentOutput {
     action: String,
-    action_input: String,
+    action_input: Value,
 }
 
 pub struct ChatOutputParser {}
@@ -33,9 +34,15 @@ impl ChatOutputParser {
                 let agent_output: AgentOutput = serde_json::from_value(value)?;
 
                 if agent_output.action == "Final Answer" {
-                    Ok(AgentEvent::Finish(AgentFinish {
-                        output: agent_output.action_input,
-                    }))
+                    if let Value::String(output) = agent_output.action_input {
+                        Ok(AgentEvent::Finish(AgentFinish {
+                            output: output.to_string(),
+                        }))
+                    } else {
+                        Err(AgentError::LLMError(LLMError::ContentNotFound(
+                            "Final answer not a string".to_string(),
+                        )))
+                    }
                 } else {
                     Ok(AgentEvent::Action(vec![AgentAction {
                         tool: agent_output.action,
