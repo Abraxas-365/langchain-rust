@@ -97,7 +97,7 @@ mod tests {
         let url = server.url();
 
         // Call the WebScrapper with the mocked URL
-        let result = scraper.call(&url).await;
+        let result = scraper.call(&Value::String(url)).await;
 
         // Assert that the result is Ok and contains "Hello World"
         assert!(result.is_ok());
