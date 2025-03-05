@@ -86,6 +86,8 @@ where
             );
         }
 
+        log::info!("Starting agent loop with input: {:#?}", input_variables);
+
         loop {
             let agent_event = self
                 .agent
@@ -122,6 +124,7 @@ where
                             }
                         };
 
+                        log::info!("Agent action:\n{:#?}\nResult:\n{:#?}", action, observation);
                         steps.push((action, observation));
                     }
                 }

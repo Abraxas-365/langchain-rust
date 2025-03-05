@@ -100,7 +100,7 @@ impl Tool for CommandExecutor {
     }
 
     async fn parse_input(&self, input: &Value) -> Value {
-        log::info!("Parsing input: {}", input);
+        // log::info!("Parsing input: {}", input);
 
         // Attempt to parse input string into CommandsWrapper struct first
         let wrapper_result = serde_json::from_value::<CommandsWrapper>(input.clone());
