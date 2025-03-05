@@ -103,6 +103,22 @@ impl Chain for LLMChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
         log::debug!("Prompt: {:?}", prompt);
+        for message in prompt.to_chat_messages() {
+            match message.message_type {
+                crate::schemas::MessageType::SystemMessage => {
+                    log::info!("System message\n{}", message.content)
+                }
+                crate::schemas::MessageType::AIMessage => {
+                    log::info!("AI message\n{}", message.content)
+                }
+                crate::schemas::MessageType::HumanMessage => {
+                    log::info!("Human message\n{}", message.content)
+                }
+                crate::schemas::MessageType::ToolMessage => {
+                    log::info!("Tool message\n{}", message.content)
+                }
+            }
+        }
         let mut output = self.llm.generate(&prompt.to_chat_messages()).await?;
         output.generation = self.output_parser.parse(&output.generation).await?;
 
