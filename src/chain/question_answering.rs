@@ -135,7 +135,7 @@ impl<'a> StuffQAPromptBuilder<'a> {
     }
 }
 
-impl<'a> Default for StuffQAPromptBuilder<'a> {
+impl Default for StuffQAPromptBuilder<'_> {
     fn default() -> Self {
         Self::new()
     }
