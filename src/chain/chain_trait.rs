@@ -114,7 +114,6 @@ pub trait Chain: Sync + Send {
         &self,
         input_variables: PromptArgs,
     ) -> Result<HashMap<String, Value>, ChainError> {
-        // log::info!("Using default implementation");
         let result = self.call(input_variables.clone()).await?;
         let mut output = HashMap::new();
         let output_key = self
@@ -182,12 +181,10 @@ pub trait Chain: Sync + Send {
 
     // Get the input keys of the prompt
     fn get_input_keys(&self) -> Vec<String> {
-        // log::info!("Using default implementation");
         vec![]
     }
 
     fn get_output_keys(&self) -> Vec<String> {
-        // log::info!("Using default implementation");
         vec![
             String::from(DEFAULT_OUTPUT_KEY),
             String::from(DEFAULT_RESULT_KEY),

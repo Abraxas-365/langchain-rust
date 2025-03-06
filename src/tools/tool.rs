@@ -70,7 +70,6 @@ pub trait Tool: Send + Sync {
     /// Implement this function to extract the parameters needed for your tool. If a simple
     /// string is sufficient, the default implementation can be used.
     async fn parse_input(&self, input: &Value) -> Value {
-        // log::info!("Using default implementation: {}", input);
         input.clone()
     }
 }
