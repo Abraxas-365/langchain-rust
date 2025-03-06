@@ -1,5 +1,6 @@
 mod chat;
 mod error;
+#[allow(clippy::module_inception)]
 mod prompt;
 
 use std::collections::HashMap;

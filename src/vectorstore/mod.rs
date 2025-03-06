@@ -18,6 +18,7 @@ pub mod opensearch;
 #[cfg(feature = "qdrant")]
 pub mod qdrant;
 
+#[allow(clippy::module_inception)]
 mod vectorstore;
 
 pub use options::*;
