@@ -49,9 +49,9 @@ impl fmt::Display for OpenAIModel {
     }
 }
 
-impl Into<String> for OpenAIModel {
-    fn into(self) -> String {
-        self.to_string()
+impl From<OpenAIModel> for String {
+    fn from(val: OpenAIModel) -> Self {
+        val.to_string()
     }
 }
 

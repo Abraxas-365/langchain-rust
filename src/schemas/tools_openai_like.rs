@@ -7,6 +7,7 @@ use async_openai::types::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::ops::Deref;
+use std::str::FromStr;
 
 #[derive(Clone, Debug)]
 pub enum FunctionCallBehavior {
@@ -93,8 +94,10 @@ pub struct FunctionDetail {
     pub arguments: String,
 }
 
-impl FunctionCallResponse {
-    pub fn from_str(s: &str) -> Result<Self, serde_json::Error> {
+impl FromStr for FunctionCallResponse {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(s)
     }
 }

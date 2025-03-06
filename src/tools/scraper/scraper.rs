@@ -40,9 +40,9 @@ impl Tool for WebScrapper {
     }
 }
 
-impl Into<Arc<dyn Tool>> for WebScrapper {
-    fn into(self) -> Arc<dyn Tool> {
-        Arc::new(self)
+impl From<WebScrapper> for Arc<dyn Tool> {
+    fn from(val: WebScrapper) -> Self {
+        Arc::new(val)
     }
 }
 

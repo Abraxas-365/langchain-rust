@@ -22,15 +22,15 @@ impl Default for SimpleMemory {
     }
 }
 
-impl Into<Arc<dyn BaseMemory>> for SimpleMemory {
-    fn into(self) -> Arc<dyn BaseMemory> {
-        Arc::new(self)
+impl From<SimpleMemory> for Arc<dyn BaseMemory> {
+    fn from(val: SimpleMemory) -> Self {
+        Arc::new(val)
     }
 }
 
-impl Into<Arc<Mutex<dyn BaseMemory>>> for SimpleMemory {
-    fn into(self) -> Arc<Mutex<dyn BaseMemory>> {
-        Arc::new(Mutex::new(self))
+impl From<SimpleMemory> for Arc<Mutex<dyn BaseMemory>> {
+    fn from(val: SimpleMemory) -> Self {
+        Arc::new(Mutex::new(val))
     }
 }
 

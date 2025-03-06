@@ -14,9 +14,9 @@ pub struct OpenAiEmbedder<C: Config> {
     model: String,
 }
 
-impl<C: Config + Send + Sync + 'static> Into<Box<dyn Embedder>> for OpenAiEmbedder<C> {
-    fn into(self) -> Box<dyn Embedder> {
-        Box::new(self)
+impl<C: Config + Send + Sync + 'static> From<OpenAiEmbedder<C>> for Box<dyn Embedder> {
+    fn from(val: OpenAiEmbedder<C>) -> Self {
+        Box::new(val)
     }
 }
 
