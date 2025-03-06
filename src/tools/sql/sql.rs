@@ -110,7 +110,7 @@ impl SQLDatabase {
     }
 
     pub async fn table_info(&self, tables: &[String]) -> Result<String, Box<dyn Error>> {
-        let mut tables: HashSet<String> = tables.to_vec().into_iter().collect();
+        let mut tables: HashSet<String> = tables.iter().cloned().collect();
         if tables.is_empty() {
             tables = self.all_tables.clone();
         }
