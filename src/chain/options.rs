@@ -1,15 +1,12 @@
 use futures::Future;
-use std::pin::Pin;
 
-use crate::language_models::options::CallOptions;
+use crate::{language_models::options::CallOptions, schemas::StreamingFunc};
 
 pub struct ChainCallOptions {
     pub max_tokens: Option<u32>,
     pub temperature: Option<f32>,
     pub stop_words: Option<Vec<String>>,
-    pub streaming_func: Option<
-        Box<dyn FnMut(String) -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send>> + Send>,
-    >,
+    pub streaming_func: Option<Box<StreamingFunc>>,
     pub top_k: Option<usize>,
     pub top_p: Option<f32>,
     pub seed: Option<usize>,

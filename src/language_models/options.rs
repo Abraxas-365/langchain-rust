@@ -2,7 +2,7 @@ use futures::Future;
 use std::{pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
-use crate::schemas::{FunctionCallBehavior, FunctionDefinition, ResponseFormat};
+use crate::schemas::{FunctionCallBehavior, FunctionDefinition, ResponseFormat, StreamingFunc};
 
 #[derive(Clone)]
 pub struct CallOptions {
@@ -10,11 +10,7 @@ pub struct CallOptions {
     pub max_tokens: Option<u32>,
     pub temperature: Option<f32>,
     pub stop_words: Option<Vec<String>>,
-    pub streaming_func: Option<
-        Arc<
-            Mutex<dyn FnMut(String) -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send>> + Send>,
-        >,
-    >,
+    pub streaming_func: Option<Arc<Mutex<StreamingFunc>>>,
     pub top_k: Option<usize>,
     pub top_p: Option<f32>,
     pub seed: Option<usize>,

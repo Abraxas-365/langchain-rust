@@ -22,6 +22,9 @@ pub use tools_openai_like::*;
 pub mod response_format_openai_like;
 pub use response_format_openai_like::*;
 
+pub mod streaming_func;
+pub use streaming_func::*;
+
 pub mod convert;
 mod stream;
 
