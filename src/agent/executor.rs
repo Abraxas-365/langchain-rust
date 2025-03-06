@@ -154,9 +154,16 @@ where
                                 });
 
                             let tools_value: serde_json::Value = serde_json::from_str(&tools)?;
-                            if tools_ai_message_seen.insert(tools, ()).is_none() {
+                            if tools_ai_message_seen.insert(tools.clone(), ()).is_none() {
                                 memory.add_message(
-                                    Message::new_ai_message("").with_tool_calls(tools_value),
+                                    Message::new_ai_message(
+                                        json! ({
+                                            "action": tool_id,
+                                            "action_input": tools,
+                                        })
+                                        .to_string(),
+                                    )
+                                    .with_tool_calls(tools_value),
                                 );
                             }
                             memory.add_message(Message::new_tool_message(observation, tool_id));
