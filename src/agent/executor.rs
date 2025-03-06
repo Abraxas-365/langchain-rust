@@ -140,7 +140,12 @@ where
 
                         let mut tools_ai_message_seen: HashMap<String, ()> = HashMap::default();
                         for (action, observation) in steps {
-                            let LogTools { tool_id, tools } = serde_json::from_str(&action.log)?;
+                            let LogTools { tool_id, tools } = serde_json::from_str(&action.log)
+                                .unwrap_or(LogTools {
+                                    tool_id: action.tool,
+                                    tools: action.tool_input.to_string(),
+                                });
+
                             let tools_value: serde_json::Value = serde_json::from_str(&tools)?;
                             if tools_ai_message_seen.insert(tools, ()).is_none() {
                                 memory.add_message(
