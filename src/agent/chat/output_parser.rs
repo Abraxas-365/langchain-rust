@@ -31,13 +31,12 @@ impl ChatOutputParser {
         match parse_json_markdown(text) {
             Some(value) => {
                 // Deserialize the Value into AgentOutput
+                let log = value.to_string();
                 let agent_output: AgentOutput = serde_json::from_value(value)?;
 
                 if agent_output.action == "Final Answer" {
                     if let Value::String(output) = agent_output.action_input {
-                        Ok(AgentEvent::Finish(AgentFinish {
-                            output: output.to_string(),
-                        }))
+                        Ok(AgentEvent::Finish(AgentFinish { output }))
                     } else {
                         Err(AgentError::LLMError(LLMError::ContentNotFound(
                             "Final answer not a string".to_string(),
@@ -47,7 +46,7 @@ impl ChatOutputParser {
                     Ok(AgentEvent::Action(vec![AgentAction {
                         tool: agent_output.action,
                         tool_input: agent_output.action_input,
-                        log: text.to_string(),
+                        log,
                     }]))
                 }
             }
