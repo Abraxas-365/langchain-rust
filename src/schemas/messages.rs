@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
@@ -29,13 +31,13 @@ impl Default for MessageType {
     }
 }
 
-impl MessageType {
-    pub fn to_string(&self) -> String {
+impl fmt::Display for MessageType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MessageType::SystemMessage => "system".to_owned(),
-            MessageType::AIMessage => "ai".to_owned(),
-            MessageType::HumanMessage => "human".to_owned(),
-            MessageType::ToolMessage => "tool".to_owned(),
+            MessageType::SystemMessage => write!(f, "system"),
+            MessageType::AIMessage => write!(f, "ai"),
+            MessageType::HumanMessage => write!(f, "human"),
+            MessageType::ToolMessage => write!(f, "tool"),
         }
     }
 }
@@ -152,5 +154,11 @@ impl Message {
             .map(|m| format!("{:?}: {}", m.message_type, m.content))
             .collect::<Vec<String>>()
             .join("\n")
+    }
+}
+
+impl fmt::Display for Message {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}: {}", self.message_type, self.content)
     }
 }

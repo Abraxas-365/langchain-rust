@@ -1,4 +1,4 @@
-use std::{collections::HashSet, error::Error};
+use std::{collections::HashSet, error::Error, fmt};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -12,12 +12,13 @@ pub enum Dialect {
     #[serde(rename = "postgresql")]
     PostgreSQL,
 }
-impl ToString for Dialect {
-    fn to_string(&self) -> String {
+
+impl fmt::Display for Dialect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Dialect::MySQL => "mysql".to_string(),
-            Dialect::SQLite => "sqlite".to_string(),
-            Dialect::PostgreSQL => "postgresql".to_string(),
+            Dialect::MySQL => write!(f, "mysql"),
+            Dialect::SQLite => write!(f, "sqlite"),
+            Dialect::PostgreSQL => write!(f, "postgresql"),
         }
     }
 }

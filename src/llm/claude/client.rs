@@ -18,13 +18,15 @@ pub enum ClaudeModel {
     Claude3_5sonnet20240620,
 }
 
-impl ToString for ClaudeModel {
-    fn to_string(&self) -> String {
+use std::fmt;
+
+impl fmt::Display for ClaudeModel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ClaudeModel::Claude3pus20240229 => "claude-3-opus-20240229".to_string(),
-            ClaudeModel::Claude3sonnet20240229 => "claude-3-sonnet-20240229".to_string(),
-            ClaudeModel::Claude3haiku20240307 => "claude-3-haiku-20240307".to_string(),
-            ClaudeModel::Claude3_5sonnet20240620 => "claude-3-5-sonnet-20240620".to_string(),
+            ClaudeModel::Claude3pus20240229 => write!(f, "claude-3-opus-20240229"),
+            ClaudeModel::Claude3sonnet20240229 => write!(f, "claude-3-sonnet-20240229"),
+            ClaudeModel::Claude3haiku20240307 => write!(f, "claude-3-haiku-20240307"),
+            ClaudeModel::Claude3_5sonnet20240620 => write!(f, "claude-3-5-sonnet-20240620"),
         }
     }
 }

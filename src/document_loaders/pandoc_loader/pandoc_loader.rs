@@ -27,18 +27,18 @@ pub enum InputFormat {
     VimWiki,
 }
 
-impl ToString for InputFormat {
-    fn to_string(&self) -> String {
+impl fmt::Display for InputFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            InputFormat::Docx => "docx".into(),
-            InputFormat::Epub => "epub".into(),
-            InputFormat::Html => "html".into(),
-            InputFormat::JuypterNotebook => "ipynb".into(),
-            InputFormat::MediaWiki => "mediawiki".into(),
-            InputFormat::Markdown => "markdown".into(),
-            InputFormat::RichTextFormat => "rtf".into(),
-            InputFormat::Typst => "typst".into(),
-            InputFormat::VimWiki => "vimwiki".into(),
+            InputFormat::Docx => write!(f, "docx"),
+            InputFormat::Epub => write!(f, "epub"),
+            InputFormat::Html => write!(f, "html"),
+            InputFormat::JuypterNotebook => write!(f, "ipynb"),
+            InputFormat::MediaWiki => write!(f, "mediawiki"),
+            InputFormat::Markdown => write!(f, "markdown"),
+            InputFormat::RichTextFormat => write!(f, "rtf"),
+            InputFormat::Typst => write!(f, "typst"),
+            InputFormat::VimWiki => write!(f, "vimwiki"),
         }
     }
 }

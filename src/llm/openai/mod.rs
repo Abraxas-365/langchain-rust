@@ -1,3 +1,4 @@
+use std::fmt;
 use std::pin::Pin;
 
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
@@ -36,14 +37,14 @@ pub enum OpenAIModel {
     Gpt4oMini,
 }
 
-impl ToString for OpenAIModel {
-    fn to_string(&self) -> String {
+impl fmt::Display for OpenAIModel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OpenAIModel::Gpt35 => "gpt-3.5-turbo".to_string(),
-            OpenAIModel::Gpt4 => "gpt-4".to_string(),
-            OpenAIModel::Gpt4Turbo => "gpt-4-turbo-preview".to_string(),
-            OpenAIModel::Gpt4o => "gpt-4o".to_string(),
-            OpenAIModel::Gpt4oMini => "gpt-4o-mini".to_string(),
+            OpenAIModel::Gpt35 => write!(f, "gpt-3.5-turbo"),
+            OpenAIModel::Gpt4 => write!(f, "gpt-4"),
+            OpenAIModel::Gpt4Turbo => write!(f, "gpt-4-turbo-preview"),
+            OpenAIModel::Gpt4o => write!(f, "gpt-4o"),
+            OpenAIModel::Gpt4oMini => write!(f, "gpt-4o-mini"),
         }
     }
 }

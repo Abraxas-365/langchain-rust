@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::messages::Message;
 
 #[derive(Debug, Clone)]
@@ -15,15 +17,16 @@ impl PromptValue {
         Self { messages }
     }
 
-    pub fn to_string(&self) -> String {
-        self.messages
-            .iter()
-            .map(|m| format!("{}: {}", m.message_type.to_string(), m.content))
-            .collect::<Vec<String>>()
-            .join("\n")
-    }
-
     pub fn to_chat_messages(&self) -> Vec<Message> {
         self.messages.clone()
+    }
+}
+
+impl fmt::Display for PromptValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for message in &self.messages {
+            writeln!(f, "{message}")?;
+        }
+        Ok(())
     }
 }
