@@ -107,12 +107,12 @@ impl SQLDatabaseChain {
             .to_string();
 
         let mut tables: Vec<String> = Vec::new();
-        if let Some(value) = input_variables.get(SQL_CHAIN_DEFAULT_INPUT_KEY_TABLE_NAMES) {
-            if let serde_json::Value::Array(array) = value {
-                for item in array {
-                    if let serde_json::Value::String(str) = item {
-                        tables.push(str.clone());
-                    }
+        if let Some(serde_json::Value::Array(array)) =
+            input_variables.get(SQL_CHAIN_DEFAULT_INPUT_KEY_TABLE_NAMES)
+        {
+            for item in array {
+                if let serde_json::Value::String(str) = item {
+                    tables.push(str.clone());
                 }
             }
         }

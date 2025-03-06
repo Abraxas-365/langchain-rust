@@ -128,7 +128,7 @@ impl Claude {
             .partition(|m| m.message_type == MessageType::SystemMessage);
         let mut payload = Payload {
             model: self.model.clone(),
-            system: system_message.get(0).map(|m| m.content.clone()),
+            system: system_message.first().map(|m| m.content.clone()),
             messages: other_messages
                 .into_iter()
                 .map(ClaudeMessage::from_message)
@@ -164,8 +164,10 @@ impl LLM for Claude {
                         Err(e) => return Err(e),
                     }
                 }
-                let mut generate_result = GenerateResult::default();
-                generate_result.generation = complete_response;
+                let generate_result = GenerateResult {
+                    generation: complete_response,
+                    ..GenerateResult::default()
+                };
                 Ok(generate_result)
             }
             None => self.generate(messages).await,

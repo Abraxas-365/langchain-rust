@@ -110,14 +110,11 @@ impl Chain for ConversationalRetrieverChain {
             )
             .await?;
 
-        match &output.tokens {
-            Some(tokens) => {
-                if let Some(mut token_usage) = token_usage {
-                    token_usage.add(tokens);
-                    output.tokens = Some(token_usage)
-                }
+        if let Some(tokens) = &output.tokens {
+            if let Some(mut token_usage) = token_usage {
+                token_usage.add(tokens);
+                output.tokens = Some(token_usage)
             }
-            None => {}
         }
 
         {
