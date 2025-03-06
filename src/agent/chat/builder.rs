@@ -9,23 +9,23 @@ use crate::{
 
 use super::{
     output_parser::ChatOutputParser,
-    prompt::{PREFIX, SUFFIX},
+    prompt::{DEFAULT_INITIAL_PROMPT, DEFAULT_SYSTEM_PROMPT},
     ConversationalAgent,
 };
 
-pub struct ConversationalAgentBuilder {
+pub struct ConversationalAgentBuilder<'a, 'b> {
     tools: Option<Vec<Arc<dyn Tool>>>,
-    prefix: Option<String>,
-    suffix: Option<String>,
+    system_prompt: Option<&'a str>,
+    initial_prompt: Option<&'b str>,
     options: Option<ChainCallOptions>,
 }
 
-impl ConversationalAgentBuilder {
+impl<'a, 'b> ConversationalAgentBuilder<'a, 'b> {
     pub fn new() -> Self {
         Self {
             tools: None,
-            prefix: None,
-            suffix: None,
+            system_prompt: None,
+            initial_prompt: None,
             options: None,
         }
     }
@@ -35,13 +35,13 @@ impl ConversationalAgentBuilder {
         self
     }
 
-    pub fn prefix<S: Into<String>>(mut self, prefix: S) -> Self {
-        self.prefix = Some(prefix.into());
+    pub fn system_prompt<S: Into<String>>(mut self, system_prompt: &'a str) -> Self {
+        self.system_prompt = Some(system_prompt);
         self
     }
 
-    pub fn suffix<S: Into<String>>(mut self, suffix: S) -> Self {
-        self.suffix = Some(suffix.into());
+    pub fn initial_prompt<S: Into<String>>(mut self, initial_prompt: &'b str) -> Self {
+        self.initial_prompt = Some(initial_prompt);
         self
     }
 
@@ -52,10 +52,10 @@ impl ConversationalAgentBuilder {
 
     pub fn build<L: Into<Box<dyn LLM>>>(self, llm: L) -> Result<ConversationalAgent, AgentError> {
         let tools = self.tools.unwrap_or_default();
-        let prefix = self.prefix.unwrap_or_else(|| PREFIX.to_string());
-        let suffix = self.suffix.unwrap_or_else(|| SUFFIX.to_string());
+        let system_prompt = self.system_prompt.unwrap_or(DEFAULT_SYSTEM_PROMPT);
+        let initial_prompt = self.initial_prompt.unwrap_or(DEFAULT_INITIAL_PROMPT);
 
-        let prompt = ConversationalAgent::create_prompt(&tools, &suffix, &prefix)?;
+        let prompt = ConversationalAgent::create_prompt(system_prompt, initial_prompt, &tools)?;
         let default_options = ChainCallOptions::default().with_max_tokens(1000);
         let chain = Box::new(
             LLMChainBuilder::new()
@@ -73,7 +73,7 @@ impl ConversationalAgentBuilder {
     }
 }
 
-impl Default for ConversationalAgentBuilder {
+impl Default for ConversationalAgentBuilder<'_, '_> {
     fn default() -> Self {
         Self::new()
     }

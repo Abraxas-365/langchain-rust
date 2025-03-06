@@ -1,3 +1,4 @@
+use core::fmt;
 use std::error::Error;
 use std::string::String;
 
@@ -6,6 +7,10 @@ use serde_json::{json, Value};
 
 #[async_trait]
 pub trait Tool: Send + Sync {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "> {}: {}", self.name(), self.description())
+    }
+
     /// Returns the name of the tool.
     fn name(&self) -> String;
 
@@ -67,5 +72,11 @@ pub trait Tool: Send + Sync {
     async fn parse_input(&self, input: &Value) -> Value {
         // log::info!("Using default implementation: {}", input);
         input.clone()
+    }
+}
+
+impl fmt::Display for dyn Tool {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "> {}: {}", self.name(), self.description())
     }
 }

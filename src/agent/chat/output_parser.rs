@@ -10,8 +10,6 @@ use crate::{
     schemas::agent::{AgentAction, AgentEvent, AgentFinish},
 };
 
-use super::prompt::FORMAT_INSTRUCTIONS;
-
 #[derive(Debug, Deserialize)]
 struct AgentOutput {
     action: String,
@@ -57,10 +55,6 @@ impl ChatOutputParser {
                 }))
             }
         }
-    }
-
-    pub fn get_format_instructions(&self) -> &str {
-        FORMAT_INSTRUCTIONS
     }
 }
 

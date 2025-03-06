@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde_json::json;
 
 use crate::{
-    agent::{agent::Agent, chat::prompt::FORMAT_INSTRUCTIONS, AgentError},
+    agent::{agent::Agent, AgentError},
     chain::chain_trait::Chain,
     message_formatter,
     prompt::{
@@ -20,7 +20,10 @@ use crate::{
     tools::Tool,
 };
 
-use super::{output_parser::ChatOutputParser, prompt::TEMPLATE_TOOL_RESPONSE};
+use super::{
+    output_parser::ChatOutputParser,
+    prompt::{SUFFIX, TEMPLATE_TOOL_RESPONSE},
+};
 
 pub struct ConversationalAgent {
     pub(crate) chain: Box<dyn Chain>,
@@ -30,13 +33,13 @@ pub struct ConversationalAgent {
 
 impl ConversationalAgent {
     pub fn create_prompt(
+        system_prompt: &str,
+        initial_prompt: &str,
         tools: &[Arc<dyn Tool>],
-        suffix: &str,
-        prefix: &str,
     ) -> Result<MessageFormatterStruct, AgentError> {
         let tool_string = tools
             .iter()
-            .map(|tool| format!("> {}: {}", tool.name(), tool.description()))
+            .map(|tool: &Arc<dyn Tool>| tool.to_string())
             .collect::<Vec<_>>()
             .join("\n");
         let tool_names = tools
@@ -44,25 +47,23 @@ impl ConversationalAgent {
             .map(|tool| tool.name())
             .collect::<Vec<_>>()
             .join(", ");
-
-        let sufix_prompt = template_jinja2!(suffix, "tools", "format_instructions");
-
         let input_variables_fstring = prompt_args! {
             "tools" => tool_string,
-            "format_instructions" => FORMAT_INSTRUCTIONS,
-            "tool_names"=>tool_names
+            "tool_names" => tool_names
         };
 
-        let sufix_prompt = sufix_prompt.format(input_variables_fstring)?;
+        let system_prompt = template_jinja2!(
+            &format!("{}{}", system_prompt, SUFFIX),
+            "tools",
+            "tool_names"
+        )
+        .format(input_variables_fstring)?;
+
         let formatter = message_formatter![
-            MessageOrTemplate::Message(Message::new_system_message(prefix)),
+            MessageOrTemplate::Message(Message::new_system_message(system_prompt)),
             MessageOrTemplate::MessagesPlaceholder("chat_history".to_string()),
             MessageOrTemplate::Template(
-                HumanMessagePromptTemplate::new(template_jinja2!(
-                    &sufix_prompt.to_string(),
-                    "input"
-                ))
-                .into()
+                HumanMessagePromptTemplate::new(template_jinja2!(initial_prompt, "input")).into()
             ),
             MessageOrTemplate::MessagesPlaceholder("agent_scratchpad".to_string()),
         ];
