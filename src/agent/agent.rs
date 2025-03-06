@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 
@@ -19,4 +19,6 @@ pub trait Agent: Send + Sync {
     ) -> Result<AgentEvent, AgentError>;
 
     fn get_tools(&self) -> Vec<Arc<dyn Tool>>;
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>>;
 }

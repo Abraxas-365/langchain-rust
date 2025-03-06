@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{error::Error, pin::Pin};
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -108,23 +108,6 @@ impl Chain for LLMChain {
 
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
-        log::debug!("Prompt: {:?}", prompt);
-        for message in prompt.to_chat_messages() {
-            match message.message_type {
-                crate::schemas::MessageType::SystemMessage => {
-                    log::info!("System message\n{}", message.content)
-                }
-                crate::schemas::MessageType::AIMessage => {
-                    log::info!("AI message\n{}", message.content)
-                }
-                crate::schemas::MessageType::HumanMessage => {
-                    log::info!("Human message\n{}", message.content)
-                }
-                crate::schemas::MessageType::ToolMessage => {
-                    log::info!("Tool message\n{}", message.content)
-                }
-            }
-        }
         let mut output = self.llm.generate(&prompt.to_chat_messages()).await?;
         output.generation = self.output_parser.parse(&output.generation).await?;
 
@@ -133,7 +116,7 @@ impl Chain for LLMChain {
 
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
-        log::debug!("Prompt: {:?}", prompt);
+
         let output = self
             .llm
             .generate(&prompt.to_chat_messages())
@@ -148,13 +131,22 @@ impl Chain for LLMChain {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
-        log::debug!("Prompt: {:?}", prompt);
         let llm_stream = self.llm.stream(&prompt.to_chat_messages()).await?;
 
         // Map the errors from LLMError to ChainError
         let mapped_stream = llm_stream.map_err(ChainError::from);
 
         Ok(Box::pin(mapped_stream))
+    }
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+        let prompt = self.prompt.format_prompt(inputs)?;
+
+        for message in prompt.to_chat_messages() {
+            log::debug!("{}:\n{}", message.message_type, message.content);
+        }
+
+        Ok(())
     }
 }
 

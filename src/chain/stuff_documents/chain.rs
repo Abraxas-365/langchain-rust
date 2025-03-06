@@ -164,4 +164,8 @@ impl Chain for StuffDocument {
     fn get_input_keys(&self) -> Vec<String> {
         vec![self.input_key.clone()]
     }
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn std::error::Error>> {
+        self.llm_chain.log_messages(inputs)
+    }
 }

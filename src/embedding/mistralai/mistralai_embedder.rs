@@ -23,8 +23,6 @@ impl MistralAIEmbedder {
 #[async_trait]
 impl Embedder for MistralAIEmbedder {
     async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, EmbedderError> {
-        log::debug!("Embedding documents: {:?}", documents);
-
         let response = self
             .client
             .embeddings_async(self.model.clone(), documents.into(), None)
@@ -39,8 +37,6 @@ impl Embedder for MistralAIEmbedder {
     }
 
     async fn embed_query(&self, text: &str) -> Result<Vec<f64>, EmbedderError> {
-        log::debug!("Embedding query: {:?}", text);
-
         let response = self
             .client
             .embeddings_async(self.model.clone(), vec![text.to_string()], None)

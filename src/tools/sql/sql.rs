@@ -131,7 +131,6 @@ impl SQLDatabase {
     }
 
     pub async fn query(&self, query: &str) -> Result<String, Box<dyn Error>> {
-        log::debug!("Query: {}", query);
         let (cols, results) = self.engine.query(query).await?;
         let mut str = cols.join("\t") + "\n";
         for row in results {
@@ -147,7 +146,6 @@ impl SQLDatabase {
 
     pub async fn sample_rows(&self, table: &str) -> Result<String, Box<dyn Error>> {
         let query = format!("SELECT * FROM {} LIMIT {}", table, self.sample_rows_number);
-        log::debug!("Sample Rows Query: {}", query);
         self.query(&query).await
     }
 }

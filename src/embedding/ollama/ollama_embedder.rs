@@ -54,8 +54,6 @@ impl Default for OllamaEmbedder {
 #[async_trait]
 impl Embedder for OllamaEmbedder {
     async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, EmbedderError> {
-        log::debug!("Embedding documents: {:?}", documents);
-
         let response = self
             .client
             .generate_embeddings(GenerateEmbeddingsRequest::new(
@@ -74,8 +72,6 @@ impl Embedder for OllamaEmbedder {
     }
 
     async fn embed_query(&self, text: &str) -> Result<Vec<f64>, EmbedderError> {
-        log::debug!("Embedding query: {:?}", text);
-
         let response = self
             .client
             .generate_embeddings(GenerateEmbeddingsRequest::new(

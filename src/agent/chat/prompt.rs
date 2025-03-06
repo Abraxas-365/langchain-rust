@@ -32,8 +32,12 @@ Use this if you want to respond directly to the human. Markdown code snippet for
 ```json
 {
     "action": "Final Answer",
-    "action_input": string \\ You should put what you want to return to use here
-}"#;
+    "action_input": string \\ You should put what you want to return to user here
+}
+```
+    
+AVAILABLE TOOLS:
+{{tools}}"#;
 
 pub const DEFAULT_INITIAL_PROMPT: &str = r#"
 Current Task: {{input}}

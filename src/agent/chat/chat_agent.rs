@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 use serde_json::json;
@@ -102,6 +102,10 @@ impl Agent for ConversationalAgent {
 
     fn get_tools(&self) -> Vec<Arc<dyn Tool>> {
         self.tools.clone()
+    }
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+        self.chain.log_messages(inputs)
     }
 }
 

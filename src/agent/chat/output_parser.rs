@@ -25,7 +25,6 @@ impl ChatOutputParser {
 
 impl ChatOutputParser {
     pub fn parse(&self, text: &str) -> Result<AgentEvent, AgentError> {
-        log::debug!("Parsing to Agent Action: {}", text);
         match parse_json_markdown(text) {
             Some(value) => {
                 // Deserialize the Value into AgentOutput
@@ -48,12 +47,9 @@ impl ChatOutputParser {
                     }]))
                 }
             }
-            None => {
-                log::debug!("No JSON found or malformed JSON in text: {}", text);
-                Ok(AgentEvent::Finish(AgentFinish {
-                    output: text.to_string(),
-                }))
-            }
+            None => Ok(AgentEvent::Finish(AgentFinish {
+                output: text.to_string(),
+            })),
         }
     }
 }

@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
@@ -59,7 +60,6 @@ where
     fn get_name_to_tools(&self) -> HashMap<String, Arc<dyn Tool>> {
         let mut name_to_tool = HashMap::new();
         for tool in self.agent.get_tools().iter() {
-            log::debug!("Loading Tool:{}", tool.name());
             name_to_tool.insert(tool.name().trim().replace(" ", "_"), tool.clone());
         }
         name_to_tool
@@ -75,7 +75,6 @@ where
         let mut input_variables = input_variables.clone();
         let name_to_tools = self.get_name_to_tools();
         let mut steps: Vec<(AgentAction, String)> = Vec::new();
-        log::debug!("steps: {:?}", steps);
         if let Some(memory) = &self.memory {
             let memory = memory.lock().await;
             input_variables.insert("chat_history".to_string(), json!(memory.messages()));
@@ -86,7 +85,13 @@ where
             );
         }
 
-        log::info!("Starting agent loop with input: {:#?}", input_variables);
+        {
+            let mut input_variables_demo = input_variables.clone();
+            input_variables_demo.insert("agent_scratchpad".to_string(), json!([]));
+            self.log_messages(input_variables_demo).map_err(|e| {
+                ChainError::AgentError(format!("Error formatting initial messages: {e}"))
+            })?;
+        }
 
         loop {
             let agent_event = self
@@ -97,7 +102,12 @@ where
             match agent_event {
                 AgentEvent::Action(actions) => {
                     for action in actions {
-                        log::debug!("Action: {:?}", action.tool_input);
+                        log::debug!(
+                            "Agent used tool {} with input:\n{:#?}",
+                            &action.tool,
+                            &action.tool_input
+                        );
+
                         let tool = name_to_tools
                             .get(&action.tool.trim().replace(" ", "_"))
                             .ok_or_else(|| {
@@ -120,7 +130,8 @@ where
                             }
                         };
 
-                        log::info!("Agent action:\n{:#?}\nResult:\n{:#?}", action, observation);
+                        log::debug!("Tool {} result:\n{}", &action.tool, &observation);
+
                         steps.push((action, observation));
                     }
                 }
@@ -153,9 +164,12 @@ where
 
                         memory.add_ai_message(&finish.output);
                     }
+
+                    log::debug!("Agent finished with result:\n{}", &finish.output);
+
                     return Ok(GenerateResult {
                         generation: finish.output,
-                        ..Default::default()
+                        ..GenerateResult::default()
                     });
                 }
             }
@@ -174,5 +188,9 @@ where
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         let result = self.call(input_variables).await?;
         Ok(result.generation)
+    }
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+        self.agent.log_messages(inputs)
     }
 }

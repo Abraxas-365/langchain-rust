@@ -1,6 +1,6 @@
 use futures::Stream;
 use futures_util::{pin_mut, StreamExt};
-use std::{collections::HashMap, pin::Pin, sync::Arc};
+use std::{collections::HashMap, error::Error, pin::Pin, sync::Arc};
 
 use async_stream::stream;
 use async_trait::async_trait;
@@ -224,6 +224,11 @@ impl Chain for ConversationalRetrieverChain {
         keys.push(DEFAULT_RESULT_KEY.to_string());
 
         keys
+    }
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+        self.combine_documents_chain.log_messages(inputs.clone())?;
+        self.condense_question_chain.log_messages(inputs)
     }
 }
 

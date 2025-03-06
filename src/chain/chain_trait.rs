@@ -1,4 +1,4 @@
-use std::{collections::HashMap, pin::Pin};
+use std::{collections::HashMap, error::Error, pin::Pin};
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -190,6 +190,8 @@ pub trait Chain: Sync + Send {
             String::from(DEFAULT_RESULT_KEY),
         ]
     }
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>>;
 }
 
 impl<C> From<C> for Box<dyn Chain>

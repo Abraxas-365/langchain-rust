@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{error::Error, pin::Pin};
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -93,6 +93,10 @@ impl Chain for CondenseQuestionGeneratorChain {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         self.chain.stream(input_variables).await
+    }
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+        self.chain.log_messages(inputs)
     }
 }
 

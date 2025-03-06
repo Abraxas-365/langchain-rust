@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+};
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -58,7 +61,6 @@ impl Chain for SequentialChain {
                 .unwrap_or(&json!(GenerateResult::default()))
                 .clone();
             let result: GenerateResult = serde_json::from_value(result)?;
-            log::debug!("{}", result.generation);
             //Insert the output chain to the final output
             output_result.insert(output_key.clone(), json!(result.generation.clone()));
             input_variables.insert(output_key, json!(result.generation.clone()));
@@ -82,6 +84,13 @@ impl Chain for SequentialChain {
         final_result.tokens = final_token_usage;
         output_result.insert(DEFAULT_RESULT_KEY.to_string(), json!(final_result));
         Ok(output_result)
+    }
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+        for chain in &self.chains {
+            chain.log_messages(inputs.clone())?;
+        }
+        Ok(())
     }
 }
 

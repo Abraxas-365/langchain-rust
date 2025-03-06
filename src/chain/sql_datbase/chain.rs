@@ -137,7 +137,6 @@ impl SQLDatabaseChain {
         }
 
         let sql_query = output.generation.trim();
-        log::debug!("output: {:?}", sql_query);
         let query_result = self
             .database
             .query(sql_query)
@@ -202,5 +201,9 @@ impl Chain for SQLDatabaseChain {
         let (llm_inputs, _) = self.call_builder_chains(&input_variables).await?;
 
         self.llmchain.stream(llm_inputs).await
+    }
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn std::error::Error>> {
+        self.llmchain.log_messages(inputs)
     }
 }

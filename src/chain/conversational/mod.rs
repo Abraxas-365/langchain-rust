@@ -1,4 +1,4 @@
-use std::{pin::Pin, sync::Arc};
+use std::{error::Error, pin::Pin, sync::Arc};
 
 use async_stream::stream;
 use async_trait::async_trait;
@@ -136,6 +136,10 @@ impl Chain for ConversationalChain {
 
     fn get_input_keys(&self) -> Vec<String> {
         vec![self.input_key.clone()]
+    }
+
+    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+        self.llm.log_messages(inputs)
     }
 }
 
