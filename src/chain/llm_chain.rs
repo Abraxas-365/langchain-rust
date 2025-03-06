@@ -83,6 +83,12 @@ impl LLMChainBuilder {
     }
 }
 
+impl Default for LLMChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct LLMChain {
     prompt: Box<dyn FormatPrompter>,
     llm: Box<dyn LLM>,

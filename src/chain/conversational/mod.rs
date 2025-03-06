@@ -44,6 +44,12 @@ impl ConversationalChainPromptBuilder {
     }
 }
 
+impl Default for ConversationalChainPromptBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct ConversationalChain {
     llm: LLMChain,
     input_key: String,

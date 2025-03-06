@@ -63,3 +63,9 @@ impl OpenAiToolAgentBuilder {
         Ok(OpenAiToolAgent { chain, tools })
     }
 }
+
+impl Default for OpenAiToolAgentBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

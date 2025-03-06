@@ -39,6 +39,12 @@ impl SequentialChainBuilder {
     }
 }
 
+impl Default for SequentialChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[macro_export]
 macro_rules! sequential_chain {
     ( $( $chain:expr ),* $(,)? ) => {

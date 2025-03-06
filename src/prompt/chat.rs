@@ -225,6 +225,12 @@ impl MessageFormatterStruct {
     }
 }
 
+impl Default for MessageFormatterStruct {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MessageFormatter for MessageFormatterStruct {
     fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, PromptError> {
         self.format(input_variables)

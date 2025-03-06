@@ -17,6 +17,12 @@ impl MemoryIndex {
     }
 }
 
+impl Default for MemoryIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl Index for MemoryIndex {
     async fn add(&mut self, routers: &[Router]) -> Result<(), IndexError> {

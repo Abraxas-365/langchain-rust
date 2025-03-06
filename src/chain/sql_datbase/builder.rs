@@ -109,3 +109,9 @@ impl SQLDatabaseChainBuilder {
         })
     }
 }
+
+impl Default for SQLDatabaseChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

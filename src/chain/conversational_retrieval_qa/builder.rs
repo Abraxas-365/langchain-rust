@@ -170,3 +170,9 @@ impl ConversationalRetrieverChainBuilder {
         })
     }
 }
+
+impl Default for ConversationalRetrieverChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

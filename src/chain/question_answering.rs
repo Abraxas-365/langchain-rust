@@ -52,6 +52,12 @@ impl CondenseQuestionPromptBuilder {
     }
 }
 
+impl Default for CondenseQuestionPromptBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct CondenseQuestionGeneratorChain {
     chain: LLMChain,
 }
@@ -126,6 +132,12 @@ impl<'a> StuffQAPromptBuilder<'a> {
             "input_documents" => self.input_documents,
             "question" => self.question
         }
+    }
+}
+
+impl<'a> Default for StuffQAPromptBuilder<'a> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

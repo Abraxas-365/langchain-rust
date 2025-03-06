@@ -72,3 +72,9 @@ impl ConversationalAgentBuilder {
         })
     }
 }
+
+impl Default for ConversationalAgentBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

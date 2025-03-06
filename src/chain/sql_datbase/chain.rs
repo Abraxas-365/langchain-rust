@@ -40,6 +40,12 @@ impl SqlChainPromptBuilder {
     }
 }
 
+impl Default for SqlChainPromptBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct SQLDatabaseChain {
     pub(crate) llmchain: LLMChain,
     pub(crate) top_k: usize,

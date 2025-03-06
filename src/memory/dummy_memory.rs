@@ -12,6 +12,12 @@ impl DummyMemory {
     }
 }
 
+impl Default for DummyMemory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Into<Arc<dyn BaseMemory>> for DummyMemory {
     fn into(self) -> Arc<dyn BaseMemory> {
         Arc::new(self)

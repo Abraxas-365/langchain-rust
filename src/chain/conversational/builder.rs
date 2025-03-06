@@ -117,3 +117,9 @@ impl ConversationalChainBuilder {
         })
     }
 }
+
+impl Default for ConversationalChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

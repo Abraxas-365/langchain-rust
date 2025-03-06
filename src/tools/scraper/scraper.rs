@@ -14,6 +14,12 @@ impl WebScrapper {
     }
 }
 
+impl Default for WebScrapper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl Tool for WebScrapper {
     fn name(&self) -> String {

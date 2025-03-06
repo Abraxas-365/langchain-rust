@@ -127,3 +127,9 @@ impl<C: Connection> StoreBuilder<C> {
         })
     }
 }
+
+impl<C: Connection> Default for StoreBuilder<C> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
