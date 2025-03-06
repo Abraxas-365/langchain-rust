@@ -25,7 +25,9 @@ impl ChatOutputParser {
 
 impl ChatOutputParser {
     pub fn parse(&self, text: &str) -> Result<AgentEvent, AgentError> {
-        match parse_json_markdown(text) {
+        let value = parse_json_markdown(text).or_else(|| parse_partial_json(text, false));
+
+        match value {
             Some(value) => {
                 // Deserialize the Value into AgentOutput
                 let log = value.to_string();
