@@ -22,7 +22,7 @@ Markdown code snippet formatted in the following schema:
 ```json
 {
     "action": string, \\ The action to take. Must be one of {{tool_names}}
-    "action_input": string \\ The input to the action
+    "action_input": object \\ The input to the action, for the exact format refer too the tool description 
 }
 ```
 
