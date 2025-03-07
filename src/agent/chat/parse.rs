@@ -65,3 +65,54 @@ fn parse_json_markdown(json_markdown: &str) -> Option<Value> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+
+    use super::*;
+
+    #[test]
+    fn test_parse_agent_output() {
+        let test_output = indoc! {r#"
+            ```json
+            {
+                "thought": "I'm thinking...",
+                "action": "generate",
+                "action_input": "Hello, world!"
+            }
+            ```
+        "#};
+
+        let parsed_output = parse_agent_output(test_output).unwrap();
+
+        match parsed_output {
+            AgentEvent::Action(agent_actions) => {
+                assert!(agent_actions.len() == 1);
+                let agent_action = &agent_actions[0];
+                assert_eq!(agent_action.thought, Some("I'm thinking...".to_string()));
+                assert_eq!(agent_action.action, "generate");
+                assert_eq!(agent_action.action_input, "Hello, world!");
+            }
+            AgentEvent::Finish(_) => panic!("Expected AgentEvent::Action, got AgentEvent::Finish"),
+        }
+
+        let test_final_answer = indoc! {r#"
+            ```json
+            {
+                "thought": "I now can give a great answer",
+                "final_answer": "Goodbye, world!"
+            }
+            ```
+        "#};
+
+        let parsed_output = parse_agent_output(test_final_answer).unwrap();
+
+        match parsed_output {
+            AgentEvent::Action(_) => panic!("Expected AgentEvent::Finish, got AgentEvent::Action"),
+            AgentEvent::Finish(final_answer) => {
+                assert_eq!(final_answer, "Goodbye, world!");
+            }
+        }
+    }
+}
