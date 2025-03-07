@@ -8,7 +8,6 @@ use crate::{
 };
 
 use super::{
-    output_parser::ChatOutputParser,
     prompt::{DEFAULT_INITIAL_PROMPT, DEFAULT_SYSTEM_PROMPT},
     ConversationalAgent,
 };
@@ -65,11 +64,7 @@ impl<'a, 'b> ConversationalAgentBuilder<'a, 'b> {
                 .build()?,
         );
 
-        Ok(ConversationalAgent {
-            chain,
-            tools,
-            output_parser: ChatOutputParser::new(),
-        })
+        Ok(ConversationalAgent { chain, tools })
     }
 }
 

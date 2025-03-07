@@ -1,6 +1,6 @@
 mod builder;
 mod chat_agent;
-mod output_parser;
+mod parse;
 mod prompt;
 
 pub use builder::*;

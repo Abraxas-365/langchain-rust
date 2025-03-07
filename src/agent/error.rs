@@ -27,4 +27,7 @@ pub enum AgentError {
 
     #[error("Error: {0}")]
     OtherError(String),
+
+    #[error("Invalid format, remember the instructions regarding the format and try again")]
+    InvalidFormatError,
 }

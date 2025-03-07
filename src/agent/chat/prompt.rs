@@ -6,37 +6,30 @@ Overall, Assistant is a powerful system that can help with a wide range of tasks
 
 pub const SUFFIX: &str = r#"
 
-TOOLS
-------
-Assistant can ask the user to use tools to look up information that may be helpful in answering the users original question. The tools the human can use are:
-
 RESPONSE FORMAT INSTRUCTIONS
 ----------------------------
 
-When responding to me, please output a response in one of two formats:
-
-**Option 1:**
-Use this if you want the human to use a tool.
-Markdown code snippet formatted in the following schema:
+You MUST either use a tool (use one at time) OR give your best final answer not both at the same time. When responding, you must use the following format:
 
 ```json
 {
-    "action": string, \\ The action to take. Must be one of {{tool_names}}
-    "action_input": object \\ The input to the action, for the exact format refer too the tool description 
+    "thought": string, \\ You should always think about what to do
+    "action": string, \\ The action to take, should be one of [{{tool_names}}]
+    "action_input": object \\ The input to the action, object enclosed in curly braces
 }
 ```
+This Thought/Action/Action Input/Result can repeat N times. 
 
-**Option #2:**
-Use this if you want to respond directly to the human. Markdown code snippet formatted in the following schema:
+Once you know the final answer, you must give it using the following format:
 
 ```json
 {
-    "action": "Final Answer",
-    "action_input": string \\ You should put what you want to return to user here
+    "thought": "I now can give a great answer",
+    "final_answer": string \\ Your final answer must be the great and the most complete as possible, it must be outcome described,
 }
 ```
-    
-AVAILABLE TOOLS:
+
+The following is the description of the tools available to you:
 {{tools}}"#;
 
 pub const DEFAULT_INITIAL_PROMPT: &str = r#"
@@ -44,11 +37,19 @@ Current Task: {{input}}
 
 Begin! This is VERY important to you, use the tools available and give your best Final Answer, your job depends on it!"#;
 
-pub const TEMPLATE_TOOL_RESPONSE: &str = r#"TOOL RESPONSE: 
----------------------
-{{observation}}
+pub const INVALID_FORMAT_ERROR: &str = r#"Invalid format, remember the instructions regarding the format and try again"#;
+// pub const INVALID_FORMAT_ERROR: &str = r#"INVALID FORMAT
+// ----------------------------
+// To use a tool, you MUST use the following format:
+// {
+//     "thought": string, \\ You should always think about what to do
+//     "action": string, \\ The action to take, should be one of [{{tool_names}}]
+//     "action_input": object \\ The input to the action, object enclosed in curly braces
+// }
 
-USER'S INPUT
---------------------
-
-Okay, so what is the response to my last comment? If using information obtained from the tools you must mention it explicitly without mentioning the tool names - I have forgotten all TOOL RESPONSES! Remember to respond with a markdown code snippet of a json blob with a single action, and NOTHING else."#;
+// Or if you know your final answer, you must give it using the following format:
+// {
+//     "thought": "I now can give a great answer",
+//     "final_answer": string \\ Your final answer must be the great and the most complete as possible, it must be outcome described,
+// }
+// "#;

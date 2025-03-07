@@ -84,6 +84,7 @@ ollama-rs = { version = "0.2.0", optional = true, features = [
     "chat-history",
 ] }
 mistralai-client = { version = "0.14.0", optional = true }
+indoc = "2.0.6"
 
 
 [features]

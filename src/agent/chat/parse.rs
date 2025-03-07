@@ -1,59 +1,17 @@
 use std::collections::VecDeque;
 
 use regex::Regex;
-use serde::Deserialize;
 use serde_json::Value;
 
-use crate::{
-    agent::AgentError,
-    language_models::LLMError,
-    schemas::agent::{AgentAction, AgentEvent, AgentFinish},
-};
+use crate::{agent::AgentError, schemas::agent::AgentEvent};
 
-#[derive(Debug, Deserialize)]
-struct AgentOutput {
-    action: String,
-    action_input: Value,
-}
-
-pub struct ChatOutputParser {}
-impl ChatOutputParser {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl ChatOutputParser {
-    pub fn parse(&self, text: &str) -> Result<AgentEvent, AgentError> {
-        let value = parse_json_markdown(text).or_else(|| parse_partial_json(text, false));
-
-        match value {
-            Some(value) => {
-                // Deserialize the Value into AgentOutput
-                let log = value.to_string();
-                let agent_output: AgentOutput = serde_json::from_value(value)?;
-
-                if agent_output.action == "Final Answer" {
-                    if let Value::String(output) = agent_output.action_input {
-                        Ok(AgentEvent::Finish(AgentFinish { output }))
-                    } else {
-                        Err(AgentError::LLMError(LLMError::ContentNotFound(
-                            "Final answer not a string".to_string(),
-                        )))
-                    }
-                } else {
-                    Ok(AgentEvent::Action(vec![AgentAction {
-                        tool: agent_output.action,
-                        tool_input: agent_output.action_input,
-                        log,
-                    }]))
-                }
-            }
-            None => Ok(AgentEvent::Finish(AgentFinish {
-                output: text.to_string(),
-            })),
-        }
-    }
+pub fn parse_agent_output(text: &str) -> Result<AgentEvent, AgentError> {
+    let agent_event = parse_json_markdown(text)
+        .or_else(|| parse_partial_json(text, false))
+        .ok_or(AgentError::InvalidFormatError)?;
+    let agent_event: AgentEvent =
+        serde_json::from_value(agent_event).map_err(|_| AgentError::InvalidFormatError)?;
+    Ok(agent_event)
 }
 
 fn parse_partial_json(s: &str, strict: bool) -> Option<Value> {

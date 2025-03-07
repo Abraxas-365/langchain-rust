@@ -4,27 +4,43 @@ use tokio::sync::mpsc;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AgentAction {
-    pub tool: String,
-    pub tool_input: Value, //this should be ToolInput in the future
-    pub log: String,
-}
-
-///Log tools is a struct used by the openai-like agents
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct LogTools {
-    pub tool_id: String,
-    pub tools: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AgentFinish {
-    pub output: String,
+    pub thought: Option<String>,
+    pub action: String,
+    pub action_input: Value,
 }
 
 #[derive(Debug)]
 pub enum AgentEvent {
     Action(Vec<AgentAction>),
-    Finish(AgentFinish),
+    Finish(String),
+}
+
+impl<'de> Deserialize<'de> for AgentEvent {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let mut value = Value::deserialize(deserializer)?;
+
+        if let (Some(Value::String(thought)), Some(Value::String(action)), Some(action_input)) = (
+            value.get_mut("thought").map(|v| v.take()),
+            value.get_mut("action").map(|v| v.take()),
+            value.get_mut("action_input").map(|v| v.take()),
+        ) {
+            Ok(AgentEvent::Action(vec![AgentAction {
+                thought: Some(thought),
+                action,
+                action_input,
+            }]))
+        } else if let Some(Value::String(final_answer)) =
+            value.get_mut("final_answer").map(|v| v.take())
+        {
+            Ok(AgentEvent::Finish(final_answer))
+        } else {
+            log::error!("Invalid output from LLM:\n{:#?}", value);
+            Err(serde::de::Error::custom("Invalid format")) // TODO: provide clearer error message
+        }
+    }
 }
 
 pub enum AgentPlan {

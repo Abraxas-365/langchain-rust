@@ -6,7 +6,7 @@ use serde_json::json;
 use tokio::sync::Mutex;
 
 use super::{agent::Agent, AgentError};
-use crate::schemas::{LogTools, Message};
+use crate::schemas::Message;
 use crate::{
     chain::{chain_trait::Chain, ChainError},
     language_models::GenerateResult,
@@ -60,7 +60,7 @@ where
     fn get_name_to_tools(&self) -> HashMap<String, Arc<dyn Tool>> {
         let mut name_to_tool = HashMap::new();
         for tool in self.agent.get_tools().iter() {
-            name_to_tool.insert(tool.name().trim().replace(" ", "_"), tool.clone());
+            name_to_tool.insert(tool.name().to_lowercase().replace(" ", ""), tool.clone());
         }
         name_to_tool
     }
@@ -104,18 +104,18 @@ where
                     for action in actions {
                         log::debug!(
                             "Agent used tool {} with input:\n{:#?}",
-                            &action.tool,
-                            &action.tool_input
+                            &action.action,
+                            &action.action_input
                         );
 
                         let tool = name_to_tools
-                            .get(&action.tool.trim().replace(" ", "_"))
+                            .get(&action.action.to_lowercase().replace(" ", ""))
                             .ok_or_else(|| {
-                                AgentError::ToolError(format!("Tool {} not found", action.tool))
+                                AgentError::ToolError(format!("Tool {} not found", action.action))
                             })
                             .map_err(|e| ChainError::AgentError(e.to_string()))?;
 
-                        let observation_result = tool.call(&action.tool_input).await;
+                        let observation_result = tool.call(&action.action_input).await;
 
                         let observation = match observation_result {
                             Ok(result) => result,
@@ -130,12 +130,12 @@ where
                             }
                         };
 
-                        log::debug!("Tool {} result:\n{}", &action.tool, &observation);
+                        log::debug!("Tool {} result:\n{}", &action.action, &observation);
 
                         steps.push((action, observation));
                     }
                 }
-                AgentEvent::Finish(finish) => {
+                AgentEvent::Finish(final_answer) => {
                     if let Some(memory) = &self.memory {
                         let mut memory = memory.lock().await;
 
@@ -145,37 +145,20 @@ where
                             x => x, // this the json encoded value.
                         });
 
-                        let mut tools_ai_message_seen: HashMap<String, ()> = HashMap::default();
                         for (action, observation) in steps {
-                            let LogTools { tool_id, tools } = serde_json::from_str(&action.log)
-                                .unwrap_or(LogTools {
-                                    tool_id: action.tool,
-                                    tools: action.tool_input.to_string(),
-                                });
-
-                            let tools_value: serde_json::Value = serde_json::from_str(&tools)?;
-                            if tools_ai_message_seen.insert(tools.clone(), ()).is_none() {
-                                memory.add_message(
-                                    Message::new_ai_message(
-                                        json! ({
-                                            "action": tool_id,
-                                            "action_input": tools,
-                                        })
-                                        .to_string(),
-                                    )
-                                    .with_tool_calls(tools_value),
-                                );
-                            }
-                            memory.add_message(Message::new_tool_message(observation, tool_id));
+                            // TODO: change message type entirely
+                            memory.add_ai_message(&action.action);
+                            memory
+                                .add_message(Message::new_tool_message(observation, action.action));
                         }
 
-                        memory.add_ai_message(&finish.output);
+                        memory.add_ai_message(&final_answer);
                     }
 
-                    log::debug!("Agent finished with result:\n{}", &finish.output);
+                    log::debug!("Agent finished with result:\n{}", &final_answer);
 
                     return Ok(GenerateResult {
-                        generation: finish.output,
+                        generation: final_answer,
                         ..GenerateResult::default()
                     });
                 }

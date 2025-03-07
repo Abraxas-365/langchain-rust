@@ -1,7 +1,8 @@
 use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
-use serde_json::json;
+use indoc::indoc;
+use serde_json::Value;
 
 use crate::{
     agent::{agent::Agent, AgentError},
@@ -20,15 +21,11 @@ use crate::{
     tools::Tool,
 };
 
-use super::{
-    output_parser::ChatOutputParser,
-    prompt::{SUFFIX, TEMPLATE_TOOL_RESPONSE},
-};
+use super::{parse::parse_agent_output, prompt::SUFFIX};
 
 pub struct ConversationalAgent {
     pub(crate) chain: Box<dyn Chain>,
     pub(crate) tools: Vec<Arc<dyn Tool>>,
-    pub(crate) output_parser: ChatOutputParser,
 }
 
 impl ConversationalAgent {
@@ -70,18 +67,35 @@ impl ConversationalAgent {
         Ok(formatter)
     }
 
-    fn construct_scratchpad(
-        &self,
-        intermediate_steps: &[(AgentAction, String)],
-    ) -> Result<Vec<Message>, AgentError> {
-        let mut thoughts: Vec<Message> = Vec::new();
-        for (action, observation) in intermediate_steps.iter() {
-            thoughts.push(Message::new_ai_message(&action.log));
-            let tool_response = template_jinja2!(TEMPLATE_TOOL_RESPONSE, "observation")
-                .format(prompt_args!("observation"=>observation))?;
-            thoughts.push(Message::new_human_message(&tool_response));
-        }
-        Ok(thoughts)
+    fn construct_scratchpad(&self, intermediate_steps: &[(AgentAction, String)]) -> String {
+        intermediate_steps
+            .iter()
+            .map(|(action, result)| {
+                if let Some(thought) = &action.thought {
+                    format!(
+                        indoc! {"
+                            Thought: {}
+                            Action: {}
+                            Action input: {}
+                            Result:
+                            {}
+                        "},
+                        thought, action.action, action.action_input, result
+                    )
+                } else {
+                    format!(
+                        indoc! {"
+                            Action: {}
+                            Action input: {}
+                            Result:
+                            {}
+                        "},
+                        action.action, action.action_input, result
+                    )
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n")
     }
 }
 
@@ -92,11 +106,11 @@ impl Agent for ConversationalAgent {
         intermediate_steps: &[(AgentAction, String)],
         inputs: PromptArgs,
     ) -> Result<AgentEvent, AgentError> {
-        let scratchpad = self.construct_scratchpad(intermediate_steps)?;
+        let scratchpad = self.construct_scratchpad(intermediate_steps);
         let mut inputs = inputs.clone();
-        inputs.insert("agent_scratchpad".to_string(), json!(scratchpad));
+        inputs.insert("agent_scratchpad".to_string(), Value::String(scratchpad));
         let output = self.chain.call(inputs.clone()).await?.generation;
-        let parsed_output = self.output_parser.parse(&output)?;
+        let parsed_output = parse_agent_output(&output)?;
         Ok(parsed_output)
     }
 
