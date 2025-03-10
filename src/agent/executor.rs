@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::marker::PhantomData;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use indoc::indoc;
@@ -16,7 +16,6 @@ use crate::{
         agent::{AgentAction, AgentEvent},
         memory::BaseMemory,
     },
-    tools::Tool,
 };
 
 pub struct AgentExecutor<A, T>
@@ -60,14 +59,6 @@ where
         self.break_if_error = break_if_error;
         self
     }
-
-    fn get_name_to_tools(&self) -> HashMap<String, Arc<dyn Tool>> {
-        let mut name_to_tool = HashMap::new();
-        for tool in self.agent.get_tools().iter() {
-            name_to_tool.insert(tool.name().to_lowercase().replace(" ", ""), tool.clone());
-        }
-        name_to_tool
-    }
 }
 
 #[async_trait]
@@ -77,7 +68,6 @@ where
     T: PromptArgs,
 {
     async fn call(&self, input_variables: &mut T) -> Result<GenerateResult, ChainError> {
-        let name_to_tools = self.get_name_to_tools();
         let mut steps: Vec<(AgentAction, String)> = Vec::new();
         if let Some(memory) = &self.memory {
             let memory: tokio::sync::MutexGuard<'_, dyn BaseMemory> = memory.lock().await;
@@ -101,8 +91,18 @@ where
                 .plan(&steps, input_variables)
                 .await
                 .map_err(|e| ChainError::AgentError(format!("Error in agent planning: {}", e)))?;
+
             match agent_event {
                 AgentEvent::Action(actions) => {
+                    if let Some(max_iterations) = self.max_iterations {
+                        if steps.len() >= max_iterations as usize {
+                            return Ok(GenerateResult {
+                                generation: "Max iterations reached".to_string(),
+                                ..Default::default()
+                            });
+                        }
+                    }
+
                     for action in actions {
                         log::debug!(
                             indoc! {"
@@ -117,8 +117,9 @@ where
                             &action.action_input
                         );
 
-                        let tool = name_to_tools
-                            .get(&action.action.to_lowercase().replace(" ", ""))
+                        let tool = self
+                            .agent
+                            .get_tool(&action.action.to_lowercase().replace(" ", ""))
                             .ok_or_else(|| {
                                 AgentError::ToolError(format!("Tool {} not found", action.action))
                             })
@@ -168,15 +169,6 @@ where
                     return Ok(GenerateResult {
                         generation: final_answer,
                         ..GenerateResult::default()
-                    });
-                }
-            }
-
-            if let Some(max_iterations) = self.max_iterations {
-                if steps.len() >= max_iterations as usize {
-                    return Ok(GenerateResult {
-                        generation: "Max iterations reached".to_string(),
-                        ..Default::default()
                     });
                 }
             }

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     agent::AgentError,
@@ -12,7 +12,7 @@ use crate::{
 use super::{prompt::PREFIX, OpenAiToolAgent};
 
 pub struct OpenAiToolAgentBuilder {
-    tools: Option<Vec<Arc<dyn Tool>>>,
+    tools: Option<HashMap<String, Arc<dyn Tool>>>,
     prefix: Option<String>,
     options: Option<ChainCallOptions>,
 }
@@ -26,8 +26,8 @@ impl OpenAiToolAgentBuilder {
         }
     }
 
-    pub fn tools(mut self, tools: &[Arc<dyn Tool>]) -> Self {
-        self.tools = Some(tools.to_vec());
+    pub fn tools(mut self, tools: HashMap<String, Arc<dyn Tool>>) -> Self {
+        self.tools = Some(tools);
         self
     }
 
@@ -49,7 +49,7 @@ impl OpenAiToolAgentBuilder {
         let prompt: Box<dyn FormatPrompter<_>> = Box::new(OpenAiToolAgent::create_prompt(&prefix)?);
         let default_options = ChainCallOptions::default().with_max_tokens(1000);
         let functions = tools
-            .iter()
+            .values()
             .map(FunctionDefinition::from_langchain_tool)
             .collect::<Vec<FunctionDefinition>>();
         llm.add_options(CallOptions::new().with_functions(functions));

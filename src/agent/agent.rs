@@ -21,7 +21,7 @@ where
         inputs: &mut T,
     ) -> Result<AgentEvent, AgentError>;
 
-    fn get_tools(&self) -> Vec<Arc<dyn Tool>>;
+    fn get_tool(&self, tool_name: &str) -> Option<Arc<dyn Tool>>;
 
     fn log_messages(&self, inputs: &T) -> Result<(), Box<dyn Error>>;
 }

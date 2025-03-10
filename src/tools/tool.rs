@@ -1,6 +1,7 @@
 use core::fmt;
-use std::error::Error;
+use std::collections::HashMap;
 use std::string::String;
+use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -78,4 +79,11 @@ impl fmt::Display for dyn Tool {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "> {}: {}", self.name(), self.description())
     }
+}
+
+pub fn map_tools(tools: Vec<Arc<dyn Tool>>) -> HashMap<String, Arc<dyn Tool>> {
+    tools
+        .into_iter()
+        .map(|tool| (tool.name().to_lowercase().replace(" ", "_"), tool))
+        .collect()
 }

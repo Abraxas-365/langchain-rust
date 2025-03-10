@@ -1,4 +1,4 @@
-use std::{error::Error, sync::Arc};
+use std::{collections::HashMap, error::Error, sync::Arc};
 
 use async_trait::async_trait;
 use indoc::indoc;
@@ -23,25 +23,21 @@ use super::{parse::parse_agent_output, prompt::SUFFIX};
 
 pub struct ConversationalAgent {
     pub(crate) chain: Box<dyn Chain<PlainPromptArgs>>,
-    pub(crate) tools: Vec<Arc<dyn Tool>>,
+    pub(crate) tools: HashMap<String, Arc<dyn Tool>>,
 }
 
 impl ConversationalAgent {
     pub fn create_prompt(
         system_prompt: &str,
         initial_prompt: &str,
-        tools: &[Arc<dyn Tool>],
+        tools: &HashMap<String, Arc<dyn Tool>>,
     ) -> Result<MessageFormatterStruct<PlainPromptArgs>, AgentError> {
         let tool_string = tools
-            .iter()
-            .map(|tool: &Arc<dyn Tool>| tool.to_string())
+            .values()
+            .map(|tool| tool.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        let tool_names = tools
-            .iter()
-            .map(|tool| tool.name())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let tool_names = tools.keys().cloned().collect::<Vec<_>>().join(", ");
         let input_variables_fstring = plain_prompt_args! {
             "tools" => tool_string,
             "tool_names" => tool_names
@@ -98,8 +94,8 @@ impl Agent<PlainPromptArgs> for ConversationalAgent {
         Ok(parsed_output)
     }
 
-    fn get_tools(&self) -> Vec<Arc<dyn Tool>> {
-        self.tools.clone()
+    fn get_tool(&self, tool_name: &str) -> Option<Arc<dyn Tool>> {
+        self.tools.get(tool_name).cloned()
     }
 
     fn log_messages(&self, inputs: &PlainPromptArgs) -> Result<(), Box<dyn Error>> {
@@ -120,7 +116,7 @@ mod tests {
         llm::openai::{OpenAI, OpenAIModel},
         memory::SimpleMemory,
         plain_prompt_args,
-        tools::Tool,
+        tools::{map_tools, Tool},
     };
 
     struct Calc {}
@@ -145,7 +141,7 @@ mod tests {
         let memory = SimpleMemory::new();
         let tool_calc = Calc {};
         let agent = ConversationalAgentBuilder::new()
-            .tools(&[Arc::new(tool_calc)])
+            .tools(map_tools(vec![Arc::new(tool_calc)]))
             .build(llm)
             .unwrap();
         let mut input_variables = plain_prompt_args! {

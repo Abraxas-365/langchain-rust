@@ -6,7 +6,7 @@ use langchain_rust::{
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     plain_prompt_args,
-    tools::CommandExecutor,
+    tools::{map_tools, CommandExecutor},
 };
 
 #[tokio::main]
@@ -15,7 +15,7 @@ async fn main() {
     let memory = SimpleMemory::new();
     let command_executor = CommandExecutor::default();
     let agent = ConversationalAgentBuilder::new()
-        .tools(&[Arc::new(command_executor)])
+        .tools(map_tools(vec![Arc::new(command_executor)]))
         .options(ChainCallOptions::new().with_max_tokens(1000))
         .build(llm)
         .unwrap();

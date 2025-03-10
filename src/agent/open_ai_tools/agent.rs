@@ -1,5 +1,5 @@
-use std::error::Error;
 use std::sync::Arc;
+use std::{collections::HashMap, error::Error};
 
 use async_trait::async_trait;
 use indoc::indoc;
@@ -29,7 +29,7 @@ pub struct LogTools {
 
 pub struct OpenAiToolAgent {
     pub(crate) chain: Box<dyn Chain<PlainPromptArgs>>,
-    pub(crate) tools: Vec<Arc<dyn Tool>>,
+    pub(crate) tools: HashMap<String, Arc<dyn Tool>>,
 }
 
 impl OpenAiToolAgent {
@@ -107,8 +107,8 @@ impl Agent<PlainPromptArgs> for OpenAiToolAgent {
         }
     }
 
-    fn get_tools(&self) -> Vec<Arc<dyn Tool>> {
-        self.tools.clone()
+    fn get_tool(&self, tool_name: &str) -> Option<Arc<dyn Tool>> {
+        self.tools.get(tool_name).cloned()
     }
 
     fn log_messages(&self, inputs: &PlainPromptArgs) -> Result<(), Box<dyn Error>> {

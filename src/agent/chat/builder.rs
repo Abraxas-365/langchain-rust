@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     agent::AgentError,
@@ -14,7 +14,7 @@ use super::{
 };
 
 pub struct ConversationalAgentBuilder<'a, 'b> {
-    tools: Option<Vec<Arc<dyn Tool>>>,
+    tools: Option<HashMap<String, Arc<dyn Tool>>>,
     system_prompt: Option<&'a str>,
     initial_prompt: Option<&'b str>,
     options: Option<ChainCallOptions>,
@@ -30,8 +30,8 @@ impl<'a, 'b> ConversationalAgentBuilder<'a, 'b> {
         }
     }
 
-    pub fn tools(mut self, tools: &[Arc<dyn Tool>]) -> Self {
-        self.tools = Some(tools.to_vec());
+    pub fn tools(mut self, tools: HashMap<String, Arc<dyn Tool>>) -> Self {
+        self.tools = Some(tools);
         self
     }
 
