@@ -12,7 +12,10 @@ pub(crate) const DEFAULT_OUTPUT_KEY: &str = "output";
 pub(crate) const DEFAULT_RESULT_KEY: &str = "generate_result";
 
 #[async_trait]
-pub trait Chain: Sync + Send {
+pub trait Chain<T>: Sync + Send
+where
+    T: PromptArgs,
+{
     /// Call the `Chain` and receive as output the result of the generation process along with
     /// additional information like token consumption. The input is a set of variables passed
     /// as a `PromptArgs` hashmap.
@@ -42,7 +45,7 @@ pub trait Chain: Sync + Send {
     /// };
     /// # };
     /// ```
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError>;
+    async fn call(&self, input_variables: &mut T) -> Result<GenerateResult, ChainError>;
 
     /// Invoke the `Chain` and receive just the generation result as a String.
     /// The input is a set of variables passed as a `PromptArgs` hashmap.
@@ -72,7 +75,7 @@ pub trait Chain: Sync + Send {
     /// };
     /// # };
     /// ```
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
+    async fn invoke(&self, input_variables: &mut T) -> Result<String, ChainError> {
         self.call(input_variables)
             .await
             .map(|result| result.generation)
@@ -110,11 +113,8 @@ pub trait Chain: Sync + Send {
     /// };
     /// # };
     /// ```
-    async fn execute(
-        &self,
-        input_variables: PromptArgs,
-    ) -> Result<HashMap<String, Value>, ChainError> {
-        let result = self.call(input_variables.clone()).await?;
+    async fn execute(&self, input_variables: &mut T) -> Result<HashMap<String, Value>, ChainError> {
+        let result = self.call(input_variables).await?;
         let mut output = HashMap::new();
         let output_key = self
             .get_output_keys()
@@ -172,7 +172,7 @@ pub trait Chain: Sync + Send {
     ///
     async fn stream(
         &self,
-        _input_variables: PromptArgs,
+        _input_variables: &mut T,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         log::warn!("stream not implemented for this chain");
@@ -191,14 +191,5 @@ pub trait Chain: Sync + Send {
         ]
     }
 
-    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>>;
-}
-
-impl<C> From<C> for Box<dyn Chain>
-where
-    C: Chain + 'static,
-{
-    fn from(chain: C) -> Self {
-        Box::new(chain)
-    }
+    fn log_messages(&self, inputs: &T) -> Result<(), Box<dyn Error>>;
 }

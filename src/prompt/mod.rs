@@ -1,58 +1,50 @@
 mod chat;
 mod error;
+mod plain_prompt_args;
 #[allow(clippy::module_inception)]
 mod prompt;
 
-use std::collections::HashMap;
-
 pub use chat::*;
 pub use error::*;
+pub use plain_prompt_args::*;
 pub use prompt::*;
-use serde_json::Value;
 
 use crate::schemas::{messages::Message, prompt::PromptValue};
 
-// pub type PromptArgs<'a> = HashMap<&'a str, &'a str>;
-pub type PromptArgs = HashMap<String, Value>;
-pub trait PromptFromatter: Send + Sync {
+pub trait PromptArgs: Send + Sync + Clone {
+    fn contains_key(&self, key: &str) -> bool;
+
+    fn get(&self, key: &str) -> Option<&str>;
+
+    fn insert(&mut self, key: String, value: String) -> Option<String>;
+
+    fn iter(&self) -> Box<dyn Iterator<Item = (&String, &String)> + '_>;
+}
+
+pub trait PromptFromatter<T>: Send + Sync
+where
+    T: PromptArgs,
+{
     fn template(&self) -> String;
     fn variables(&self) -> Vec<String>;
-    fn format(&self, input_variables: PromptArgs) -> Result<String, PromptError>;
-}
-impl<PA> From<PA> for Box<dyn PromptFromatter>
-where
-    PA: PromptFromatter + 'static,
-{
-    fn from(prompt: PA) -> Self {
-        Box::new(prompt)
-    }
+    fn format(&self, input_variables: &T) -> Result<String, PromptError>;
 }
 
 /// Represents a generic template for formatting messages.
-pub trait MessageFormatter: Send + Sync {
-    fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, PromptError>;
+pub trait MessageFormatter<T>: Send + Sync
+where
+    T: PromptArgs,
+{
+    fn format_messages(&self, input_variables: &T) -> Result<Vec<Message>, PromptError>;
 
     /// Returns a list of required input variable names for the template.
     fn input_variables(&self) -> Vec<String>;
 }
-impl<MF> From<MF> for Box<dyn MessageFormatter>
-where
-    MF: MessageFormatter + 'static,
-{
-    fn from(prompt: MF) -> Self {
-        Box::new(prompt)
-    }
-}
 
-pub trait FormatPrompter: Send + Sync {
-    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, PromptError>;
-    fn get_input_variables(&self) -> Vec<String>;
-}
-impl<FP> From<FP> for Box<dyn FormatPrompter>
+pub trait FormatPrompter<T>: Send + Sync
 where
-    FP: FormatPrompter + 'static,
+    T: PromptArgs,
 {
-    fn from(prompt: FP) -> Self {
-        Box::new(prompt)
-    }
+    fn format_prompt(&self, input_variables: &T) -> Result<PromptValue, PromptError>;
+    fn get_input_variables(&self) -> Vec<String>;
 }

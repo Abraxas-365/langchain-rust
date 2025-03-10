@@ -6,7 +6,7 @@ use langchain_rust::{
     chain::{options::ChainCallOptions, Chain},
     llm::openai::OpenAI,
     memory::SimpleMemory,
-    prompt_args,
+    plain_prompt_args,
     tools::{CommandExecutor, DuckDuckGoSearchResults, SerpApi, Tool},
 };
 
@@ -47,11 +47,11 @@ async fn main() {
 
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
 
-    let input_variables = prompt_args! {
+    let mut input_variables = plain_prompt_args! {
         "input" => "What the name of the current dir, And what date is today",
     };
 
-    match executor.invoke(input_variables).await {
+    match executor.invoke(&mut input_variables).await {
         Ok(result) => {
             println!("Result: {:?}", result.replace("\n", " "));
         }

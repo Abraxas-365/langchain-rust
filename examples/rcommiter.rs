@@ -1,29 +1,31 @@
 use std::io::{self, BufRead};
 use std::process::{Command, Stdio};
 
+use indoc::indoc;
 use langchain_rust::chain::chain_trait::Chain;
 use langchain_rust::chain::llm_chain::LLMChainBuilder;
 use langchain_rust::llm::openai::OpenAI;
-use langchain_rust::prompt::HumanMessagePromptTemplate;
-use langchain_rust::{prompt_args, template_jinja2};
+use langchain_rust::prompt::{FormatPrompter, HumanMessagePromptTemplate};
+use langchain_rust::{plain_prompt_args, template_jinja2};
 
 //to try this in action , add something to this file stage it an run it
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
+        indoc! {"
+            Create a conventional commit message for the following changes.
+
+            File changes: 
+                {{input}}
+
+
+        "},
+        "input"
+    ));
+
     let llm = OpenAI::default();
     let chain = LLMChainBuilder::new()
-        .prompt(HumanMessagePromptTemplate::new(template_jinja2!(
-            r#"
-    Create a conventional commit message for the following changes.
-
-    File changes: 
-        {{input}}
-
-
-
-    "#,
-            "input"
-        )))
+        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
         .llm(llm)
         .build()
         .expect("Failed to build LLMChain");
@@ -49,8 +51,8 @@ git diff --cached --name-only --diff-filter=ACM | while read -r file; do echo "\
         .join("\n");
 
     let res = chain
-        .invoke(prompt_args! {
-            "input"=>complete_changes,
+        .invoke(&mut plain_prompt_args! {
+            "input" => complete_changes,
         })
         .await
         .expect("Failed to invoke chain");

@@ -8,8 +8,8 @@ use tokio::sync::Mutex;
 
 use crate::{
     language_models::GenerateResult,
-    prompt::PromptArgs,
-    prompt_args,
+    plain_prompt_args,
+    prompt::{PlainPromptArgs, PromptArgs},
     schemas::{memory::BaseMemory, messages::Message, StreamData},
 };
 
@@ -37,8 +37,8 @@ impl ConversationalChainPromptBuilder {
         self
     }
 
-    pub fn build(self) -> PromptArgs {
-        prompt_args! {
+    pub fn build(self) -> PlainPromptArgs {
+        plain_prompt_args! {
             DEFAULT_INPUT_VARIABLE => self.input,
         }
     }
@@ -51,7 +51,7 @@ impl Default for ConversationalChainPromptBuilder {
 }
 
 pub struct ConversationalChain {
-    llm: LLMChain,
+    llm: LLMChain<PlainPromptArgs>,
     input_key: String,
     pub memory: Arc<Mutex<dyn BaseMemory>>,
 }
@@ -64,8 +64,11 @@ impl ConversationalChain {
 }
 
 #[async_trait]
-impl Chain for ConversationalChain {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
+impl Chain<PlainPromptArgs> for ConversationalChain {
+    async fn call(
+        &self,
+        input_variables: &mut PlainPromptArgs,
+    ) -> Result<GenerateResult, ChainError> {
         let input_variable = &input_variables
             .get(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
@@ -75,9 +78,8 @@ impl Chain for ConversationalChain {
             let memory = self.memory.lock().await;
             memory.to_string()
         };
-        let mut input_variables = input_variables;
-        input_variables.insert("history".to_string(), history.into());
-        let result = self.llm.call(input_variables.clone()).await?;
+        input_variables.insert("history".to_string(), history);
+        let result = self.llm.call(input_variables).await?;
 
         let mut memory = self.memory.lock().await;
         memory.add_message(human_message);
@@ -87,7 +89,7 @@ impl Chain for ConversationalChain {
 
     async fn stream(
         &self,
-        input_variables: PromptArgs,
+        input_variables: &mut PlainPromptArgs,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let input_variable = &input_variables
@@ -100,8 +102,7 @@ impl Chain for ConversationalChain {
             memory.to_string()
         };
 
-        let mut input_variables = input_variables;
-        input_variables.insert("history".to_string(), history.into());
+        input_variables.insert("history".to_string(), history);
 
         let complete_ai_message = Arc::new(Mutex::new(String::new()));
         let complete_ai_message_clone = complete_ai_message.clone();
@@ -138,7 +139,7 @@ impl Chain for ConversationalChain {
         vec![self.input_key.clone()]
     }
 
-    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &PlainPromptArgs) -> Result<(), Box<dyn Error>> {
         self.llm.log_messages(inputs)
     }
 }
@@ -148,7 +149,7 @@ mod tests {
     use crate::{
         chain::conversational::builder::ConversationalChainBuilder,
         llm::openai::{OpenAI, OpenAIModel},
-        prompt_args,
+        plain_prompt_args,
     };
 
     use super::*;
@@ -162,11 +163,11 @@ mod tests {
             .build()
             .expect("Error building ConversationalChain");
 
-        let input_variables_first = prompt_args! {
+        let mut input_variables_first = plain_prompt_args! {
             "input" => "Soy de peru",
         };
         // Execute the first `chain.invoke` and assert that it should succeed
-        let result_first = chain.invoke(input_variables_first).await;
+        let result_first = chain.invoke(&mut input_variables_first).await;
         assert!(
             result_first.is_ok(),
             "Error invoking LLMChain: {:?}",
@@ -178,11 +179,11 @@ mod tests {
             println!("Result: {:?}", result);
         }
 
-        let input_variables_second = prompt_args! {
+        let mut input_variables_second = plain_prompt_args! {
             "input" => "Cuales son platos tipicos de mi pais",
         };
         // Execute the second `chain.invoke` and assert that it should succeed
-        let result_second = chain.invoke(input_variables_second).await;
+        let result_second = chain.invoke(&mut input_variables_second).await;
         assert!(
             result_second.is_ok(),
             "Error invoking LLMChain: {:?}",

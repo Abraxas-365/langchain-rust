@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::schemas::{messages::Message, prompt::PromptValue};
 
 use super::{FormatPrompter, PromptArgs, PromptError, PromptFromatter};
@@ -9,25 +11,36 @@ pub enum TemplateFormat {
 }
 
 #[derive(Clone)]
-pub struct PromptTemplate {
+pub struct PromptTemplate<T>
+where
+    T: PromptArgs,
+{
     template: String,
     variables: Vec<String>,
     format: TemplateFormat,
+    phantom: PhantomData<T>,
 }
 
-impl PromptTemplate {
+impl<T> PromptTemplate<T>
+where
+    T: PromptArgs,
+{
     pub fn new(template: String, variables: Vec<String>, format: TemplateFormat) -> Self {
         Self {
             template,
             variables,
             format,
+            phantom: PhantomData,
         }
     }
 }
 
 //PromptTemplate will be default transformed to an Human Input when used as FromatPrompter
-impl FormatPrompter for PromptTemplate {
-    fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, PromptError> {
+impl<T> FormatPrompter<T> for PromptTemplate<T>
+where
+    T: PromptArgs,
+{
+    fn format_prompt(&self, input_variables: &T) -> Result<PromptValue, PromptError> {
         let messages = vec![Message::new_human_message(self.format(input_variables)?)];
         Ok(PromptValue::from_messages(messages))
     }
@@ -36,7 +49,10 @@ impl FormatPrompter for PromptTemplate {
     }
 }
 
-impl PromptFromatter for PromptTemplate {
+impl<T> PromptFromatter<T> for PromptTemplate<T>
+where
+    T: PromptArgs,
+{
     fn template(&self) -> String {
         self.template.clone()
     }
@@ -45,7 +61,7 @@ impl PromptFromatter for PromptTemplate {
         self.variables.clone()
     }
 
-    fn format(&self, input_variables: PromptArgs) -> Result<String, PromptError> {
+    fn format(&self, input_variables: &T) -> Result<String, PromptError> {
         let mut prompt = self.template();
 
         // check if all variables are in the input variables
@@ -55,16 +71,12 @@ impl PromptFromatter for PromptTemplate {
             }
         }
 
-        for (key, value) in input_variables {
+        for (key, value) in input_variables.iter() {
             let key = match self.format {
                 TemplateFormat::FString => format!("{{{}}}", key),
                 TemplateFormat::Jinja2 => format!("{{{{{}}}}}", key),
             };
-            let value_str = match &value {
-                serde_json::Value::String(s) => s.clone(),
-                _ => value.to_string(),
-            };
-            prompt = prompt.replace(&key, &value_str);
+            prompt = prompt.replace(&key, value);
         }
 
         Ok(prompt)
@@ -95,15 +107,21 @@ impl PromptFromatter for PromptTemplate {
 #[macro_export]
 macro_rules! prompt_args {
     ( $($key:expr => $value:expr),* $(,)? ) => {
-        {
-            #[allow(unused_mut)]
-            let mut args = std::collections::HashMap::<String, serde_json::Value>::new();
-            $(
-                // Convert the value to serde_json::Value before inserting
-                args.insert($key.to_string(), serde_json::json!($value));
-            )*
-            args
-        }
+        std::collections::HashMap::<String, String>::from([$(
+            ($key.to_string(), $value.to_string()),
+        )*])
+    };
+}
+
+#[macro_export]
+macro_rules! plain_prompt_args {
+    ( $($key:expr => $value:expr),* $(,)? ) => {
+        $crate::prompt::PlainPromptArgs::new(
+            std::collections::HashMap::<String, String>::from([$(
+                ($key.to_string(), $value.to_string()),
+            )*]),
+            vec![]
+        )
     };
 }
 
@@ -154,7 +172,7 @@ macro_rules! template_jinja2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prompt_args;
+    use crate::{prompt::PlainPromptArgs, prompt_args};
 
     #[test]
     fn should_format_jinja2_template() {
@@ -164,14 +182,14 @@ mod tests {
             TemplateFormat::Jinja2,
         );
 
-        let input_variables = prompt_args! {};
-        let result = template.format(input_variables);
+        let input_variables = plain_prompt_args! {};
+        let result = template.format(&input_variables);
         assert!(result.is_err());
 
-        let input_variables = prompt_args! {
+        let input_variables = plain_prompt_args! {
             "name" => "world",
         };
-        let result = template.format(input_variables);
+        let result = template.format(&input_variables);
         println!("{:?}", result);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello world!");
@@ -185,14 +203,14 @@ mod tests {
             TemplateFormat::FString,
         );
 
-        let input_variables = prompt_args! {};
-        let result = template.format(input_variables);
+        let input_variables = plain_prompt_args! {};
+        let result = template.format(&input_variables);
         assert!(result.is_err());
 
-        let input_variables = prompt_args! {
+        let input_variables = plain_prompt_args! {
             "name" => "world",
         };
-        let result = template.format(input_variables);
+        let result = template.format(&input_variables);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello world!");
     }
@@ -232,26 +250,32 @@ mod tests {
             template_jinja2!("Jinja2 Chat: {{user}} says {{message}}", "user", "message");
 
         // Define input variables for the templates
-        let input_variables_fstring = prompt_args! {
-            "user" => "Alice",
-            "message" => "Hello, Bob!",
-            "test"=>"test2"
-        };
+        let input_variables_fstring = PlainPromptArgs::new(
+            prompt_args! {
+                "user" => "Alice",
+                "message" => "Hello, Bob!",
+                "test"=>"test2"
+            },
+            vec![],
+        );
 
-        let input_variables_jinja2 = prompt_args! {
-            "user" => "Bob",
-            "message" => "Hi, Alice!",
-        };
+        let input_variables_jinja2 = PlainPromptArgs::new(
+            prompt_args! {
+                "user" => "Bob",
+                "message" => "Hi, Alice!",
+            },
+            vec![],
+        );
 
         // Format the FString chat template
-        let formatted_fstring = fstring_template.format(input_variables_fstring).unwrap();
+        let formatted_fstring = fstring_template.format(&input_variables_fstring).unwrap();
         assert_eq!(
             formatted_fstring,
             "FString Chat: Alice says Hello, Bob! test2"
         );
 
         // Format the Jinja2 chat template
-        let formatted_jinja2 = jinja2_template.format(input_variables_jinja2).unwrap();
+        let formatted_jinja2 = jinja2_template.format(&input_variables_jinja2).unwrap();
         assert_eq!(formatted_jinja2, "Jinja2 Chat: Bob says Hi, Alice!");
     }
 }

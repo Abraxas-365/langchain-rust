@@ -13,15 +13,21 @@ use crate::{
 };
 
 //THIS IS EXPERIMENTAL
-pub struct SequentialChain {
-    pub(crate) chains: Vec<Box<dyn Chain>>,
+pub struct SequentialChain<T>
+where
+    T: PromptArgs,
+{
+    pub(crate) chains: Vec<Box<dyn Chain<T>>>,
     pub(crate) input_keys: HashSet<String>,
     pub(crate) outputs: HashSet<String>,
 }
 
 #[async_trait]
-impl Chain for SequentialChain {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
+impl<T> Chain<T> for SequentialChain<T>
+where
+    T: PromptArgs,
+{
+    async fn call(&self, input_variables: &mut T) -> Result<GenerateResult, ChainError> {
         let output = self.execute(input_variables).await?;
         let result = output
             .get(DEFAULT_RESULT_KEY)
@@ -30,8 +36,8 @@ impl Chain for SequentialChain {
         let result: GenerateResult = serde_json::from_value(result)?;
         Ok(result)
     }
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
-        self.call(input_variables.clone())
+    async fn invoke(&self, input_variables: &mut T) -> Result<String, ChainError> {
+        self.call(input_variables)
             .await
             .map(|result| result.generation)
     }
@@ -39,16 +45,12 @@ impl Chain for SequentialChain {
         self.outputs.iter().cloned().collect()
     }
 
-    async fn execute(
-        &self,
-        input_variables: PromptArgs,
-    ) -> Result<HashMap<String, Value>, ChainError> {
-        let mut input_variables = input_variables;
+    async fn execute(&self, input_variables: &mut T) -> Result<HashMap<String, Value>, ChainError> {
         let mut final_token_usage: Option<TokenUsage> = None;
         let mut output_result = HashMap::new();
         let mut final_result = GenerateResult::default();
         for chain in self.chains.iter() {
-            let output = chain.execute(input_variables.clone()).await?;
+            let output = chain.execute(input_variables).await?;
             //Get the oput key for the chain result
             let output_key = chain
                 .get_output_keys()
@@ -63,7 +65,7 @@ impl Chain for SequentialChain {
             let result: GenerateResult = serde_json::from_value(result)?;
             //Insert the output chain to the final output
             output_result.insert(output_key.clone(), json!(result.generation.clone()));
-            input_variables.insert(output_key, json!(result.generation.clone()));
+            input_variables.insert(output_key, result.generation.clone());
 
             //add the generation to keep track of the final generation
             final_result.generation = result.generation;
@@ -86,9 +88,9 @@ impl Chain for SequentialChain {
         Ok(output_result)
     }
 
-    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &T) -> Result<(), Box<dyn Error>> {
         for chain in &self.chains {
-            chain.log_messages(inputs.clone())?;
+            chain.log_messages(inputs)?;
         }
         Ok(())
     }
@@ -99,7 +101,9 @@ mod tests {
     use crate::{
         chain::{Chain, LLMChainBuilder},
         llm::openai::OpenAI,
-        prompt_args, sequential_chain, template_fstring,
+        plain_prompt_args,
+        prompt::FormatPrompter,
+        sequential_chain, template_fstring,
     };
 
     #[tokio::test]
@@ -107,21 +111,21 @@ mod tests {
     async fn test_sequential() {
         let llm = OpenAI::default();
         let chain1 = LLMChainBuilder::new()
-            .prompt(template_fstring!(
+            .prompt(Box::new(template_fstring!(
                 "dame un nombre para una tienda de {input}",
                 "input"
-            ))
+            )) as Box<dyn FormatPrompter<_>>)
             .llm(llm.clone())
             .output_key("nombre")
             .build()
             .expect("Failed to build LLMChain");
 
         let chain2 = LLMChainBuilder::new()
-            .prompt(template_fstring!(
+            .prompt(Box::new(template_fstring!(
                 "dame un slogan para una tienda llamada {nombre},tiene que incluir la palabra {palabra}",
                 "nombre",
             "palabra"
-            ))
+            )) as Box<dyn FormatPrompter<_>>)
             .llm(llm.clone())
             .output_key("slogan")
             .build()
@@ -129,7 +133,10 @@ mod tests {
 
         let chain = sequential_chain!(chain1, chain2);
         let result = chain
-            .execute(prompt_args! {"input"=>"medias","palabra"=>"arroz"})
+            .execute(&mut plain_prompt_args! {
+                "input" => "medias",
+                "palabra" => "arroz"
+            })
             .await;
         assert!(
             result.is_ok(),

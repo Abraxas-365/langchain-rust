@@ -1,9 +1,11 @@
 use base64::prelude::*;
 use langchain_rust::chain::{Chain, LLMChainBuilder};
 use langchain_rust::llm::OpenAI;
-use langchain_rust::prompt::HumanMessagePromptTemplate;
+use langchain_rust::prompt::{FormatPrompter, HumanMessagePromptTemplate};
 use langchain_rust::schemas::Message;
-use langchain_rust::{fmt_message, fmt_template, message_formatter, prompt_args, template_fstring};
+use langchain_rust::{
+    fmt_message, fmt_template, message_formatter, plain_prompt_args, template_fstring,
+};
 
 #[tokio::main]
 async fn main() {
@@ -24,13 +26,13 @@ async fn main() {
     //     .with_model("llava");
     let open_ai = OpenAI::default();
     let chain = LLMChainBuilder::new()
-        .prompt(prompt)
+        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
         .llm(open_ai)
         .build()
         .unwrap();
 
     match chain
-        .invoke(prompt_args! { "input" => "Describe this image"})
+        .invoke(&mut plain_prompt_args! { "input" => "Describe this image"})
         .await
     {
         Ok(result) => {

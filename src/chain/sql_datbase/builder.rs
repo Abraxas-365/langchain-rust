@@ -4,7 +4,7 @@ use crate::{
     },
     language_models::llm::LLM,
     output_parsers::OutputParser,
-    prompt::HumanMessagePromptTemplate,
+    prompt::{FormatPrompter, HumanMessagePromptTemplate, PlainPromptArgs},
     template_jinja2,
     tools::SQLDatabase,
 };
@@ -77,13 +77,14 @@ impl SQLDatabaseChainBuilder {
             .database
             .ok_or_else(|| ChainError::MissingObject("Database must be set".into()))?;
 
-        let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
-            format!("{}{}", DEFAULT_SQLTEMPLATE, DEFAULT_SQLSUFFIX),
-            "dialect",
-            "table_info",
-            "top_k",
-            "input"
-        ));
+        let prompt: Box<dyn FormatPrompter<PlainPromptArgs>> =
+            Box::new(HumanMessagePromptTemplate::new(template_jinja2!(
+                format!("{}{}", DEFAULT_SQLTEMPLATE, DEFAULT_SQLSUFFIX),
+                "dialect",
+                "table_info",
+                "top_k",
+                "input"
+            )));
 
         let llm_chain = {
             let mut builder = LLMChainBuilder::new()

@@ -66,7 +66,7 @@ impl<S: AsRef<str>> From<S> for ImageContent {
 /// let system_message = Message::new_system_message("System Alert");
 /// let ai_message = Message::new_ai_message("AI Response");
 /// ```
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Message {
     pub content: String,
     pub message_type: MessageType,
@@ -158,7 +158,16 @@ impl Message {
 }
 
 impl fmt::Display for Message {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}: {}", self.message_type, self.content)
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        todo!()
+    }
+}
+
+impl<'de> Deserialize<'de> for Message {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        todo!()
     }
 }

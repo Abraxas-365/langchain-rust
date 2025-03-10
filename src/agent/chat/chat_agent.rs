@@ -2,17 +2,15 @@ use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 use indoc::indoc;
-use serde_json::Value;
 
 use crate::{
     agent::{agent::Agent, AgentError},
     chain::chain_trait::Chain,
-    message_formatter,
+    message_formatter, plain_prompt_args,
     prompt::{
-        HumanMessagePromptTemplate, MessageFormatterStruct, MessageOrTemplate, PromptArgs,
-        PromptFromatter,
+        HumanMessagePromptTemplate, MessageFormatterStruct, MessageOrTemplate, PlainPromptArgs,
+        PromptArgs, PromptFromatter,
     },
-    prompt_args,
     schemas::{
         agent::{AgentAction, AgentEvent},
         messages::Message,
@@ -24,7 +22,7 @@ use crate::{
 use super::{parse::parse_agent_output, prompt::SUFFIX};
 
 pub struct ConversationalAgent {
-    pub(crate) chain: Box<dyn Chain>,
+    pub(crate) chain: Box<dyn Chain<PlainPromptArgs>>,
     pub(crate) tools: Vec<Arc<dyn Tool>>,
 }
 
@@ -33,7 +31,7 @@ impl ConversationalAgent {
         system_prompt: &str,
         initial_prompt: &str,
         tools: &[Arc<dyn Tool>],
-    ) -> Result<MessageFormatterStruct, AgentError> {
+    ) -> Result<MessageFormatterStruct<PlainPromptArgs>, AgentError> {
         let tool_string = tools
             .iter()
             .map(|tool: &Arc<dyn Tool>| tool.to_string())
@@ -44,7 +42,7 @@ impl ConversationalAgent {
             .map(|tool| tool.name())
             .collect::<Vec<_>>()
             .join(", ");
-        let input_variables_fstring = prompt_args! {
+        let input_variables_fstring = plain_prompt_args! {
             "tools" => tool_string,
             "tool_names" => tool_names
         };
@@ -54,14 +52,14 @@ impl ConversationalAgent {
             "tools",
             "tool_names"
         )
-        .format(input_variables_fstring)?;
+        .format(&input_variables_fstring)?;
 
         let formatter = message_formatter![
             MessageOrTemplate::Message(Message::new_system_message(system_prompt)),
             MessageOrTemplate::MessagesPlaceholder("chat_history".to_string()),
-            MessageOrTemplate::Template(
-                HumanMessagePromptTemplate::new(template_jinja2!(initial_prompt, "input")).into()
-            ),
+            MessageOrTemplate::Template(Box::new(HumanMessagePromptTemplate::new(
+                template_jinja2!(initial_prompt, "input")
+            ))),
             MessageOrTemplate::MessagesPlaceholder("agent_scratchpad".to_string()),
         ];
         Ok(formatter)
@@ -100,16 +98,15 @@ impl ConversationalAgent {
 }
 
 #[async_trait]
-impl Agent for ConversationalAgent {
+impl Agent<PlainPromptArgs> for ConversationalAgent {
     async fn plan(
         &self,
         intermediate_steps: &[(AgentAction, String)],
-        inputs: PromptArgs,
+        inputs: &mut PlainPromptArgs,
     ) -> Result<AgentEvent, AgentError> {
         let scratchpad = self.construct_scratchpad(intermediate_steps);
-        let mut inputs = inputs.clone();
-        inputs.insert("agent_scratchpad".to_string(), Value::String(scratchpad));
-        let output = self.chain.call(inputs.clone()).await?.generation;
+        inputs.insert("agent_scratchpad".to_string(), scratchpad);
+        let output = self.chain.call(inputs).await?.generation;
         let parsed_output = parse_agent_output(&output)?;
         Ok(parsed_output)
     }
@@ -118,7 +115,7 @@ impl Agent for ConversationalAgent {
         self.tools.clone()
     }
 
-    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &PlainPromptArgs) -> Result<(), Box<dyn Error>> {
         self.chain.log_messages(inputs)
     }
 }
@@ -135,7 +132,7 @@ mod tests {
         chain::chain_trait::Chain,
         llm::openai::{OpenAI, OpenAIModel},
         memory::SimpleMemory,
-        prompt_args,
+        plain_prompt_args,
         tools::Tool,
     };
 
@@ -164,20 +161,20 @@ mod tests {
             .tools(&[Arc::new(tool_calc)])
             .build(llm)
             .unwrap();
-        let input_variables = prompt_args! {
+        let mut input_variables = plain_prompt_args! {
             "input" => "hola,Me llamo luis, y tengo 10 anos, y estudio Computer scinence",
         };
         let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
-        match executor.invoke(input_variables).await {
+        match executor.invoke(&mut input_variables).await {
             Ok(result) => {
                 println!("Result: {:?}", result);
             }
             Err(e) => panic!("Error invoking LLMChain: {:?}", e),
         }
-        let input_variables = prompt_args! {
+        let mut input_variables = plain_prompt_args! {
             "input" => "cuanta es la edad de luis +10 y que estudia",
         };
-        match executor.invoke(input_variables).await {
+        match executor.invoke(&mut input_variables).await {
             Ok(result) => {
                 println!("Result: {:?}", result);
             }

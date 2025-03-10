@@ -9,7 +9,7 @@ use crate::{
     language_models::llm::LLM,
     memory::SimpleMemory,
     output_parsers::OutputParser,
-    prompt::{FormatPrompter, HumanMessagePromptTemplate},
+    prompt::{FormatPrompter, HumanMessagePromptTemplate, PlainPromptArgs},
     schemas::memory::BaseMemory,
     template_fstring,
 };
@@ -23,7 +23,7 @@ pub struct ConversationalChainBuilder {
     output_key: Option<String>,
     output_parser: Option<Box<dyn OutputParser>>,
     input_key: Option<String>,
-    prompt: Option<Box<dyn FormatPrompter>>,
+    prompt: Option<Box<dyn FormatPrompter<PlainPromptArgs>>>,
 }
 
 impl ConversationalChainBuilder {
@@ -70,7 +70,7 @@ impl ConversationalChainBuilder {
     }
 
     ///If you want to add a custom prompt,keep in mind which variables are obligatory.
-    pub fn prompt<P: Into<Box<dyn FormatPrompter>>>(mut self, prompt: P) -> Self {
+    pub fn prompt<P: Into<Box<dyn FormatPrompter<PlainPromptArgs>>>>(mut self, prompt: P) -> Self {
         self.prompt = Some(prompt.into());
         self
     }

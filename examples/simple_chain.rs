@@ -1,8 +1,9 @@
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
     llm::openai::{OpenAI, OpenAIModel},
-    prompt::HumanMessagePromptTemplate,
-    prompt_args, template_jinja2,
+    plain_prompt_args,
+    prompt::{FormatPrompter, HumanMessagePromptTemplate},
+    template_jinja2,
 };
 use std::io::{self, Write}; // Include io Library for terminal input
 
@@ -15,7 +16,7 @@ async fn main() {
 
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
     let chain = LLMChainBuilder::new()
-        .prompt(prompt)
+        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
         .llm(llm)
         .build()
         .unwrap();
@@ -29,7 +30,7 @@ async fn main() {
     let product = product.trim();
 
     let output = chain
-        .invoke(prompt_args!["producto" => product]) // Use product input here
+        .invoke(&mut plain_prompt_args! { "producto" => product }) // Use product input here
         .await
         .unwrap();
 

@@ -1,8 +1,9 @@
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
     llm::openai::{OpenAI, OpenAIModel},
-    prompt::HumanMessagePromptTemplate,
-    prompt_args, sequential_chain, template_jinja2,
+    plain_prompt_args,
+    prompt::{FormatPrompter, HumanMessagePromptTemplate},
+    sequential_chain, template_jinja2,
 };
 use std::io::{self, Write}; // Include io Library for terminal input
 
@@ -15,7 +16,7 @@ async fn main() {
     ));
 
     let get_name_chain = LLMChainBuilder::new()
-        .prompt(prompt)
+        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
         .llm(llm.clone())
         .output_key("name")
         .build()
@@ -26,7 +27,7 @@ async fn main() {
         "name"
     ));
     let get_slogan_chain = LLMChainBuilder::new()
-        .prompt(prompt)
+        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
         .llm(llm.clone())
         .output_key("slogan")
         .build()
@@ -42,7 +43,7 @@ async fn main() {
 
     let product = product.trim();
     let output = sequential_chain
-        .execute(prompt_args! {
+        .execute(&mut plain_prompt_args! {
             "producto" => product
         })
         .await

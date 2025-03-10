@@ -40,13 +40,23 @@ impl BaseMemory for WindowBufferMemory {
     fn messages(&self) -> Vec<Message> {
         self.messages.clone()
     }
+
     fn add_message(&mut self, message: Message) {
         if self.messages.len() >= self.window_size {
             self.messages.remove(0);
         }
         self.messages.push(message);
     }
+
     fn clear(&mut self) {
         self.messages.clear();
+    }
+
+    fn to_string(&self) -> String {
+        self.messages()
+            .iter()
+            .map(|msg| msg.to_string())
+            .collect::<Vec<String>>()
+            .join("\n")
     }
 }

@@ -3,12 +3,9 @@ use std::io::{stdout, Write};
 use futures_util::StreamExt;
 use langchain_rust::{
     chain::{builder::ConversationalChainBuilder, Chain},
-    // fmt_message, fmt_template,
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
-    // message_formatter,
-    // prompt::HumanMessagePromptTemplate,
-    prompt_args,
+    plain_prompt_args,
     // schemas::Message,
     // template_fstring,
 };
@@ -41,11 +38,11 @@ async fn main() {
         .build()
         .expect("Error building ConversationalChain");
 
-    let input_variables = prompt_args! {
+    let mut input_variables = plain_prompt_args! {
         "input" => "Im from Peru",
     };
 
-    let mut stream = chain.stream(input_variables).await.unwrap();
+    let mut stream = chain.stream(&mut input_variables).await.unwrap();
     while let Some(result) = stream.next().await {
         match result {
             Ok(data) => {
@@ -59,10 +56,10 @@ async fn main() {
         }
     }
 
-    let input_variables = prompt_args! {
+    let mut input_variables = plain_prompt_args! {
         "input" => "Which are the typical dish",
     };
-    match chain.invoke(input_variables).await {
+    match chain.invoke(&mut input_variables).await {
         Ok(result) => {
             println!("\n");
             println!("Result: {:?}", result);

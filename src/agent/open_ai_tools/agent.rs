@@ -4,13 +4,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use indoc::indoc;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::{
     agent::{Agent, AgentError},
     chain::Chain,
     fmt_message, fmt_placeholder, fmt_template, message_formatter,
-    prompt::{HumanMessagePromptTemplate, MessageFormatterStruct, PromptArgs},
+    prompt::{HumanMessagePromptTemplate, MessageFormatterStruct, PlainPromptArgs, PromptArgs},
     schemas::{
         agent::{AgentAction, AgentEvent},
         messages::Message,
@@ -28,12 +28,14 @@ pub struct LogTools {
 }
 
 pub struct OpenAiToolAgent {
-    pub(crate) chain: Box<dyn Chain>,
+    pub(crate) chain: Box<dyn Chain<PlainPromptArgs>>,
     pub(crate) tools: Vec<Arc<dyn Tool>>,
 }
 
 impl OpenAiToolAgent {
-    pub fn create_prompt(prefix: &str) -> Result<MessageFormatterStruct, AgentError> {
+    pub fn create_prompt(
+        prefix: &str,
+    ) -> Result<MessageFormatterStruct<PlainPromptArgs>, AgentError> {
         let prompt = message_formatter![
             fmt_message!(Message::new_system_message(prefix)),
             fmt_placeholder!("chat_history"),
@@ -80,15 +82,14 @@ impl OpenAiToolAgent {
 }
 
 #[async_trait]
-impl Agent for OpenAiToolAgent {
+impl Agent<PlainPromptArgs> for OpenAiToolAgent {
     async fn plan(
         &self,
         intermediate_steps: &[(AgentAction, String)],
-        inputs: PromptArgs,
+        inputs: &mut PlainPromptArgs,
     ) -> Result<AgentEvent, AgentError> {
-        let mut inputs = inputs.clone();
         let scratchpad = self.construct_scratchpad(intermediate_steps);
-        inputs.insert("agent_scratchpad".to_string(), json!(scratchpad));
+        inputs.insert("agent_scratchpad".to_string(), scratchpad);
         let output = self.chain.call(inputs).await?.generation;
         match serde_json::from_str::<Vec<FunctionCallResponse>>(&output) {
             Ok(tools) => {
@@ -110,7 +111,7 @@ impl Agent for OpenAiToolAgent {
         self.tools.clone()
     }
 
-    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &PlainPromptArgs) -> Result<(), Box<dyn Error>> {
         self.chain.log_messages(inputs)
     }
 }

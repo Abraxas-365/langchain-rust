@@ -1,8 +1,8 @@
 use std::error::Error;
+use std::marker::PhantomData;
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use serde_json::json;
 use tokio::sync::Mutex;
 
 use super::{agent::Agent, AgentError};
@@ -10,7 +10,6 @@ use crate::schemas::Message;
 use crate::{
     chain::{chain_trait::Chain, ChainError},
     language_models::GenerateResult,
-    memory::SimpleMemory,
     prompt::PromptArgs,
     schemas::{
         agent::{AgentAction, AgentEvent},
@@ -19,19 +18,22 @@ use crate::{
     tools::Tool,
 };
 
-pub struct AgentExecutor<A>
+pub struct AgentExecutor<A, T>
 where
-    A: Agent,
+    A: Agent<T>,
+    T: PromptArgs,
 {
     agent: A,
     max_iterations: Option<i32>,
     break_if_error: bool,
     pub memory: Option<Arc<Mutex<dyn BaseMemory>>>,
+    phantom: PhantomData<T>,
 }
 
-impl<A> AgentExecutor<A>
+impl<A, T> AgentExecutor<A, T>
 where
-    A: Agent,
+    A: Agent<T>,
+    T: PromptArgs,
 {
     pub fn from_agent(agent: A) -> Self {
         Self {
@@ -39,6 +41,7 @@ where
             max_iterations: Some(10),
             break_if_error: false,
             memory: None,
+            phantom: PhantomData,
         }
     }
 
@@ -67,28 +70,26 @@ where
 }
 
 #[async_trait]
-impl<A> Chain for AgentExecutor<A>
+impl<A, T> Chain<T> for AgentExecutor<A, T>
 where
-    A: Agent + Send + Sync,
+    A: Agent<T> + Send + Sync,
+    T: PromptArgs,
 {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
-        let mut input_variables = input_variables.clone();
+    async fn call(&self, input_variables: &mut T) -> Result<GenerateResult, ChainError> {
         let name_to_tools = self.get_name_to_tools();
         let mut steps: Vec<(AgentAction, String)> = Vec::new();
         if let Some(memory) = &self.memory {
-            let memory = memory.lock().await;
-            input_variables.insert("chat_history".to_string(), json!(memory.messages()));
+            let memory: tokio::sync::MutexGuard<'_, dyn BaseMemory> = memory.lock().await;
+            input_variables.insert("chat_history".to_string(), memory.to_string());
+        // TODO: Possibly implement messages parsing
         } else {
-            input_variables.insert(
-                "chat_history".to_string(),
-                json!(SimpleMemory::new().messages()),
-            );
+            input_variables.insert("chat_history".to_string(), "".to_string());
         }
 
         {
             let mut input_variables_demo = input_variables.clone();
-            input_variables_demo.insert("agent_scratchpad".to_string(), json!([]));
-            self.log_messages(input_variables_demo).map_err(|e| {
+            input_variables_demo.insert("agent_scratchpad".to_string(), "".to_string());
+            self.log_messages(&input_variables_demo).map_err(|e| {
                 ChainError::AgentError(format!("Error formatting initial messages: {e}"))
             })?;
         }
@@ -96,7 +97,7 @@ where
         loop {
             let agent_event = self
                 .agent
-                .plan(&steps, input_variables.clone())
+                .plan(&steps, input_variables)
                 .await
                 .map_err(|e| ChainError::AgentError(format!("Error in agent planning: {}", e)))?;
             match agent_event {
@@ -139,10 +140,9 @@ where
                     if let Some(memory) = &self.memory {
                         let mut memory = memory.lock().await;
 
-                        memory.add_user_message(match &input_variables["input"] {
-                            // This avoids adding extra quotes to the user input in the history.
-                            serde_json::Value::String(s) => s,
-                            x => x, // this the json encoded value.
+                        memory.add_user_message(match &input_variables.get("input") {
+                            Some(input) => input,
+                            None => &"",
                         });
 
                         for (action, observation) in steps {
@@ -175,12 +175,12 @@ where
         }
     }
 
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
+    async fn invoke(&self, input_variables: &mut T) -> Result<String, ChainError> {
         let result = self.call(input_variables).await?;
         Ok(result.generation)
     }
 
-    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &T) -> Result<(), Box<dyn Error>> {
         self.agent.log_messages(inputs)
     }
 }

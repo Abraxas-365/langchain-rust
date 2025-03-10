@@ -19,13 +19,7 @@ pub trait BaseMemory: Send + Sync {
 
     fn clear(&mut self);
 
-    fn to_string(&self) -> String {
-        self.messages()
-            .iter()
-            .map(|msg| format!("{}: {}", msg.message_type, msg.content))
-            .collect::<Vec<String>>()
-            .join("\n")
-    }
+    fn to_string(&self) -> String;
 }
 
 impl<M> From<M> for Box<dyn BaseMemory>

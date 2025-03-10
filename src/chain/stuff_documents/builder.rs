@@ -1,3 +1,5 @@
+use indoc::indoc;
+
 use crate::{
     chain::{options::ChainCallOptions, ChainError, LLMChainBuilder},
     language_models::llm::LLM,
@@ -6,15 +8,16 @@ use crate::{
     template_jinja2,
 };
 
-use super::StuffDocument;
+use super::{StuffDocument, StuffQA};
 
 pub struct StuffDocumentBuilder {
     llm: Option<Box<dyn LLM>>,
     options: Option<ChainCallOptions>,
     output_key: Option<String>,
     output_parser: Option<Box<dyn OutputParser>>,
-    prompt: Option<Box<dyn FormatPrompter>>,
+    prompt: Option<Box<dyn FormatPrompter<StuffQA>>>,
 }
+
 impl StuffDocumentBuilder {
     pub fn new() -> Self {
         Self {
@@ -42,7 +45,7 @@ impl StuffDocumentBuilder {
     }
 
     ///If you want to add a custom prompt,keep in mind which variables are obligatory.
-    pub fn prompt<P: Into<Box<dyn FormatPrompter>>>(mut self, prompt: P) -> Self {
+    pub fn prompt<P: Into<Box<dyn FormatPrompter<StuffQA>>>>(mut self, prompt: P) -> Self {
         self.prompt = Some(prompt.into());
         self
     }
@@ -82,10 +85,11 @@ impl Default for StuffDocumentBuilder {
     }
 }
 
-const DEFAULT_STUFF_QA_TEMPLATE: &str = r#"Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+const DEFAULT_STUFF_QA_TEMPLATE: &str = indoc! {"
+    Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
 
-{{context}}
+    {{context}}
 
-Question:{{question}}
-Helpful Answer:
-"#;
+    Question:{{question}}
+    Helpful Answer:
+"};

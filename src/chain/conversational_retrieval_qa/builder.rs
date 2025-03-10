@@ -3,7 +3,8 @@ use tokio::sync::Mutex;
 
 use crate::{
     chain::{
-        Chain, ChainError, CondenseQuestionGeneratorChain, StuffDocumentBuilder, DEFAULT_OUTPUT_KEY,
+        Chain, ChainError, CondenseQuestionGeneratorChain, StuffDocumentBuilder, StuffQA,
+        DEFAULT_OUTPUT_KEY,
     },
     language_models::llm::LLM,
     memory::SimpleMemory,
@@ -48,9 +49,9 @@ pub struct ConversationalRetrieverChainBuilder {
     llm: Option<Box<dyn LLM>>,
     retriever: Option<Box<dyn Retriever>>,
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
-    combine_documents_chain: Option<Box<dyn Chain>>,
-    condense_question_chain: Option<Box<dyn Chain>>,
-    prompt: Option<Box<dyn FormatPrompter>>,
+    combine_documents_chain: Option<Box<dyn Chain<StuffQA>>>,
+    condense_question_chain: Option<Box<dyn Chain<StuffQA>>>,
+    prompt: Option<Box<dyn FormatPrompter<StuffQA>>>,
     rephrase_question: bool,
     return_source_documents: bool,
     input_key: String,
@@ -78,7 +79,7 @@ impl ConversationalRetrieverChainBuilder {
     }
 
     ///If you want to add a custom prompt,keep in mind which variables are obligatory.
-    pub fn prompt<P: Into<Box<dyn FormatPrompter>>>(mut self, prompt: P) -> Self {
+    pub fn prompt<P: Into<Box<dyn FormatPrompter<StuffQA>>>>(mut self, prompt: P) -> Self {
         self.prompt = Some(prompt.into());
         self
     }
@@ -99,7 +100,7 @@ impl ConversationalRetrieverChainBuilder {
     }
 
     ///Chain designed to take the documents and the question and generate an output
-    pub fn combine_documents_chain<C: Into<Box<dyn Chain>>>(
+    pub fn combine_documents_chain<C: Into<Box<dyn Chain<StuffQA>>>>(
         mut self,
         combine_documents_chain: C,
     ) -> Self {
@@ -108,7 +109,7 @@ impl ConversationalRetrieverChainBuilder {
     }
 
     ///Chain designed to reformulate the question based on the cat history
-    pub fn condense_question_chain<C: Into<Box<dyn Chain>>>(
+    pub fn condense_question_chain<C: Into<Box<dyn Chain<StuffQA>>>>(
         mut self,
         condense_question_chain: C,
     ) -> Self {

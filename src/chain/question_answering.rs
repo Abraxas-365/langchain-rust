@@ -5,14 +5,14 @@ use futures::Stream;
 
 use crate::{
     language_models::{llm::LLM, GenerateResult},
-    prompt::PromptArgs,
+    prompt::FormatPrompter,
     prompt_args,
     schemas::{messages::Message, Document, StreamData},
     template_jinja2,
 };
 
 use super::{
-    options::ChainCallOptions, Chain, ChainError, LLMChain, LLMChainBuilder, StuffDocument,
+    options::ChainCallOptions, Chain, ChainError, LLMChain, LLMChainBuilder, StuffDocument, StuffQA,
 };
 
 const DEFAULTCONDENSEQUESTIONTEMPLATE: &str = r#"Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
@@ -44,11 +44,14 @@ impl CondenseQuestionPromptBuilder {
         self
     }
 
-    pub fn build(self) -> PromptArgs {
-        prompt_args! {
-            "chat_history" => self.chat_history,
-            "question" => self.question
-        }
+    pub fn build(self) -> StuffQA {
+        StuffQA::new(
+            vec![],
+            prompt_args! {
+                "chat_history" => self.chat_history,
+                "question" => self.question
+            },
+        )
     }
 }
 
@@ -59,13 +62,14 @@ impl Default for CondenseQuestionPromptBuilder {
 }
 
 pub struct CondenseQuestionGeneratorChain {
-    chain: LLMChain,
+    chain: LLMChain<StuffQA>,
 }
 
 impl CondenseQuestionGeneratorChain {
     pub fn new<L: Into<Box<dyn LLM>>>(llm: L) -> Self {
-        let condense_question_prompt_template =
-            template_jinja2!(DEFAULTCONDENSEQUESTIONTEMPLATE, "chat_history", "question");
+        let condense_question_prompt_template: Box<dyn FormatPrompter<StuffQA>> = Box::new(
+            template_jinja2!(DEFAULTCONDENSEQUESTIONTEMPLATE, "chat_history", "question"),
+        );
 
         let chain = LLMChainBuilder::new()
             .llm(llm)
@@ -82,20 +86,20 @@ impl CondenseQuestionGeneratorChain {
 }
 
 #[async_trait]
-impl Chain for CondenseQuestionGeneratorChain {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
+impl Chain<StuffQA> for CondenseQuestionGeneratorChain {
+    async fn call(&self, input_variables: &mut StuffQA) -> Result<GenerateResult, ChainError> {
         self.chain.call(input_variables).await
     }
 
     async fn stream(
         &self,
-        input_variables: PromptArgs,
+        input_variables: &mut StuffQA,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         self.chain.stream(input_variables).await
     }
 
-    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &StuffQA) -> Result<(), Box<dyn Error>> {
         self.chain.log_messages(inputs)
     }
 }
@@ -108,12 +112,12 @@ Question:{{question}}
 Helpful Answer:
 "#;
 
-pub struct StuffQAPromptBuilder<'a> {
-    input_documents: Vec<&'a Document>,
+pub struct StuffQAPromptBuilder {
+    input_documents: Vec<Document>,
     question: String,
 }
 
-impl<'a> StuffQAPromptBuilder<'a> {
+impl StuffQAPromptBuilder {
     pub fn new() -> Self {
         Self {
             input_documents: vec![],
@@ -121,8 +125,8 @@ impl<'a> StuffQAPromptBuilder<'a> {
         }
     }
 
-    pub fn documents(mut self, documents: &'a [Document]) -> Self {
-        self.input_documents = documents.iter().collect();
+    pub fn documents(mut self, documents: &[Document]) -> Self {
+        self.input_documents = documents.to_vec();
         self
     }
 
@@ -131,15 +135,15 @@ impl<'a> StuffQAPromptBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> PromptArgs {
-        prompt_args! {
-            "input_documents" => self.input_documents,
-            "question" => self.question
-        }
+    pub fn build(self) -> StuffQA {
+        StuffQA::new(
+            self.input_documents,
+            prompt_args! { "question" => self.question },
+        )
     }
 }
 
-impl Default for StuffQAPromptBuilder<'_> {
+impl Default for StuffQAPromptBuilder {
     fn default() -> Self {
         Self::new()
     }
@@ -149,8 +153,11 @@ pub(crate) fn load_stuff_qa<L: Into<Box<dyn LLM>>>(
     llm: L,
     options: Option<ChainCallOptions>,
 ) -> StuffDocument {
-    let default_qa_prompt_template =
-        template_jinja2!(DEFAULT_STUFF_QA_TEMPLATE, "context", "question");
+    let default_qa_prompt_template: Box<dyn FormatPrompter<StuffQA>> = Box::new(template_jinja2!(
+        DEFAULT_STUFF_QA_TEMPLATE,
+        "context",
+        "question"
+    ));
 
     let llm_chain_builder = LLMChainBuilder::new()
         .prompt(default_qa_prompt_template)
@@ -177,7 +184,7 @@ mod tests {
     async fn test_qa() {
         let llm = OpenAI::default();
         let chain = StuffDocument::load_stuff_qa(llm);
-        let input = chain
+        let mut input = chain
             .qa_prompt_builder()
             .documents(&[
                 Document::new(format!(
@@ -192,7 +199,7 @@ mod tests {
             .question("How old is luis and whats his favorite text editor")
             .build();
 
-        let ouput = chain.invoke(input).await.unwrap();
+        let ouput = chain.invoke(&mut input).await.unwrap();
 
         println!("{}", ouput);
     }

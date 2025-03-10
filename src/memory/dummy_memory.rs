@@ -34,6 +34,12 @@ impl BaseMemory for DummyMemory {
     fn messages(&self) -> Vec<Message> {
         vec![]
     }
+
     fn add_message(&mut self, _message: Message) {}
+
     fn clear(&mut self) {}
+
+    fn to_string(&self) -> String {
+        "".to_string()
+    }
 }

@@ -1,24 +1,30 @@
 use std::collections::HashSet;
 
-use crate::chain::Chain;
+use crate::{chain::Chain, prompt::PromptArgs};
 
 use super::SequentialChain;
 
-pub struct SequentialChainBuilder {
-    chains: Vec<Box<dyn Chain>>,
+pub struct SequentialChainBuilder<T>
+where
+    T: PromptArgs,
+{
+    chains: Vec<Box<dyn Chain<T>>>,
 }
 
-impl SequentialChainBuilder {
+impl<T> SequentialChainBuilder<T>
+where
+    T: PromptArgs,
+{
     pub fn new() -> Self {
         Self { chains: Vec::new() }
     }
 
-    pub fn add_chain<C: Chain + 'static>(mut self, chain: C) -> Self {
+    pub fn add_chain<C: Chain<T> + 'static>(mut self, chain: C) -> Self {
         self.chains.push(Box::new(chain));
         self
     }
 
-    pub fn build(self) -> SequentialChain {
+    pub fn build(self) -> SequentialChain<T> {
         let outputs: HashSet<String> = self
             .chains
             .iter()
@@ -39,7 +45,10 @@ impl SequentialChainBuilder {
     }
 }
 
-impl Default for SequentialChainBuilder {
+impl<T> Default for SequentialChainBuilder<T>
+where
+    T: PromptArgs,
+{
     fn default() -> Self {
         Self::new()
     }

@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use futures_util::future::try_join_all;
+use indoc::indoc;
 
 use crate::{
     chain::{LLMChain, LLMChainBuilder},
     embedding::{openai::OpenAiEmbedder, Embedder},
     language_models::llm::LLM,
     llm::openai::OpenAI,
-    prompt::HumanMessagePromptTemplate,
+    prompt::{FormatPrompter, HumanMessagePromptTemplate, PlainPromptArgs},
     semantic_router::{Index, MemoryIndex, RouteLayerBuilderError, Router},
     template_jinja2,
 };
@@ -46,7 +47,7 @@ pub struct RouteLayerBuilder {
     routes: Vec<Router>,
     threshold: Option<f64>,
     index: Option<Box<dyn Index>>,
-    llm: Option<LLMChain>,
+    llm: Option<LLMChain<PlainPromptArgs>>,
     top_k: usize,
     aggregation_method: AggregationMethod,
 }
@@ -83,16 +84,18 @@ impl RouteLayerBuilder {
     }
 
     pub fn llm<L: LLM + 'static>(mut self, llm: L) -> Self {
-        let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
-            "You should Generate the input for the following tool.
-Tool description:{{description}}.
-Input query context to generate the input for the tool :{{query}}
+        let prompt: Box<dyn FormatPrompter<PlainPromptArgs>> =
+            Box::new(HumanMessagePromptTemplate::new(template_jinja2!(
+                indoc! {"
+                    You should Generate the input for the following tool.
+                    Tool description:{{description}}.
+                    Input query context to generate the input for the tool :{{query}}
 
-Tool Input:
-",
-            "description",
-            "query"
-        ));
+                    Tool Input:
+                "},
+                "description",
+                "query"
+            )));
         let chain = LLMChainBuilder::new()
             .prompt(prompt)
             .llm(llm)

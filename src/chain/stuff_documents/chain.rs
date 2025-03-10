@@ -1,8 +1,8 @@
-use std::pin::Pin;
+use std::{collections::HashMap, pin::Pin};
 
 use async_trait::async_trait;
+use derive_new::new;
 use futures::Stream;
-use serde_json::Value;
 
 use crate::{
     chain::{
@@ -18,15 +18,38 @@ const COMBINE_DOCUMENTS_DEFAULT_OUTPUT_KEY: &str = "text";
 const COMBINE_DOCUMENTS_DEFAULT_DOCUMENT_VARIABLE_NAME: &str = "context";
 const STUFF_DOCUMENTS_DEFAULT_SEPARATOR: &str = "\n\n";
 
+#[derive(Clone, new)]
+pub struct StuffQA {
+    documents: Vec<Document>,
+    input: HashMap<String, String>,
+}
+
+impl PromptArgs for StuffQA {
+    fn contains_key(&self, key: &str) -> bool {
+        self.input.contains_key(key)
+    }
+
+    fn get(&self, key: &str) -> Option<&str> {
+        self.input.get(key).map(|s| s.as_str())
+    }
+    fn insert(&mut self, key: String, value: String) -> Option<String> {
+        self.input.insert(key.to_string(), value.to_string())
+    }
+
+    fn iter(&self) -> Box<dyn Iterator<Item = (&String, &String)> + '_> {
+        Box::new(self.input.iter())
+    }
+}
+
 pub struct StuffDocument {
-    llm_chain: LLMChain,
+    llm_chain: LLMChain<StuffQA>,
     input_key: String,
     document_variable_name: String,
     separator: String,
 }
 
 impl StuffDocument {
-    pub fn new(llm_chain: LLMChain) -> Self {
+    pub fn new(llm_chain: LLMChain<StuffQA>) -> Self {
         Self {
             llm_chain,
             input_key: COMBINE_DOCUMENTS_DEFAULT_INPUT_KEY.to_string(),
@@ -43,7 +66,7 @@ impl StuffDocument {
     }
 
     ///Inly use thi if you use the deafult prompt
-    pub fn qa_prompt_builder<'a>(&self) -> StuffQAPromptBuilder<'a> {
+    pub fn qa_prompt_builder(&self) -> StuffQAPromptBuilder {
         StuffQAPromptBuilder::new()
     }
 
@@ -115,57 +138,54 @@ impl StuffDocument {
 }
 
 #[async_trait]
-impl Chain for StuffDocument {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
+impl Chain<StuffQA> for StuffDocument {
+    async fn call(&self, input_variables: &mut StuffQA) -> Result<GenerateResult, ChainError> {
         let docs = input_variables
             .get(&self.input_key)
             .ok_or_else(|| ChainError::MissingInputVariable(self.input_key.clone()))?;
 
-        let documents: Vec<Document> = serde_json::from_value(docs.clone()).map_err(|e| {
-            ChainError::IncorrectInputVariable {
+        let documents: Vec<Document> =
+            serde_json::from_str(docs).map_err(|e| ChainError::IncorrectInputVariable {
                 source: e,
                 expected_type: "Vec<Document>".to_string(),
-            }
-        })?;
+            })?;
 
-        let mut input_values = input_variables.clone();
-        input_values.insert(
+        input_variables.insert(
             self.document_variable_name.clone(),
-            Value::String(self.join_documents(documents)),
+            self.join_documents(documents),
         );
 
-        self.llm_chain.call(input_values).await
+        self.llm_chain.call(input_variables).await
     }
 
     async fn stream(
         &self,
-        input_variables: PromptArgs,
+        input_variables: &mut StuffQA,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let docs = input_variables
             .get(&self.input_key)
             .ok_or_else(|| ChainError::MissingInputVariable(self.input_key.clone()))?;
 
-        let documents: Vec<Document> = serde_json::from_value(docs.clone()).map_err(|e| {
-            ChainError::IncorrectInputVariable {
+        let documents: Vec<Document> =
+            serde_json::from_str(docs).map_err(|e| ChainError::IncorrectInputVariable {
                 source: e,
                 expected_type: "Vec<Document>".to_string(),
-            }
-        })?;
+            })?;
 
-        let mut input_values = input_variables.clone();
-        input_values.insert(
+        input_variables.insert(
             self.document_variable_name.clone(),
-            Value::String(self.join_documents(documents)),
+            self.join_documents(documents),
         );
-        self.llm_chain.stream(input_values).await
+
+        self.llm_chain.stream(input_variables).await
     }
 
     fn get_input_keys(&self) -> Vec<String> {
         vec![self.input_key.clone()]
     }
 
-    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn std::error::Error>> {
+    fn log_messages(&self, inputs: &StuffQA) -> Result<(), Box<dyn std::error::Error>> {
         self.llm_chain.log_messages(inputs)
     }
 }

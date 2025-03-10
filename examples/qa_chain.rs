@@ -1,5 +1,5 @@
 use langchain_rust::{
-    chain::{Chain, StuffDocumentBuilder},
+    chain::{Chain, StuffDocumentBuilder, StuffQA},
     llm::openai::OpenAI,
     prompt_args,
     schemas::Document,
@@ -14,8 +14,8 @@ async fn main() {
         // .prompt() you can add a custom prompt if you want
         .build()
         .unwrap();
-    let input = prompt_args! {
-        "input_documents"=>vec![
+    let mut input = StuffQA::new(
+        vec![
             Document::new(format!(
                 "\nQuestion: {}\nAnswer: {}\n",
                 "Which is the favorite text editor of luis", "Nvim"
@@ -25,10 +25,12 @@ async fn main() {
                 "How old is Luis", "24"
             )),
         ],
-        "question"=>"How old is luis and whats his favorite text editor"
-    };
+        prompt_args! {
+            "question"=>"How old is luis and whats his favorite text editor"
+        },
+    );
 
-    let output = chain.invoke(input).await.unwrap();
+    let output = chain.invoke(&mut input).await.unwrap();
 
     println!("{}", output);
 }

@@ -2,13 +2,12 @@ use std::pin::Pin;
 
 use async_trait::async_trait;
 use futures::Stream;
-use serde_json::Value;
 
 use crate::{
     chain::{chain_trait::Chain, llm_chain::LLMChain, ChainError},
     language_models::{GenerateResult, TokenUsage},
-    prompt::PromptArgs,
-    prompt_args,
+    plain_prompt_args,
+    prompt::{PlainPromptArgs, PromptArgs},
     schemas::StreamData,
     tools::SQLDatabase,
 };
@@ -33,8 +32,8 @@ impl SqlChainPromptBuilder {
         self
     }
 
-    pub fn build(self) -> PromptArgs {
-        prompt_args! {
+    pub fn build(self) -> PlainPromptArgs {
+        plain_prompt_args! {
           SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY  => self.query,
         }
     }
@@ -47,7 +46,7 @@ impl Default for SqlChainPromptBuilder {
 }
 
 pub struct SQLDatabaseChain {
-    pub(crate) llmchain: LLMChain,
+    pub(crate) llmchain: LLMChain<PlainPromptArgs>,
     pub(crate) top_k: usize,
     pub(crate) database: SQLDatabase,
 }
@@ -95,8 +94,8 @@ impl SQLDatabaseChain {
 
     async fn call_builder_chains(
         &self,
-        input_variables: &PromptArgs,
-    ) -> Result<(PromptArgs, Option<TokenUsage>), ChainError> {
+        input_variables: &PlainPromptArgs,
+    ) -> Result<(PlainPromptArgs, Option<TokenUsage>), ChainError> {
         let mut token_usage: Option<TokenUsage> = None;
 
         let query = input_variables
@@ -107,15 +106,11 @@ impl SQLDatabaseChain {
             .to_string();
 
         let mut tables: Vec<String> = Vec::new();
-        if let Some(serde_json::Value::Array(array)) =
-            input_variables.get(SQL_CHAIN_DEFAULT_INPUT_KEY_TABLE_NAMES)
-        {
-            for item in array {
-                if let serde_json::Value::String(str) = item {
-                    tables.push(str.clone());
-                }
+        if let Some(array) = input_variables.get(SQL_CHAIN_DEFAULT_INPUT_KEY_TABLE_NAMES) {
+            for item in array.split(",") {
+                tables.push(item.to_string());
             }
-        }
+        } // WONTFIX: Possibly broken
 
         let tables_info = self
             .database
@@ -123,7 +118,7 @@ impl SQLDatabaseChain {
             .await
             .map_err(|e| ChainError::DatabaseError(e.to_string()))?;
 
-        let mut llm_inputs = prompt_args! {
+        let mut llm_inputs = plain_prompt_args! {
             "input"=> query.clone() + QUERY_PREFIX_WITH,
             "top_k"=> self.top_k,
             "dialect"=> self.database.dialect().to_string(),
@@ -131,7 +126,7 @@ impl SQLDatabaseChain {
 
         };
 
-        let output = self.llmchain.call(llm_inputs.clone()).await?;
+        let output = self.llmchain.call(&mut llm_inputs).await?;
         if let Some(tokens) = output.tokens {
             token_usage = Some(tokens);
         }
@@ -145,24 +140,27 @@ impl SQLDatabaseChain {
 
         llm_inputs.insert(
             "input".to_string(),
-            Value::from(format!(
+            format!(
                 "{}{}{}{}{}",
                 &query, QUERY_PREFIX_WITH, sql_query, STOP_WORD, &query_result,
-            )),
+            ),
         );
         Ok((llm_inputs, token_usage))
     }
 }
 
 #[async_trait]
-impl Chain for SQLDatabaseChain {
+impl Chain<PlainPromptArgs> for SQLDatabaseChain {
     fn get_input_keys(&self) -> Vec<String> {
         self.llmchain.get_input_keys()
     }
 
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
-        let (llm_inputs, mut token_usage) = self.call_builder_chains(&input_variables).await?;
-        let output = self.llmchain.call(llm_inputs).await?;
+    async fn call(
+        &self,
+        input_variables: &mut PlainPromptArgs,
+    ) -> Result<GenerateResult, ChainError> {
+        let (mut llm_inputs, mut token_usage) = self.call_builder_chains(input_variables).await?;
+        let output = self.llmchain.call(&mut llm_inputs).await?;
         if let Some(tokens) = output.tokens {
             if let Some(general_result) = token_usage.as_mut() {
                 general_result.completion_tokens += tokens.completion_tokens;
@@ -188,22 +186,22 @@ impl Chain for SQLDatabaseChain {
         })
     }
 
-    async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
+    async fn invoke(&self, input_variables: &mut PlainPromptArgs) -> Result<String, ChainError> {
         let result = self.call(input_variables).await?;
         Ok(result.generation)
     }
 
     async fn stream(
         &self,
-        input_variables: PromptArgs,
+        input_variables: &mut PlainPromptArgs,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
-        let (llm_inputs, _) = self.call_builder_chains(&input_variables).await?;
+        let (mut llm_inputs, _) = self.call_builder_chains(input_variables).await?;
 
-        self.llmchain.stream(llm_inputs).await
+        self.llmchain.stream(&mut llm_inputs).await
     }
 
-    fn log_messages(&self, inputs: PromptArgs) -> Result<(), Box<dyn std::error::Error>> {
+    fn log_messages(&self, inputs: &PlainPromptArgs) -> Result<(), Box<dyn std::error::Error>> {
         self.llmchain.log_messages(inputs)
     }
 }

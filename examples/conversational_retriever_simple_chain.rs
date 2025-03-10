@@ -2,13 +2,14 @@ use std::error::Error;
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
+use indoc::indoc;
 use langchain_rust::{
-    chain::{Chain, ConversationalRetrieverChainBuilder},
+    chain::{Chain, ConversationalRetrieverChainBuilder, StuffQA},
     fmt_message, fmt_template,
     llm::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     message_formatter,
-    prompt::HumanMessagePromptTemplate,
+    prompt::{FormatPrompter, HumanMessagePromptTemplate},
     prompt_args,
     schemas::{Document, Message, Retriever},
     template_jinja2,
@@ -44,21 +45,22 @@ impl Retriever for RetrieverMock {
 #[tokio::main]
 async fn main() {
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
-    let prompt=message_formatter![
-                    fmt_message!(Message::new_system_message("You are a helpful assistant")),
-                    fmt_template!(HumanMessagePromptTemplate::new(
-                    template_jinja2!("
-Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+    let prompt = message_formatter![
+        fmt_message!(Message::new_system_message("You are a helpful assistant")),
+        fmt_template!(HumanMessagePromptTemplate::new(template_jinja2!(
+            indoc! {"
+            Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
 
-{{context}}
+            {{context}}
 
-Question:{{question}}
-Helpful Answer:
+            Question:{{question}}
+            Helpful Answer:
 
-        ",
-                    "context","question")))
-
-                ];
+            "},
+            "context",
+            "question"
+        )))
+    ];
     let chain = ConversationalRetrieverChainBuilder::new()
         .llm(llm)
         .rephrase_question(true)
@@ -66,25 +68,31 @@ Helpful Answer:
         .memory(SimpleMemory::new().into())
         //If you want to use the default prompt remove the .prompt()
         //Keep in mind if you want to change the prompt; this chain need the {{context}} variable
-        .prompt(prompt)
+        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<StuffQA>>)
         .build()
         .expect("Error building ConversationalChain");
 
-    let input_variables = prompt_args! {
-        "question" => "Hi",
-    };
+    let mut input_variables = StuffQA::new(
+        vec![],
+        prompt_args! {
+            "question" => "Hi",
+        },
+    );
 
-    let result = chain.invoke(input_variables).await;
+    let result = chain.invoke(&mut input_variables).await;
     if let Ok(result) = result {
         println!("Result: {:?}", result);
     }
 
-    let input_variables = prompt_args! {
-        "question" => "Which is luis Favorite Food",
-    };
+    let mut input_variables = StuffQA::new(
+        vec![],
+        prompt_args! {
+            "question" => "Which is luis Favorite Food",
+        },
+    );
 
     //If you want to stream
-    let mut stream = chain.stream(input_variables).await.unwrap();
+    let mut stream = chain.stream(&mut input_variables).await.unwrap();
     while let Some(result) = stream.next().await {
         match result {
             Ok(data) => data.to_stdout().unwrap(),

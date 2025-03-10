@@ -4,6 +4,7 @@ use crate::{
     agent::AgentError,
     chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions},
     language_models::llm::LLM,
+    prompt::FormatPrompter,
     tools::Tool,
 };
 
@@ -58,7 +59,7 @@ impl<'a, 'b> ConversationalAgentBuilder<'a, 'b> {
         let default_options = ChainCallOptions::default().with_max_tokens(1000);
         let chain = Box::new(
             LLMChainBuilder::new()
-                .prompt(prompt)
+                .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
                 .llm(llm)
                 .options(self.options.unwrap_or(default_options))
                 .build()?,
