@@ -49,32 +49,24 @@ impl OpenAiToolAgent {
         Ok(prompt)
     }
 
-    fn construct_scratchpad(&self, intermediate_steps: &[(AgentAction, String)]) -> String {
+    fn construct_scratchpad(&self, intermediate_steps: &[(Option<AgentAction>, String)]) -> String {
         intermediate_steps
             .iter()
-            .map(|(action, result)| {
-                if let Some(thought) = &action.thought {
-                    format!(
-                        indoc! {"
-                            Thought: {}
-                            Action: {}
-                            Action input: {}
-                            Result:
-                            {}
-                        "},
-                        thought, action.action, action.action_input, result
-                    )
-                } else {
-                    format!(
-                        indoc! {"
-                            Action: {}
-                            Action input: {}
-                            Result:
-                            {}
-                        "},
-                        action.action, action.action_input, result
-                    )
-                }
+            .map(|(action, result)| match action {
+                Some(action) => format!(
+                    indoc! {"
+                        Thought: {}
+                        Action: {}
+                        Action input: {}
+                        Result:
+                        {}
+                    "},
+                    action.thought.as_deref().unwrap_or("None"),
+                    &action.action,
+                    &action.action_input,
+                    result
+                ),
+                None => result.to_string(),
             })
             .collect::<Vec<_>>()
             .join("\n\n")
@@ -85,7 +77,7 @@ impl OpenAiToolAgent {
 impl Agent<PlainPromptArgs> for OpenAiToolAgent {
     async fn plan(
         &self,
-        intermediate_steps: &[(AgentAction, String)],
+        intermediate_steps: &[(Option<AgentAction>, String)],
         inputs: &mut PlainPromptArgs,
     ) -> Result<AgentEvent, AgentError> {
         let scratchpad = self.construct_scratchpad(intermediate_steps);

@@ -61,19 +61,24 @@ impl ConversationalAgent {
         Ok(formatter)
     }
 
-    fn construct_scratchpad(&self, intermediate_steps: &[(AgentAction, String)]) -> String {
+    fn construct_scratchpad(&self, intermediate_steps: &[(Option<AgentAction>, String)]) -> String {
         intermediate_steps
             .iter()
-            .map(|(action, result)| {
-                format!(
+            .map(|(action, result)| match action {
+                Some(action) => format!(
                     indoc! {"
+                        Thought: {}
                         Action: {}
                         Action input: {}
                         Result:
                         {}
                     "},
-                    action.action, action.action_input, result
-                )
+                    action.thought.as_deref().unwrap_or("None"),
+                    &action.action,
+                    &action.action_input,
+                    result
+                ),
+                None => result.to_string(),
             })
             .collect::<Vec<_>>()
             .join("\n\n")
@@ -84,7 +89,7 @@ impl ConversationalAgent {
 impl Agent<PlainPromptArgs> for ConversationalAgent {
     async fn plan(
         &self,
-        intermediate_steps: &[(AgentAction, String)],
+        intermediate_steps: &[(Option<AgentAction>, String)],
         inputs: &mut PlainPromptArgs,
     ) -> Result<AgentEvent, AgentError> {
         let scratchpad = self.construct_scratchpad(intermediate_steps);

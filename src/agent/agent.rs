@@ -17,7 +17,7 @@ where
 {
     async fn plan(
         &self,
-        intermediate_steps: &[(AgentAction, String)],
+        intermediate_steps: &[(Option<AgentAction>, String)],
         inputs: &mut T,
     ) -> Result<AgentEvent, AgentError>;
 

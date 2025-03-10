@@ -73,6 +73,10 @@ pub trait Tool: Send + Sync {
     async fn parse_input(&self, input: &Value) -> Value {
         input.clone()
     }
+
+    fn usage_limit(&self) -> Option<usize> {
+        None
+    }
 }
 
 impl fmt::Display for dyn Tool {
