@@ -69,28 +69,15 @@ impl ConversationalAgent {
         intermediate_steps
             .iter()
             .map(|(action, result)| {
-                if let Some(thought) = &action.thought {
-                    format!(
-                        indoc! {"
-                            Thought: {}
-                            Action: {}
-                            Action input: {}
-                            Result:
-                            {}
-                        "},
-                        thought, action.action, action.action_input, result
-                    )
-                } else {
-                    format!(
-                        indoc! {"
-                            Action: {}
-                            Action input: {}
-                            Result:
-                            {}
-                        "},
-                        action.action, action.action_input, result
-                    )
-                }
+                format!(
+                    indoc! {"
+                        Action: {}
+                        Action input: {}
+                        Result:
+                        {}
+                    "},
+                    action.action, action.action_input, result
+                )
             })
             .collect::<Vec<_>>()
             .join("\n\n")

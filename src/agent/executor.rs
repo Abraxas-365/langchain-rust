@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
+use indoc::indoc;
 use tokio::sync::Mutex;
 
 use super::{agent::Agent, AgentError};
@@ -104,7 +105,14 @@ where
                 AgentEvent::Action(actions) => {
                     for action in actions {
                         log::debug!(
-                            "Agent used tool {} with input:\n{:#?}",
+                            indoc! {"
+                                Agent Action:
+                                  thought: {}
+                                  action: {}
+                                  input:
+                                    {:#?}
+                            "},
+                            action.thought.as_deref().unwrap_or("None"),
                             &action.action,
                             &action.action_input
                         );
