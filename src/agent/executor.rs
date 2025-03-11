@@ -123,14 +123,18 @@ where
                             &action.action_input
                         );
 
-                        let tool_name = action.action.to_lowercase().replace(" ", "");
-                        let tool = self
-                            .agent
-                            .get_tool(&tool_name)
-                            .ok_or_else(|| {
-                                AgentError::ToolError(format!("Tool {} not found", action.action))
-                            })
-                            .map_err(|e| ChainError::AgentError(e.to_string()))?;
+                        let tool_name = action.action.to_lowercase().replace(" ", "_");
+                        let tool = match self.agent.get_tool(&tool_name) {
+                            Some(tool) => tool,
+                            None => {
+                                log::debug!("Tool {} not found", action.action);
+                                steps.push((
+                                    None,
+                                    format!("{} is not a tool, You MUST use a tool OR give your best final answer.", action.action),
+                                ));
+                                continue;
+                            }
+                        };
 
                         if let Some(usage_limit) = tool.usage_limit() {
                             let count = use_counts.entry(tool_name.clone()).or_insert(0);
