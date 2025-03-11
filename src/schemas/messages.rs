@@ -158,8 +158,8 @@ impl Message {
 }
 
 impl fmt::Display for Message {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.message_type, self.content)
     }
 }
 
