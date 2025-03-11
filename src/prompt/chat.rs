@@ -240,11 +240,11 @@ where
                 MessageOrTemplate::Template(tmpl) => {
                     result.extend(tmpl.format_messages(input_variables)?)
                 }
-                MessageOrTemplate::MessagesPlaceholder(_placeholder) => {
-                    // let messages = input_variables
-                    //     .get(placeholder)
-                    //     .ok_or_else(|| PromptError::MissingVariable(placeholder.to_string()))?;
-                    // result.extend(Message::(messages)?); TODO
+                MessageOrTemplate::MessagesPlaceholder(placeholder) => {
+                    let scratchpad = input_variables
+                        .get(placeholder)
+                        .ok_or_else(|| PromptError::MissingVariable(placeholder.to_string()))?;
+                    result.extend(vec![Message::new_human_message(scratchpad)]);
                 }
             }
         }
