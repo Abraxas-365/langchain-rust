@@ -164,13 +164,13 @@ mod tests {
         let ollama = Ollama::default().with_model("llama3.2");
 
         let message = Message::new_human_message("Why does water boil at 100 degrees?");
-        let mut stream = ollama.stream(&vec![message]).await.unwrap();
+        let mut stream = ollama.stream(&[message]).await.unwrap();
         let mut stdout = tokio::io::stdout();
         while let Some(res) = stream.next().await {
             let data = res.unwrap();
-            stdout.write(data.content.as_bytes()).await.unwrap();
+            stdout.write_all(data.content.as_bytes()).await.unwrap();
         }
-        stdout.write(b"\n").await.unwrap();
+        stdout.write_all(b"\n").await.unwrap();
         stdout.flush().await.unwrap();
     }
 }
