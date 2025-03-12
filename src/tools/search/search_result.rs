@@ -21,10 +21,19 @@ pub struct SearchResults(Vec<SearchResult>);
 
 impl Display for SearchResults {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for result in &self.0 {
-            write!(f, "{}\n---\n", result)?;
+        if !self.0.is_empty() {
+            write!(
+                f,
+                "{}",
+                self.0
+                    .iter()
+                    .map(|r| r.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n---\n")
+            )?;
+        } else {
+            write!(f, "No results found, try adjusting your search query")?;
         }
-
         Ok(())
     }
 }

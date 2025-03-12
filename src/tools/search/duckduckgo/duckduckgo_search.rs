@@ -1,9 +1,11 @@
 use std::{collections::HashMap, error::Error, sync::Arc};
 
 use async_trait::async_trait;
+use derive_new::new;
 use indoc::indoc;
 use reqwest::Client;
 use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use url::Url;
 
@@ -12,6 +14,7 @@ use crate::tools::{
     Tool, ToolFunction, ToolWrapper,
 };
 
+#[derive(Deserialize, Serialize, new)]
 pub struct DuckDuckGoSearchInput {
     query: String,
 }
@@ -31,9 +34,7 @@ impl DuckDuckGoSearch {
     pub async fn search(&self, query: &str) -> Result<SearchResults, Box<dyn Error>> {
         let mut url = Url::parse(&self.url)?;
 
-        let mut query_params = HashMap::new();
-        query_params.insert("q", query);
-
+        let query_params = HashMap::from([("q", query)]);
         url.query_pairs_mut().extend_pairs(query_params.iter());
 
         let response = self.client.get(url).send().await?;
@@ -47,18 +48,16 @@ impl DuckDuckGoSearch {
 
         let results = document
             .select(&result_selector)
-            .map(|result| {
+            .filter_map(|result| {
                 let title = result
                     .select(&result_title_selector)
-                    .next()
-                    .unwrap()
+                    .next()?
                     .text()
                     .collect::<Vec<_>>()
                     .join("");
                 let link = result
                     .select(&result_url_selector)
-                    .next()
-                    .unwrap()
+                    .next()?
                     .text()
                     .collect::<Vec<_>>()
                     .join("")
@@ -66,13 +65,12 @@ impl DuckDuckGoSearch {
                     .to_string();
                 let snippet = result
                     .select(&result_snippet_selector)
-                    .next()
-                    .unwrap()
+                    .next()?
                     .text()
                     .collect::<Vec<_>>()
                     .join("");
 
-                SearchResult::new(title, link, snippet)
+                Some(SearchResult::new(title, link, snippet))
             })
             .take(self.max_results)
             .collect::<Vec<_>>();
@@ -82,8 +80,7 @@ impl DuckDuckGoSearch {
 }
 
 const DESCRIPTION: &str = r#"Search the web using Duckduckgo.
-Useful for when you need to answer questions about current events.
-"#;
+Useful for when you need to answer questions about current events."#;
 
 #[async_trait]
 impl ToolFunction for DuckDuckGoSearch {
@@ -91,7 +88,7 @@ impl ToolFunction for DuckDuckGoSearch {
     type Result = SearchResults;
 
     fn name(&self) -> String {
-        String::from("DuckDuckGoSearch")
+        "DuckDuckGo Search".to_string()
     }
 
     fn description(&self) -> String {
@@ -122,10 +119,10 @@ impl ToolFunction for DuckDuckGoSearch {
     }
 
     async fn parse_input(&self, input: Value) -> Result<Self::Input, Box<dyn Error>> {
-        let query = input["query"].as_str().ok_or("Invalid input")?;
-        Ok(DuckDuckGoSearchInput {
-            query: query.to_string(),
-        })
+        let result = serde_json::from_value::<DuckDuckGoSearchInput>(input.clone())
+            .or_else(|_| serde_json::from_value::<String>(input).map(DuckDuckGoSearchInput::new))?;
+
+        Ok(result)
     }
 
     async fn run(&self, input: DuckDuckGoSearchInput) -> Result<SearchResults, Box<dyn Error>> {
@@ -152,16 +149,33 @@ impl From<DuckDuckGoSearch> for Arc<dyn Tool> {
 #[cfg(test)]
 mod tests {
     use super::DuckDuckGoSearch;
+    use crate::tools::Tool;
+    use serde_json::json;
+    use std::sync::Arc;
 
     #[tokio::test]
     #[ignore]
     async fn duckduckgosearch_tool() {
-        let ddg = DuckDuckGoSearch::default().with_max_results(5);
-        let s = ddg
-            .search("Who is the current President of Peru?")
-            .await
-            .unwrap();
+        let tool: Arc<dyn Tool> = DuckDuckGoSearch::default().with_max_results(5).into();
+        let input = json!({
+            "query": "Who is the current President of Peru?"
+        });
 
-        println!("{}", s);
+        let result = tool.call(input).await.unwrap();
+
+        println!("{}", result);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn duckduckgosearch_tool_empty() {
+        let tool: Arc<dyn Tool> = DuckDuckGoSearch::default().into();
+        let input = json!({
+            "query": "vaygbuoipqyngxaupoidfcaasdcfjlkqwhfqhsakdnasfsfclkvahsxczkgjqeopjraoisphd"
+        });
+
+        let result = tool.call(input).await.unwrap();
+
+        println!("{}", result);
     }
 }
