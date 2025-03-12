@@ -150,7 +150,7 @@ where
                             }
                         }
 
-                        let observation_result = tool.call(&action.action_input).await;
+                        let observation_result = tool.call(action.action_input.clone()).await;
 
                         let observation = match observation_result {
                             Ok(result) => result,

@@ -80,3 +80,9 @@ impl StoreBuilder {
         })
     }
 }
+
+impl Default for StoreBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use langchain_rust::{
     agent::{AgentExecutor, ConversationalAgentBuilder},
     chain::{options::ChainCallOptions, Chain},
@@ -15,7 +13,7 @@ async fn main() {
     let memory = SimpleMemory::new();
     let command_executor = CommandExecutor::default();
     let agent = ConversationalAgentBuilder::new()
-        .tools(map_tools(vec![Arc::new(command_executor)]))
+        .tools(map_tools(vec![command_executor.into()]))
         .options(ChainCallOptions::new().with_max_tokens(1000))
         .build(llm)
         .unwrap();

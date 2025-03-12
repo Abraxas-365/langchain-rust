@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use langchain_rust::{
     embedding::openai::OpenAiEmbedder,
     semantic_router::{AggregationMethod, RouteLayerBuilder, Router},
@@ -6,7 +8,7 @@ use langchain_rust::{
 
 #[tokio::main]
 async fn main() {
-    let tool = SerpApi::default();
+    let tool: Arc<dyn Tool> = SerpApi::default().into();
     let capital_route = Router::new(
         "capital",
         &[
@@ -45,7 +47,7 @@ async fn main() {
 
     println!("{:?}", &route_choice);
     if route_choice.route == "capital" {
-        let tool_output = tool.run(route_choice.tool_input.unwrap()).await.unwrap();
+        let tool_output = tool.call(route_choice.tool_input.unwrap()).await.unwrap();
         println!("{:?}", tool_output);
     }
 }

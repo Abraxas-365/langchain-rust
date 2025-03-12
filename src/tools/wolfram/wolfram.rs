@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::tools::Tool;
-use std::error::Error;
+use crate::tools::{Tool, ToolFunction, ToolWrapper};
+use std::{error::Error, sync::Arc};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct WolframError {
@@ -114,7 +114,10 @@ impl Default for Wolfram {
 }
 
 #[async_trait]
-impl Tool for Wolfram {
+impl ToolFunction for Wolfram {
+    type Input = String;
+    type Result = String;
+
     fn name(&self) -> String {
         String::from("Wolfram")
     }
@@ -127,12 +130,19 @@ impl Tool for Wolfram {
             interpret.",
         )
     }
-    async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
-        let input = input.as_str().ok_or("Invalid input")?;
+
+    async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error>> {
+        input
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or("Invalid input".into())
+    }
+
+    async fn run(&self, input: String) -> Result<String, Box<dyn Error>> {
         let mut url = format!(
             "https://api.wolframalpha.com/v2/query?appid={}&input={}&output=JSON&format=plaintext&podstate=Result__Step-by-step+solution",
             &self.app_id,
-            urlencoding::encode(input)
+            urlencoding::encode(&input)
         );
 
         if !self.exclude_pods.is_empty() {
@@ -166,6 +176,12 @@ impl Tool for Wolfram {
     }
 }
 
+impl From<Wolfram> for Arc<dyn Tool> {
+    fn from(wolfram: Wolfram) -> Arc<dyn Tool> {
+        Arc::new(ToolWrapper::new(wolfram))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,9 +189,9 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_wolfram() {
-        let wolfram = Wolfram::default().with_excludes(&["Plot"]);
+        let wolfram: Arc<dyn Tool> = Wolfram::default().with_excludes(&["Plot"]).into();
         let input = "Solve x^2 - 2x + 1 = 0";
-        let result = wolfram.call(&Value::String(input.to_string())).await;
+        let result = wolfram.call(Value::String(input.to_string())).await;
 
         assert!(result.is_ok());
         println!("{}", result.unwrap());

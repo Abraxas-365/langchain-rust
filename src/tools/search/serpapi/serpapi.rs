@@ -1,9 +1,9 @@
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::tools::Tool;
+use crate::tools::{Tool, ToolFunction, ToolWrapper};
 
 pub struct SerpApi {
     api_key: String,
@@ -148,7 +148,10 @@ fn get_organic_result(result: &Value) -> String {
 }
 
 #[async_trait]
-impl Tool for SerpApi {
+impl ToolFunction for SerpApi {
+    type Input = String;
+    type Result = String;
+
     fn name(&self) -> String {
         String::from("GoogleSearch")
     }
@@ -161,9 +164,15 @@ impl Tool for SerpApi {
         )
     }
 
-    async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
-        let input = input.as_str().ok_or("Input should be a string")?;
-        self.simple_search(input).await
+    async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error>> {
+        input
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or("Invalid input".into())
+    }
+
+    async fn run(&self, input: String) -> Result<String, Box<dyn Error>> {
+        self.simple_search(&input).await
     }
 }
 
@@ -176,6 +185,12 @@ impl Default for SerpApi {
             gl: None,
             google_domain: None,
         }
+    }
+}
+
+impl From<SerpApi> for Arc<dyn Tool> {
+    fn from(val: SerpApi) -> Self {
+        Arc::new(ToolWrapper::new(val))
     }
 }
 

@@ -121,21 +121,34 @@ mod tests {
         llm::openai::{OpenAI, OpenAIModel},
         memory::SimpleMemory,
         plain_prompt_args,
-        tools::{map_tools, Tool},
+        tools::{map_tools, Tool, ToolFunction, ToolWrapper},
     };
 
+    #[derive(Default)]
     struct Calc {}
 
     #[async_trait]
-    impl Tool for Calc {
+    impl ToolFunction for Calc {
+        type Input = String;
+        type Result = i128;
+
         fn name(&self) -> String {
             "Calculator".to_string()
         }
         fn description(&self) -> String {
             "Usefull to make calculations".to_string()
         }
-        async fn run(&self, _input: Value) -> Result<String, Box<dyn Error>> {
-            Ok("25".to_string())
+        async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error>> {
+            Ok(input.to_string())
+        }
+        async fn run(&self, _input: String) -> Result<i128, Box<dyn Error>> {
+            Ok(25)
+        }
+    }
+
+    impl From<Calc> for Arc<dyn Tool> {
+        fn from(val: Calc) -> Self {
+            Arc::new(ToolWrapper::new(val))
         }
     }
 
@@ -144,9 +157,9 @@ mod tests {
     async fn test_invoke_agent() {
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt4.to_string());
         let memory = SimpleMemory::new();
-        let tool_calc = Calc {};
+        let tool_calc = Calc::default();
         let agent = ConversationalAgentBuilder::new()
-            .tools(map_tools(vec![Arc::new(tool_calc)]))
+            .tools(map_tools(vec![tool_calc.into()]))
             .build(llm)
             .unwrap();
         let mut input_variables = plain_prompt_args! {

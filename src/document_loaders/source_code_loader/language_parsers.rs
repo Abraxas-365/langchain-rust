@@ -1,7 +1,7 @@
 use crate::schemas::Document;
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::string::ToString;
+use std::{collections::HashMap, fmt::Display};
 use strum_macros::Display;
 use tree_sitter::{Parser, Tree};
 
@@ -25,11 +25,11 @@ pub enum LanguageContentTypes {
     FunctionsImpls,
 }
 
-impl ToString for LanguageContentTypes {
-    fn to_string(&self) -> String {
+impl Display for LanguageContentTypes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LanguageContentTypes::SimplifiedCode => "simplified_code".to_string(),
-            LanguageContentTypes::FunctionsImpls => "functions_impls".to_string(),
+            LanguageContentTypes::SimplifiedCode => write!(f, "simplified_code"),
+            LanguageContentTypes::FunctionsImpls => write!(f, "functions_impls"),
         }
     }
 }
@@ -73,7 +73,7 @@ impl Clone for LanguageParser {
     }
 }
 
-pub fn get_language_by_filename(name: &String) -> Language {
+pub fn get_language_by_filename(name: &str) -> Language {
     let extension = name.split('.').last().unwrap();
     match extension.to_lowercase().as_str() {
         "c" => Language::C,
@@ -134,7 +134,7 @@ impl LanguageParser {
         self.parser_options.parser_threshold = threshold;
     }
 
-    pub fn parse_code(&mut self, code: &String) -> Vec<Document> {
+    pub fn parse_code(&mut self, code: &str) -> Vec<Document> {
         let tree = self.parser.parse(code, None).unwrap();
         if self.parser_options.parser_threshold > tree.root_node().end_position().row as u64 {
             return vec![Document::new(code).with_metadata(HashMap::from([
@@ -151,7 +151,7 @@ impl LanguageParser {
         self.extract_functions_classes(tree, code)
     }
 
-    pub fn extract_functions_classes(&self, tree: Tree, code: &String) -> Vec<Document> {
+    pub fn extract_functions_classes(&self, tree: Tree, code: &str) -> Vec<Document> {
         let mut chunks = Vec::new();
 
         let count = tree.root_node().child_count();
@@ -219,13 +219,13 @@ mod tests {
 
         let mut parser = LanguageParser::from_language(Language::Rust);
 
-        let documents = parser.parse_code(&code.to_string());
+        let documents = parser.parse_code(code);
         assert_eq!(documents.len(), 1);
 
         // Set the parser threshold to 10 for testing
         parser.set_parser_threshold(10);
 
-        let documents = parser.parse_code(&code.to_string());
+        let documents = parser.parse_code(code);
         assert_eq!(documents.len(), 3);
         assert_eq!(
             documents[0].page_content,

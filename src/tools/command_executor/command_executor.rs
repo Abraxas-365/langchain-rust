@@ -1,10 +1,10 @@
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::tools::Tool;
+use crate::tools::{Tool, ToolFunction, ToolWrapper};
 
 pub struct CommandExecutor {
     platform: String,
@@ -30,18 +30,22 @@ impl Default for CommandExecutor {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-struct CommandInput {
+pub struct CommandInput {
     cmd: String,
     #[serde(default)]
     args: Vec<String>,
 }
-#[derive(Serialize, Deserialize, Debug)]
-struct CommandsWrapper {
+
+#[derive(Deserialize, Serialize, Debug)]
+struct CommandsInput {
     commands: Vec<CommandInput>,
 }
 
 #[async_trait]
-impl Tool for CommandExecutor {
+impl ToolFunction for CommandExecutor {
+    type Input = Vec<CommandInput>;
+    type Result = String;
+
     fn name(&self) -> String {
         String::from("Command_Executor")
     }
@@ -62,9 +66,7 @@ impl Tool for CommandExecutor {
         The input should be an array with commands for the following platform: {}",
             self.platform
         );
-        json!(
-
-        {
+        json!({
           "description": prompt,
           "type": "object",
           "properties": {
@@ -95,38 +97,18 @@ impl Tool for CommandExecutor {
           },
           "required": ["commands"],
           "additionalProperties": false
-        }
-                )
+        })
     }
 
-    async fn parse_input(&self, input: &Value) -> Value {
-        // Attempt to parse input string into CommandsWrapper struct first
-        let wrapper_result = serde_json::from_value::<CommandsWrapper>(input.clone());
-
-        if let Ok(wrapper) = wrapper_result {
-            // If successful, serialize the `commands` back into a serde_json::Value
-            // this is for llm like open ai tools
-            serde_json::to_value(wrapper.commands).unwrap_or_else(|err| {
-                log::error!("Serialization error: {}", err);
-                Value::Null
-            })
-        } else {
-            // If the first attempt fails, try parsing it as Vec<CommandInput> directly
-            // This works on any llm
-            let commands_result = serde_json::from_value::<Vec<CommandInput>>(input.clone());
-
-            commands_result.map_or_else(
-                |err| {
-                    log::error!("Failed to parse input: {}", err);
-                    Value::Null
-                },
-                |commands| serde_json::to_value(commands).unwrap_or(Value::Null),
-            )
-        }
+    async fn parse_input(&self, input: Value) -> Result<Vec<CommandInput>, Box<dyn Error>> {
+        serde_json::from_value::<CommandsInput>(input.clone())
+            .map(|commands| commands.commands)
+            .or_else(|_| serde_json::from_value::<Vec<CommandInput>>(input))
+            .map_err(|e| e.into())
     }
 
-    async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
-        let commands: Vec<CommandInput> = serde_json::from_value(input)?;
+    async fn run(&self, input: Vec<CommandInput>) -> Result<String, Box<dyn Error>> {
+        let commands = input;
         let mut result = String::new();
 
         for command in commands {
@@ -156,13 +138,21 @@ impl Tool for CommandExecutor {
     }
 }
 
+impl From<CommandExecutor> for Arc<dyn Tool> {
+    fn from(val: CommandExecutor) -> Self {
+        Arc::new(ToolWrapper::new(val))
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use crate::tools::Tool;
+
     use super::*;
     use serde_json::json;
     #[tokio::test]
     async fn test_with_string_executor() {
-        let tool = CommandExecutor::new("linux");
+        let tool: Arc<dyn Tool> = CommandExecutor::new("linux").into();
         let input = json!({
             "commands": [
                 {
@@ -172,7 +162,7 @@ mod test {
             ]
         });
         println!("{}", &input.to_string());
-        let result = tool.call(&Value::String(input.to_string())).await.unwrap();
+        let result = tool.call(Value::String(input.to_string())).await.unwrap();
         println!("Res: {}", result);
     }
 }

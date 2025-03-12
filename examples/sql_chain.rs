@@ -34,8 +34,8 @@ async fn main() {
     io::stdin().read_line(&mut input).unwrap();
 
     let input = input.trim();
-    let input_variables = chain.prompt_builder().query(input).build();
-    match chain.invoke(input_variables).await {
+    let mut input_variables = chain.prompt_builder().query(input).build();
+    match chain.invoke(&mut input_variables).await {
         Ok(result) => {
             println!("Result: {:?}", result);
         }

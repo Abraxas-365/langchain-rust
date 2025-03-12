@@ -1,35 +1,34 @@
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, sync::Arc};
 
 use async_trait::async_trait;
+use indoc::indoc;
 use reqwest::Client;
 use scraper::{Html, Selector};
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use url::Url;
 
-use crate::tools::Tool;
+use crate::tools::{
+    search::search_result::{SearchResult, SearchResults},
+    Tool, ToolFunction, ToolWrapper,
+};
 
-pub struct DuckDuckGoSearchResults {
+pub struct DuckDuckGoSearchInput {
+    query: String,
+}
+
+pub struct DuckDuckGoSearch {
     url: String,
     client: Client,
     max_results: usize,
 }
 
-impl DuckDuckGoSearchResults {
-    pub fn new() -> Self {
-        Self {
-            client: Client::new(),
-            url: "https://duckduckgo.com/html/".to_string(),
-            max_results: 4,
-        }
-    }
-
+impl DuckDuckGoSearch {
     pub fn with_max_results(mut self, max_results: usize) -> Self {
         self.max_results = max_results;
         self
     }
 
-    pub async fn search(&self, query: &str) -> Result<String, Box<dyn Error>> {
+    pub async fn search(&self, query: &str) -> Result<SearchResults, Box<dyn Error>> {
         let mut url = Url::parse(&self.url)?;
 
         let mut query_params = HashMap::new();
@@ -73,54 +72,45 @@ impl DuckDuckGoSearchResults {
                     .collect::<Vec<_>>()
                     .join("");
 
-                SearchResult {
-                    title,
-                    link,
-                    snippet,
-                }
+                SearchResult::new(title, link, snippet)
             })
             .take(self.max_results)
             .collect::<Vec<_>>();
 
-        Ok(serde_json::to_string(&results)?)
+        Ok(SearchResults::new(results))
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SearchResult {
-    title: String,
-    link: String,
-    snippet: String,
-}
+const DESCRIPTION: &str = r#"Search the web using Duckduckgo.
+Useful for when you need to answer questions about current events.
+"#;
 
 #[async_trait]
-impl Tool for DuckDuckGoSearchResults {
+impl ToolFunction for DuckDuckGoSearch {
+    type Input = DuckDuckGoSearchInput;
+    type Result = SearchResults;
+
     fn name(&self) -> String {
         String::from("DuckDuckGoSearch")
     }
 
     fn description(&self) -> String {
-        String::from(
-            r#""Wrapper for DuckDuckGo Search API. "
-	"Useful for when you need to answer questions about current events. "
-	"Always one of the first options when you need to find information on internet"
-	"Input should be a search query. Output is a JSON array of the query results."#,
+        format!(
+            "{}\n{}",
+            DESCRIPTION,
+            indoc! {"
+                The input for this tool MUST be in the following format:
+                {{
+                    query (String): The query you want to search for,
+                }}
+            "}
         )
     }
 
-    async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
-        let input = input.as_str().ok_or("Input should be a string")?;
-        self.search(input).await
-    }
-
     fn parameters(&self) -> Value {
-        let prompt = r#"A wrapper around DuckDuckGo Search.
-            Useful for when you need to answer questions about current events.
-            Input should be a search query. Output is a JSON array of the query results."#;
-
         json!({
-            "description": prompt,
-            "type": "object",
+            "description": DESCRIPTION,
+            "type": "string",
             "properties": {
                 "query": {
                     "type": "string",
@@ -130,22 +120,43 @@ impl Tool for DuckDuckGoSearchResults {
             "required": ["query"]
         })
     }
+
+    async fn parse_input(&self, input: Value) -> Result<Self::Input, Box<dyn Error>> {
+        let query = input["query"].as_str().ok_or("Invalid input")?;
+        Ok(DuckDuckGoSearchInput {
+            query: query.to_string(),
+        })
+    }
+
+    async fn run(&self, input: DuckDuckGoSearchInput) -> Result<SearchResults, Box<dyn Error>> {
+        self.search(&input.query).await
+    }
 }
 
-impl Default for DuckDuckGoSearchResults {
-    fn default() -> DuckDuckGoSearchResults {
-        DuckDuckGoSearchResults::new()
+impl Default for DuckDuckGoSearch {
+    fn default() -> Self {
+        Self {
+            client: Client::new(),
+            url: "https://duckduckgo.com/html/".to_string(),
+            max_results: 4,
+        }
+    }
+}
+
+impl From<DuckDuckGoSearch> for Arc<dyn Tool> {
+    fn from(val: DuckDuckGoSearch) -> Self {
+        Arc::new(ToolWrapper::new(val))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::DuckDuckGoSearchResults;
+    use super::DuckDuckGoSearch;
 
     #[tokio::test]
     #[ignore]
     async fn duckduckgosearch_tool() {
-        let ddg = DuckDuckGoSearchResults::default().with_max_results(5);
+        let ddg = DuckDuckGoSearch::default().with_max_results(5);
         let s = ddg
             .search("Who is the current President of Peru?")
             .await

@@ -61,7 +61,7 @@ async fn main() {
 
         let openai = Text2SpeechOpenAI::default().with_path(format!("chunk_{}.mp3", i));
         let path = openai
-            .call(&Value::String(chunk.page_content.to_string()))
+            .call(Value::String(chunk.page_content.to_string()))
             .await
             .unwrap();
 

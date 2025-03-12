@@ -238,7 +238,7 @@ impl StoreBuilder<PgFilter> {
         // https://github.com/langchain-ai/langchain/issues/12933
         // For more information see:
         // https://www.postgresql.org/docs/16/explicit-locking.html#ADVISORY-LOCKS
-        let create_extension_sql = format!("CREATE EXTENSION IF NOT EXISTS vector");
+        let create_extension_sql = "CREATE EXTENSION IF NOT EXISTS vector".to_string();
         sqlx::query(&create_extension_sql)
             .execute(&mut **tx)
             .await?;
@@ -301,23 +301,26 @@ impl StoreBuilder<PgFilter> {
         sqlx::query(&sql).execute(&mut **tx).await?;
 
         // See this for more details on HNWS indexes: https://github.com/pgvector/pgvector#hnsw
-        match &self.hns_index {
-            Some(hns_index) => {
-                let mut sql = format!(
-                    r#"CREATE INDEX IF NOT EXISTS {}_embedding_hnsw ON {} USING hnsw (embedding {})"#,
-                    self.embedder_table_name, self.embedder_table_name, hns_index.distance_function
+        if let Some(hns_index) = &self.hns_index {
+            let mut sql = format!(
+                r#"CREATE INDEX IF NOT EXISTS {}_embedding_hnsw ON {} USING hnsw (embedding {})"#,
+                self.embedder_table_name, self.embedder_table_name, hns_index.distance_function
+            );
+            if hns_index.m > 0 && hns_index.ef_construction > 0 {
+                sql = format!(
+                    "{} WITH (m={}, ef_construction = {})",
+                    sql, hns_index.m, hns_index.ef_construction
                 );
-                if hns_index.m > 0 && hns_index.ef_construction > 0 {
-                    sql = format!(
-                        "{} WITH (m={}, ef_construction = {})",
-                        sql, hns_index.m, hns_index.ef_construction
-                    );
-                }
-                sqlx::query(&sql).execute(&mut **tx).await?;
             }
-            None => {}
+            sqlx::query(&sql).execute(&mut **tx).await?;
         }
 
         Ok(())
+    }
+}
+
+impl Default for StoreBuilder<PgFilter> {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -41,7 +41,7 @@ impl Store {
             .send()
             .await?;
 
-        let result = response.error_for_status_code().map_err(|e| Box::new(e))?;
+        let result = response.error_for_status_code().map_err(Box::new)?;
 
         Ok(result)
     }
@@ -91,7 +91,7 @@ impl Store {
             .send()
             .await?;
 
-        let result = response.error_for_status_code().map_err(|e| Box::new(e))?;
+        let result = response.error_for_status_code().map_err(Box::new)?;
 
         Ok(result)
     }
@@ -138,7 +138,7 @@ impl VectorStore for Store {
             .send()
             .await?
             .error_for_status_code()
-            .map_err(|e| Box::new(e))?;
+            .map_err(Box::new)?;
 
         let response_body = response.json::<Value>().await?;
 

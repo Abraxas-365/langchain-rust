@@ -7,22 +7,41 @@ use langchain_rust::{
     llm::openai::OpenAI,
     memory::SimpleMemory,
     plain_prompt_args,
-    tools::{map_tools, CommandExecutor, DuckDuckGoSearchResults, SerpApi, Tool},
+    tools::{
+        map_tools, CommandExecutor, DuckDuckGoSearch, SerpApi, Tool, ToolFunction, ToolWrapper,
+    },
 };
 
 use serde_json::Value;
+
+#[derive(Default)]
 struct Date {}
 
 #[async_trait]
-impl Tool for Date {
+impl ToolFunction for Date {
+    type Input = ();
+    type Result = String;
+
     fn name(&self) -> String {
         "Date".to_string()
     }
+
     fn description(&self) -> String {
-        "Useful when you need to get the date,input is  a query".to_string()
+        "Useful when you need to get the date, input should be an empty object ({})".to_string()
     }
-    async fn run(&self, _input: Value) -> Result<String, Box<dyn Error>> {
-        Ok("25  of november of 2025".to_string())
+
+    async fn parse_input(&self, _input: Value) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
+
+    async fn run(&self, _input: ()) -> Result<String, Box<dyn Error>> {
+        Ok("25 of november of 2025".to_string())
+    }
+}
+
+impl From<Date> for Arc<dyn Tool> {
+    fn from(val: Date) -> Self {
+        Arc::new(ToolWrapper::new(val))
     }
 }
 
@@ -31,15 +50,15 @@ async fn main() {
     let llm = OpenAI::default();
     let memory = SimpleMemory::new();
     let serpapi_tool = SerpApi::default();
-    let duckduckgo_tool = DuckDuckGoSearchResults::default();
-    let tool_calc = Date {};
+    let duckduckgo_tool = DuckDuckGoSearch::default();
+    let tool_calc = Date::default();
     let command_executor = CommandExecutor::default();
     let agent = OpenAiToolAgentBuilder::new()
         .tools(map_tools(vec![
-            Arc::new(serpapi_tool),
-            Arc::new(tool_calc),
-            Arc::new(command_executor),
-            Arc::new(duckduckgo_tool),
+            serpapi_tool.into(),
+            tool_calc.into(),
+            command_executor.into(),
+            duckduckgo_tool.into(),
         ]))
         .options(ChainCallOptions::new().with_max_tokens(1000))
         .build(llm)

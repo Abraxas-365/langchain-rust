@@ -4,24 +4,16 @@ use scraper::{ElementRef, Html, Selector};
 use serde_json::Value;
 use std::{error::Error, sync::Arc};
 
-use crate::tools::Tool;
+use crate::tools::{Tool, ToolFunction, ToolWrapper};
 
+#[derive(Default)]
 pub struct WebScrapper {}
 
-impl WebScrapper {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for WebScrapper {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[async_trait]
-impl Tool for WebScrapper {
+impl ToolFunction for WebScrapper {
+    type Input = String;
+    type Result = String;
+
     fn name(&self) -> String {
         String::from("Web Scraper")
     }
@@ -31,9 +23,15 @@ impl Tool for WebScrapper {
 		Input should be a working url.",
         )
     }
-    async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
-        let input = input.as_str().ok_or("Invalid input")?;
-        match scrape_url(input).await {
+
+    async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error>> {
+        input
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or("Invalid input".into())
+    }
+    async fn run(&self, input: String) -> Result<String, Box<dyn Error>> {
+        match scrape_url(&input).await {
             Ok(content) => Ok(content),
             Err(e) => Ok(format!("Error scraping {}: {}\n", input, e)),
         }
@@ -42,7 +40,7 @@ impl Tool for WebScrapper {
 
 impl From<WebScrapper> for Arc<dyn Tool> {
     fn from(val: WebScrapper) -> Self {
-        Arc::new(val)
+        Arc::new(ToolWrapper::new(val))
     }
 }
 
@@ -97,13 +95,13 @@ mod tests {
             .create();
 
         // Instantiate your WebScrapper
-        let scraper = WebScrapper::new();
+        let scraper: Arc<dyn Tool> = WebScrapper::default().into();
 
         // Use the server URL for scraping
         let url = server.url();
 
         // Call the WebScrapper with the mocked URL
-        let result = scraper.call(&Value::String(url)).await;
+        let result = scraper.call(Value::String(url)).await;
 
         // Assert that the result is Ok and contains "Hello World"
         assert!(result.is_ok());

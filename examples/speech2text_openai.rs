@@ -21,7 +21,7 @@ async fn main() {
     // .with_storage(XStorage {});
 
     let path = openai
-        .call(&Value::String("Hi, My name is Luis".to_string()))
+        .call(Value::String("Hi, My name is Luis".to_string()))
         .await
         .unwrap();
     println!("Path: {}", path);
