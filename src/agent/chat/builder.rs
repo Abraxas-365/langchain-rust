@@ -56,7 +56,7 @@ impl<'a, 'b> ConversationalAgentBuilder<'a, 'b> {
         let initial_prompt = self.initial_prompt.unwrap_or(DEFAULT_INITIAL_PROMPT);
 
         let prompt = ConversationalAgent::create_prompt(system_prompt, initial_prompt, &tools)?;
-        let default_options = ChainCallOptions::default().with_max_tokens(1000);
+        let default_options = ChainCallOptions::default();
         let chain = Box::new(
             LLMChainBuilder::new()
                 .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
