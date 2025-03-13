@@ -33,9 +33,7 @@ The following is the description of the tools available to you:
 pub const DEFAULT_INITIAL_PROMPT: &str = r#"
 Current Task: {{input}}
 
-Begin! This is VERY important to you, use the tools available and give your best Final Answer, your job depends on it!
-
-<think>"#;
+Begin! This is VERY important to you, use the tools available and give your best Final Answer, your job depends on it!"#;
 
 pub const INVALID_FORMAT_ERROR: &str =
     r#"Invalid format, remember the instructions regarding the format and try again"#;
