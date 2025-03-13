@@ -6,6 +6,7 @@ use serde_json::Value;
 use crate::{agent::AgentError, schemas::agent::AgentEvent};
 
 pub fn parse_agent_output(text: &str) -> Result<AgentEvent, AgentError> {
+    println!("agent_event: {}", text);
     let agent_event = parse_json_markdown(text)
         .or_else(|| parse_partial_json(text, false))
         .ok_or(AgentError::InvalidFormatError)?;
@@ -77,7 +78,6 @@ mod tests {
         let test_output = indoc! {r#"
             ```json
             {
-                "thought": "I'm thinking...",
                 "action": "generate",
                 "action_input": "Hello, world!"
             }
@@ -90,7 +90,6 @@ mod tests {
             AgentEvent::Action(agent_actions) => {
                 assert!(agent_actions.len() == 1);
                 let agent_action = &agent_actions[0];
-                assert_eq!(agent_action.thought, Some("I'm thinking...".to_string()));
                 assert_eq!(agent_action.action, "generate");
                 assert_eq!(agent_action.action_input, "Hello, world!");
             }
@@ -100,7 +99,6 @@ mod tests {
         let test_final_answer = indoc! {r#"
             ```json
             {
-                "thought": "I now can give a great answer",
                 "final_answer": "Goodbye, world!"
             }
             ```

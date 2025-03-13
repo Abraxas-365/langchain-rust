@@ -67,13 +67,11 @@ impl ConversationalAgent {
             .map(|(action, result)| match action {
                 Some(action) => format!(
                     indoc! {"
-                        Thought: {}
                         Action: {}
                         Action input: {}
                         Result:
                         {}
                     "},
-                    action.thought.as_deref().unwrap_or("None"),
                     &action.action,
                     &action.action_input,
                     result

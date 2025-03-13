@@ -90,14 +90,10 @@ where
         }
 
         loop {
-            let agent_event = self
-                .agent
-                .plan(&steps, input_variables)
-                .await
-                .map_err(|e| ChainError::AgentError(format!("Error in agent planning: {}", e)))?;
+            let agent_event = self.agent.plan(&steps, input_variables).await;
 
             match agent_event {
-                AgentEvent::Action(actions) => {
+                Ok(AgentEvent::Action(actions)) => {
                     for action in actions {
                         if let Some(max_iterations) = self.max_iterations {
                             if steps.len() >= max_iterations {
@@ -113,12 +109,10 @@ where
                         log::debug!(
                             indoc! {"
                                 Agent Action:
-                                  thought: {}
                                   action: {}
                                   input:
                                     {:#?}
                             "},
-                            action.thought.as_deref().unwrap_or("None"),
                             &action.action,
                             &action.action_input
                         );
@@ -170,7 +164,7 @@ where
                         steps.push((Some(action), observation));
                     }
                 }
-                AgentEvent::Finish(final_answer) => {
+                Ok(AgentEvent::Finish(final_answer)) => {
                     if let Some(memory) = &self.memory {
                         let mut memory = memory.lock().await;
 
@@ -199,6 +193,9 @@ where
                         generation: final_answer,
                         ..GenerateResult::default()
                     });
+                }
+                Err(e) => {
+                    steps.push((None, e.to_string()));
                 }
             }
         }

@@ -145,7 +145,7 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
                     });
                 }
 
-                if let Some(choice) = &response.choices.first() {
+                if let Some(choice) = response.choices.first() {
                     generate_result.generation = choice.message.content.clone().unwrap_or_default();
                     if let Some(function) = &choice.message.tool_calls {
                         if !function.is_empty() {
@@ -174,6 +174,8 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
         let client = Client::with_config(self.config.clone());
         let request = self.generate_request(messages, true)?;
+
+        println!("{:#?}", request);
 
         let original_stream = client.chat().create_stream(request).await?;
 

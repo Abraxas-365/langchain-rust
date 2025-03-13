@@ -55,16 +55,12 @@ impl OpenAiToolAgent {
             .map(|(action, result)| match action {
                 Some(action) => format!(
                     indoc! {"
-                        Thought: {}
                         Action: {}
                         Action input: {}
                         Result:
                         {}
                     "},
-                    action.thought.as_deref().unwrap_or("None"),
-                    &action.action,
-                    &action.action_input,
-                    result
+                    &action.action, &action.action_input, result
                 ),
                 None => result.to_string(),
             })
@@ -88,7 +84,6 @@ impl Agent<PlainPromptArgs> for OpenAiToolAgent {
                 let mut actions: Vec<AgentAction> = Vec::new();
                 for tool in tools {
                     actions.push(AgentAction {
-                        thought: None,
                         action: tool.function.name.clone(),
                         action_input: Value::String(tool.function.arguments),
                     });

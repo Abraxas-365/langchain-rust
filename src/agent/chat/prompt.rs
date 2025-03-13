@@ -13,7 +13,6 @@ You MUST either use a tool (use one at time) OR give your best final answer not 
 
 ```json
 {
-    "thought": string, \\ You should always think about what to do
     "action": string, \\ The action to take, should be one of [{{tool_names}}]
     "action_input": object \\ The input to the action, object enclosed in curly braces
 }
@@ -24,7 +23,6 @@ Once you know the final answer, you must give it using the following format:
 
 ```json
 {
-    "thought": "I now can give a great answer",
     "final_answer": string \\ Your final answer must be the great and the most complete as possible, it must be outcome described,
 }
 ```
@@ -42,14 +40,12 @@ pub const INVALID_FORMAT_ERROR: &str = r#"Invalid format, remember the instructi
 // ----------------------------
 // To use a tool, you MUST use the following format:
 // {
-//     "thought": string, \\ You should always think about what to do
 //     "action": string, \\ The action to take, should be one of [{{tool_names}}]
 //     "action_input": object \\ The input to the action, object enclosed in curly braces
 // }
 
 // Or if you know your final answer, you must give it using the following format:
 // {
-//     "thought": "I now can give a great answer",
 //     "final_answer": string \\ Your final answer must be the great and the most complete as possible, it must be outcome described,
 // }
 // "#;

@@ -4,7 +4,6 @@ use tokio::sync::mpsc;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AgentAction {
-    pub thought: Option<String>,
     pub action: String,
     pub action_input: Value,
 }
@@ -22,13 +21,11 @@ impl<'de> Deserialize<'de> for AgentEvent {
     {
         let mut value = Value::deserialize(deserializer)?;
 
-        if let (Some(Value::String(thought)), Some(Value::String(action)), Some(action_input)) = (
-            value.get_mut("thought").map(|v| v.take()),
+        if let (Some(Value::String(action)), Some(action_input)) = (
             value.get_mut("action").map(|v| v.take()),
             value.get_mut("action_input").map(|v| v.take()),
         ) {
             Ok(AgentEvent::Action(vec![AgentAction {
-                thought: Some(thought),
                 action,
                 action_input,
             }]))
