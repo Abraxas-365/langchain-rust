@@ -6,7 +6,6 @@ use serde_json::Value;
 use crate::{agent::AgentError, schemas::agent::AgentEvent};
 
 pub fn parse_agent_output(text: &str) -> Result<AgentEvent, AgentError> {
-    println!("agent_event: {}", text);
     let agent_event = parse_json_markdown(text)
         .or_else(|| parse_partial_json(text, false))
         .ok_or(AgentError::InvalidFormatError)?;

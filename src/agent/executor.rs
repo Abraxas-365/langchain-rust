@@ -122,6 +122,7 @@ where
                             Some(tool) => tool,
                             None => {
                                 log::debug!("Tool {} not found", action.action);
+
                                 steps.push((
                                     None,
                                     format!("{} is not a tool, You MUST use a tool OR give your best final answer.", action.action),
@@ -195,6 +196,7 @@ where
                     });
                 }
                 Err(e) => {
+                    log::debug!("Error: {}", e);
                     steps.push((None, e.to_string()));
                 }
             }

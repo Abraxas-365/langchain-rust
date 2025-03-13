@@ -72,9 +72,7 @@ impl ConversationalAgent {
                         Result:
                         {}
                     "},
-                    &action.action,
-                    &action.action_input,
-                    result
+                    &action.action, &action.action_input, result
                 ),
                 None => result.to_string(),
             })
@@ -93,6 +91,7 @@ impl Agent<PlainPromptArgs> for ConversationalAgent {
         let scratchpad = self.construct_scratchpad(intermediate_steps);
         inputs.insert("agent_scratchpad".to_string(), scratchpad);
         let output = self.chain.call(inputs).await?.generation;
+        log::trace!("Agent output: {}", output);
         let parsed_output = parse_agent_output(&output)?;
         Ok(parsed_output)
     }
