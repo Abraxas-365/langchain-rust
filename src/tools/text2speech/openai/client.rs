@@ -84,7 +84,7 @@ impl<C: Config + Send + Sync> Tool for Text2SpeechOpenAI<C> {
             .to_string()
     }
 
-    async fn call(&self, input: Value) -> Result<String, Box<dyn Error>> {
+    async fn call(&self, input: Value) -> Result<String, Box<dyn Error + Send + Sync>> {
         let input = input.as_str().ok_or("Invalid input")?;
         let client = Client::new();
         let response_format: SpeechResponseFormat = self.response_format;

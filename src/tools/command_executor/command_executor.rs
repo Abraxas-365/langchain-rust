@@ -100,14 +100,14 @@ impl ToolFunction for CommandExecutor {
         })
     }
 
-    async fn parse_input(&self, input: Value) -> Result<Vec<CommandInput>, Box<dyn Error>> {
+    async fn parse_input(&self, input: Value) -> Result<Vec<CommandInput>, Box<dyn Error + Send + Sync>> {
         serde_json::from_value::<CommandsInput>(input.clone())
             .map(|commands| commands.commands)
             .or_else(|_| serde_json::from_value::<Vec<CommandInput>>(input))
             .map_err(|e| e.into())
     }
 
-    async fn run(&self, input: Vec<CommandInput>) -> Result<String, Box<dyn Error>> {
+    async fn run(&self, input: Vec<CommandInput>) -> Result<String, Box<dyn Error + Send + Sync>> {
         let commands = input;
         let mut result = String::new();
 

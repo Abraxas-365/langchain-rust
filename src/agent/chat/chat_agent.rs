@@ -135,10 +135,10 @@ mod tests {
         fn description(&self) -> String {
             "Usefull to make calculations".to_string()
         }
-        async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error>> {
+        async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error + Send + Sync>> {
             Ok(input.to_string())
         }
-        async fn run(&self, _input: String) -> Result<i128, Box<dyn Error>> {
+        async fn run(&self, _input: String) -> Result<i128, Box<dyn Error + Send + Sync>> {
             Ok(25)
         }
     }

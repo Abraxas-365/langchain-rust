@@ -30,11 +30,11 @@ impl ToolFunction for Date {
         "Useful when you need to get the date, input should be an empty object ({})".to_string()
     }
 
-    async fn parse_input(&self, _input: Value) -> Result<(), Box<dyn Error>> {
+    async fn parse_input(&self, _input: Value) -> Result<(), Box<dyn Error + Send + Sync>> {
         Ok(())
     }
 
-    async fn run(&self, _input: ()) -> Result<String, Box<dyn Error>> {
+    async fn run(&self, _input: ()) -> Result<String, Box<dyn Error + Send + Sync>> {
         Ok("25 of november of 2025".to_string())
     }
 }

@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use async_trait::async_trait;
 use langchain_rust::tools::{SpeechStorage, Text2SpeechOpenAI, Tool};
 use serde_json::Value;
@@ -9,7 +11,7 @@ struct XStorage {}
 
 #[async_trait]
 impl SpeechStorage for XStorage {
-    async fn save(&self, path: &str, _data: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    async fn save(&self, path: &str, _data: &[u8]) -> Result<String, Box<dyn Error + Send + Sync>> {
         println!("Saving to: {}", path);
         Ok(path.to_string())
     }

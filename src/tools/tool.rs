@@ -48,7 +48,7 @@ pub trait Tool: Send + Sync {
     ///
     /// This function utilizes `parse_input` to parse the input and then calls `run`.
     /// Its used by the Agent
-    async fn call(&self, input: Value) -> Result<String, Box<dyn Error>>;
+    async fn call(&self, input: Value) -> Result<String, Box<dyn Error + Send + Sync>>;
 
     fn usage_limit(&self) -> Option<usize> {
         None
@@ -85,13 +85,13 @@ pub trait ToolFunction: Default + Send + Sync + Into<Arc<dyn Tool>> {
     ///     self.simple_search(input).await
     /// }
     /// ```
-    async fn run(&self, input: Self::Input) -> Result<Self::Result, Box<dyn Error>>;
+    async fn run(&self, input: Self::Input) -> Result<Self::Result, Box<dyn Error + Send + Sync>>;
 
     /// Parses the input string, which could be a JSON value or a raw string, depending on the LLM model.
     ///
     /// Implement this function to extract the parameters needed for your tool. If a simple
     /// string is sufficient, the default implementation can be used.
-    async fn parse_input(&self, input: Value) -> Result<Self::Input, Box<dyn Error>>;
+    async fn parse_input(&self, input: Value) -> Result<Self::Input, Box<dyn Error + Send + Sync>>;
 
     fn usage_limit(&self) -> Option<usize> {
         None
@@ -139,7 +139,7 @@ where
         self.tool.parameters()
     }
 
-    async fn call(&self, input: Value) -> Result<String, Box<dyn Error>> {
+    async fn call(&self, input: Value) -> Result<String, Box<dyn Error + Send + Sync>> {
         let input = self.tool.parse_input(input).await?;
         let result = self.tool.run(input).await?;
 

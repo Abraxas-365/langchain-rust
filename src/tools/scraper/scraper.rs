@@ -24,13 +24,13 @@ impl ToolFunction for WebScrapper {
         )
     }
 
-    async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error>> {
+    async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error + Send + Sync>> {
         input
             .as_str()
             .map(|s| s.to_string())
             .ok_or("Invalid input".into())
     }
-    async fn run(&self, input: String) -> Result<String, Box<dyn Error>> {
+    async fn run(&self, input: String) -> Result<String, Box<dyn Error + Send + Sync>> {
         match scrape_url(&input).await {
             Ok(content) => Ok(content),
             Err(e) => Ok(format!("Error scraping {}: {}\n", input, e)),

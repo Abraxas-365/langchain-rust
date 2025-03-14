@@ -131,14 +131,14 @@ impl ToolFunction for Wolfram {
         )
     }
 
-    async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error>> {
+    async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error + Send + Sync>> {
         input
             .as_str()
             .map(|s| s.to_string())
             .ok_or("Invalid input".into())
     }
 
-    async fn run(&self, input: String) -> Result<String, Box<dyn Error>> {
+    async fn run(&self, input: String) -> Result<String, Box<dyn Error + Send + Sync>> {
         let mut url = format!(
             "https://api.wolframalpha.com/v2/query?appid={}&input={}&output=JSON&format=plaintext&podstate=Result__Step-by-step+solution",
             &self.app_id,

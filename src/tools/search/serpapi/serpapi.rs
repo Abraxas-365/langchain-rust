@@ -45,7 +45,7 @@ impl SerpApi {
         self
     }
 
-    pub async fn simple_search(&self, query: &str) -> Result<String, Box<dyn Error>> {
+    pub async fn simple_search(&self, query: &str) -> Result<String, Box<dyn Error + Send + Sync>> {
         let mut url = format!(
             "https://serpapi.com/search.json?q={}&api_key={}",
             query, self.api_key
@@ -95,7 +95,7 @@ fn get_answer_box(result: &Value) -> String {
     "".to_string()
 }
 
-fn process_response(res: &Value) -> Result<String, Box<dyn Error>> {
+fn process_response(res: &Value) -> Result<String, Box<dyn Error + Send + Sync>> {
     if !get_answer_box(res).is_empty() {
         return Ok(get_answer_box(res));
     }
@@ -164,14 +164,14 @@ impl ToolFunction for SerpApi {
         )
     }
 
-    async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error>> {
+    async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error + Send + Sync>> {
         input
             .as_str()
             .map(|s| s.to_string())
             .ok_or("Invalid input".into())
     }
 
-    async fn run(&self, input: String) -> Result<String, Box<dyn Error>> {
+    async fn run(&self, input: String) -> Result<String, Box<dyn Error + Send + Sync>> {
         self.simple_search(&input).await
     }
 }

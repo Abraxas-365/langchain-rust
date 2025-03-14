@@ -28,7 +28,7 @@ impl DuckDuckGoSearch {
         self
     }
 
-    pub async fn search(&self, query: &str) -> Result<FormattedVec<Article>, Box<dyn Error>> {
+    pub async fn search(&self, query: &str) -> Result<FormattedVec<Article>, Box<dyn Error + Send + Sync>> {
         let mut url = Url::parse(&self.url)?;
 
         let query_params = HashMap::from([("q", query)]);
@@ -115,7 +115,7 @@ impl ToolFunction for DuckDuckGoSearch {
         })
     }
 
-    async fn parse_input(&self, input: Value) -> Result<Self::Input, Box<dyn Error>> {
+    async fn parse_input(&self, input: Value) -> Result<Self::Input, Box<dyn Error + Send + Sync>> {
         let result = serde_json::from_value::<DuckDuckGoSearchInput>(input.clone())
             .or_else(|_| serde_json::from_value::<String>(input).map(DuckDuckGoSearchInput::new))?;
 
@@ -125,7 +125,7 @@ impl ToolFunction for DuckDuckGoSearch {
     async fn run(
         &self,
         input: DuckDuckGoSearchInput,
-    ) -> Result<FormattedVec<Article>, Box<dyn Error>> {
+    ) -> Result<FormattedVec<Article>, Box<dyn Error + Send + Sync>> {
         self.search(&input.query).await
     }
 }
