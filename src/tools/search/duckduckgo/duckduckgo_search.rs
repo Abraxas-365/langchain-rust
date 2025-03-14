@@ -9,10 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use url::Url;
 
-use crate::tools::{
-    search::search_result::{SearchResult, SearchResults},
-    Tool, ToolFunction, ToolWrapper,
-};
+use crate::tools::{search::article::Article, FormattedVec, Tool, ToolFunction, ToolWrapper};
 
 #[derive(Deserialize, Serialize, new)]
 pub struct DuckDuckGoSearchInput {
@@ -31,7 +28,7 @@ impl DuckDuckGoSearch {
         self
     }
 
-    pub async fn search(&self, query: &str) -> Result<SearchResults, Box<dyn Error>> {
+    pub async fn search(&self, query: &str) -> Result<FormattedVec<Article>, Box<dyn Error>> {
         let mut url = Url::parse(&self.url)?;
 
         let query_params = HashMap::from([("q", query)]);
@@ -70,12 +67,12 @@ impl DuckDuckGoSearch {
                     .collect::<Vec<_>>()
                     .join("");
 
-                Some(SearchResult::new(title, link, snippet))
+                Some(Article::new(title, link, snippet))
             })
             .take(self.max_results)
             .collect::<Vec<_>>();
 
-        Ok(SearchResults::new(results))
+        Ok(FormattedVec(results))
     }
 }
 
@@ -85,7 +82,7 @@ Useful for when you need to answer questions about current events."#;
 #[async_trait]
 impl ToolFunction for DuckDuckGoSearch {
     type Input = DuckDuckGoSearchInput;
-    type Result = SearchResults;
+    type Result = FormattedVec<Article>;
 
     fn name(&self) -> String {
         "DuckDuckGo Search".to_string()
@@ -125,7 +122,10 @@ impl ToolFunction for DuckDuckGoSearch {
         Ok(result)
     }
 
-    async fn run(&self, input: DuckDuckGoSearchInput) -> Result<SearchResults, Box<dyn Error>> {
+    async fn run(
+        &self,
+        input: DuckDuckGoSearchInput,
+    ) -> Result<FormattedVec<Article>, Box<dyn Error>> {
         self.search(&input.query).await
     }
 }

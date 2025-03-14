@@ -1,25 +1,13 @@
 use std::fmt::Display;
 
-use derive_new::new;
-use serde::{Deserialize, Serialize};
+pub struct FormattedVec<T>(pub Vec<T>)
+where
+    T: Display;
 
-#[derive(Debug, Clone, Serialize, Deserialize, new)]
-pub struct SearchResult {
-    title: String,
-    link: String,
-    snippet: String,
-}
-
-impl Display for SearchResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}]({})\n{}", self.title, self.link, self.snippet)
-    }
-}
-
-#[derive(new)]
-pub struct SearchResults(Vec<SearchResult>);
-
-impl Display for SearchResults {
+impl<T> Display for FormattedVec<T>
+where
+    T: Display,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if !self.0.is_empty() {
             write!(
