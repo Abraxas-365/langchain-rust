@@ -112,4 +112,41 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_complicated_output() {
+        let test_final_answer = indoc! {r#"
+            ```json
+            {
+                "final_answer": [
+                    {
+                        "ingredients": "Universal ANI threshold validation: Established a 95–96% ANI species boundary across 6,787 prokaryotic genomes spanning 22 phyla, supported by empirical evidence of a distinct ANI distribution valley at this value, forming a universal genomic criterion supplanting DDH."
+                    },
+                    {
+                        "ingredients": "Optimized 16S threshold via cross-validation: Derived a 98.65% 16S rRNA sequence similarity threshold for species demarcation through F-score optimization and logarithmic transformation of ANI-16S correlations, enabling alignment with genomic standards and resolving prior linear model discrepancies."
+                    },
+                    {
+                        "ingredients": "Statistical methodology innovation: Introduced a precision-recall framework combining F-score maximization and cross-validation to objectively determine genomic-phenotypic species boundaries, overcoming subjective reliance on historical DDH values."
+                    },
+                    {
+                        "ingredients": "Taxonomic reclassification mandates: Identified inconsistent species classifications (e.g., Bacillus anthracis-cereus, Shigella-E. coli) requiring genomic reevaluation as ANI exceeds 96% despite existing taxonomic separation, necessitating revised microbial nomenclature."
+                    },
+                    {
+                        "ingredients": "16S taxonomic limitations: Revealed intra-species 16S rRNA heterogeneity (up to 9.8% in Halomicrobium) and genus-specific sequencing artifacts undermining solely marker-based classification, necessitating multi-genome analyses for accuracy."
+                    },
+                    {
+                        "ingredients": "Genomic data quality criteria: Established stringent quality controls (>7× 16S sequencing depth, full-genome completion) to eliminate errors from low-coverage drafts (e.g., Neisseria meningitidis exceptions), ensuring valid ANI calculations."
+                    },
+                    {
+                        "ingredients": "Bimodal ANI distribution proof: Empirically validated species boundary via bimodal ANI histograms displaying consistent inter-species valley at 95–96%, confirming universal lineage-independent validity across prokaryotes."
+                    }
+                ]
+            }
+            ```
+        "#};
+
+        let result = parse_agent_output(test_final_answer);
+
+        println!("{:#?}", result);
+    }
 }

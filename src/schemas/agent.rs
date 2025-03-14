@@ -29,10 +29,11 @@ impl<'de> Deserialize<'de> for AgentEvent {
                 action,
                 action_input,
             }]))
-        } else if let Some(Value::String(final_answer)) =
-            value.get_mut("final_answer").map(|v| v.take())
-        {
-            Ok(AgentEvent::Finish(final_answer))
+        } else if let Some(final_answer) = value.get_mut("final_answer").map(|v| v.take()) {
+            match final_answer {
+                Value::String(value) => return Ok(AgentEvent::Finish(value)),
+                v => Ok(AgentEvent::Finish(v.to_string())),
+            }
         } else {
             log::error!("Invalid output from LLM:\n{:#?}", value);
             Err(serde::de::Error::custom("Invalid format")) // TODO: provide clearer error message
