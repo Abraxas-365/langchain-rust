@@ -13,10 +13,10 @@ pub struct CallOptions {
     pub streaming_func: Option<Arc<Mutex<StreamingFunc>>>,
     pub top_k: Option<usize>,
     pub top_p: Option<f32>,
-    pub seed: Option<usize>,
+    pub seed: Option<i64>,
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
-    pub n: Option<usize>,
+    pub n: Option<u8>,
     pub repetition_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
@@ -102,7 +102,7 @@ impl CallOptions {
         self
     }
 
-    pub fn with_seed(mut self, seed: usize) -> Self {
+    pub fn with_seed(mut self, seed: i64) -> Self {
         self.seed = Some(seed);
         self
     }
@@ -117,7 +117,7 @@ impl CallOptions {
         self
     }
 
-    pub fn with_n(mut self, n: usize) -> Self {
+    pub fn with_n(mut self, n: u8) -> Self {
         self.n = Some(n);
         self
     }

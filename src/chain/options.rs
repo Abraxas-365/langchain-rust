@@ -9,7 +9,7 @@ pub struct ChainCallOptions {
     pub streaming_func: Option<Box<StreamingFunc>>,
     pub top_k: Option<usize>,
     pub top_p: Option<f32>,
-    pub seed: Option<usize>,
+    pub seed: Option<i64>,
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
     pub repetition_penalty: Option<f32>,
@@ -57,12 +57,6 @@ impl ChainCallOptions {
         if let Some(seed) = options.seed {
             llm_option = llm_option.with_seed(seed);
         }
-        if let Some(min_length) = options.min_length {
-            llm_option = llm_option.with_min_length(min_length);
-        }
-        if let Some(max_length) = options.max_length {
-            llm_option = llm_option.with_max_length(max_length);
-        }
         if let Some(repetition_penalty) = options.repetition_penalty {
             llm_option = llm_option.with_repetition_penalty(repetition_penalty);
         }
@@ -108,7 +102,7 @@ impl ChainCallOptions {
         self
     }
 
-    pub fn with_seed(mut self, seed: usize) -> Self {
+    pub fn with_seed(mut self, seed: i64) -> Self {
         self.seed = Some(seed);
         self
     }

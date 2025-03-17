@@ -293,6 +293,25 @@ impl<C: Config> OpenAI<C> {
         if let Some(temperature) = self.options.temperature {
             request_builder.temperature(temperature);
         }
+        if let Some(top_p) = self.options.top_p {
+            request_builder.top_p(top_p);
+        }
+
+        if let Some(seed) = self.options.seed {
+            request_builder.seed(seed);
+        }
+
+        if let Some(n) = self.options.n {
+            request_builder.n(n);
+        }
+
+        if let Some(frequency_penalty) = self.options.frequency_penalty {
+            request_builder.frequency_penalty(frequency_penalty);
+        }
+        if let Some(presense_penalty) = self.options.presence_penalty {
+            request_builder.presence_penalty(presense_penalty);
+        }
+
         if let Some(max_tokens) = self.options.max_tokens {
             request_builder.max_tokens(max_tokens);
         }
