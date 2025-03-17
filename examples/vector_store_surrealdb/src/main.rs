@@ -65,7 +65,7 @@ async fn main() {
     let doc4 = Document::new("Capital of France is Paris.");
 
     store
-        .add_documents(&vec![doc1, doc2, doc3, doc4], &VecStoreOptions::default())
+        .add_documents(&vec![doc1, doc2, doc3, doc4], None)
         .await
         .unwrap();
 
