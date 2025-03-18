@@ -22,6 +22,8 @@ pub struct OpenAIRequest {
     pub messages: Vec<ChatCompletionRequestMessage>,
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_options: Option<ChatCompletionStreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub candidate_count: Option<usize>,
@@ -68,6 +70,7 @@ impl OpenAIRequest {
         Ok(OpenAIRequest {
             messages,
             model: model.into(),
+            stream: Some(call_options.stream_option.is_some()),
             stream_options: call_options.stream_option.as_ref().map(|stream| {
                 ChatCompletionStreamOptions {
                     include_usage: stream.include_usage,
