@@ -28,7 +28,8 @@ where
 {
     agent: A,
     max_iterations: Option<usize>,
-    break_if_error: bool,
+    max_consecutive_fails: Option<usize>,
+    break_if_tool_error: bool,
     pub memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     phantom: PhantomData<T>,
 }
@@ -42,7 +43,8 @@ where
         Self {
             agent,
             max_iterations: Some(10),
-            break_if_error: false,
+            max_consecutive_fails: Some(3),
+            break_if_tool_error: false,
             memory: None,
             phantom: PhantomData,
         }
@@ -58,8 +60,8 @@ where
         self
     }
 
-    pub fn with_break_if_error(mut self, break_if_error: bool) -> Self {
-        self.break_if_error = break_if_error;
+    pub fn with_break_if_tool_error(mut self, break_if_tool_error: bool) -> Self {
+        self.break_if_tool_error = break_if_tool_error;
         self
     }
 }
@@ -73,6 +75,8 @@ where
     async fn call(&self, input_variables: &mut T) -> Result<GenerateResult, ChainError> {
         let mut steps: Vec<(Option<AgentAction>, String)> = Vec::new();
         let mut use_counts: HashMap<String, usize> = HashMap::new();
+        let mut consecutive_fails: usize = 0;
+
         if let Some(memory) = &self.memory {
             let memory: tokio::sync::MutexGuard<'_, dyn BaseMemory> = memory.lock().await;
             input_variables.insert("chat_history".to_string(), memory.to_string());
@@ -89,21 +93,33 @@ where
             })?;
         }
 
-        loop {
+        'step: loop {
+            if self
+                .max_consecutive_fails
+                .is_some_and(|max_consecutive_fails| consecutive_fails >= max_consecutive_fails)
+            {
+                log::error!(
+                    "Too many consecutive fails ({} in a row), aborting",
+                    consecutive_fails
+                );
+                return Err(ChainError::AgentError("Too many consecutive fails".into()));
+            }
+
             let agent_event = self.agent.plan(&steps, input_variables).await;
 
             match agent_event {
                 Ok(AgentEvent::Action(actions)) => {
                     for action in actions {
-                        if let Some(max_iterations) = self.max_iterations {
-                            if steps.len() >= max_iterations {
-                                log::debug!(
-                                    "Max iteration ({}) reached, forcing final answer",
-                                    max_iterations
-                                );
-                                steps.push((None, FORCE_FINAL_ANSWER.to_string()));
-                                continue;
-                            }
+                        if self
+                            .max_iterations
+                            .is_some_and(|max_iterations| steps.len() >= max_iterations)
+                        {
+                            log::warn!(
+                                "Max iteration ({}) reached, forcing final answer",
+                                self.max_iterations.unwrap()
+                            );
+                            steps.push((None, FORCE_FINAL_ANSWER.to_string()));
+                            continue 'step;
                         }
 
                         log::debug!(
@@ -118,44 +134,51 @@ where
                         );
 
                         let tool_name = action.action.to_lowercase().replace(" ", "_");
-                        let tool = match self.agent.get_tool(&tool_name) {
-                            Some(tool) => tool,
-                            None => {
-                                log::debug!("Tool {} not found", action.action);
-
-                                steps.push((
-                                    None,
-                                    format!("{} is not a tool, You MUST use a tool OR give your best final answer.", action.action),
-                                ));
-                                continue;
-                            }
+                        let Some(tool) = self.agent.get_tool(&tool_name) else {
+                            consecutive_fails += 1;
+                            log::warn!(
+                                "Agent tried to use nonexistent tool {}, retrying ({} consecutive fails)",
+                                action.action,
+                                consecutive_fails
+                            );
+                            continue 'step;
                         };
 
                         if let Some(usage_limit) = tool.usage_limit() {
                             let count = use_counts.entry(tool_name.clone()).or_insert(0);
                             *count += 1;
                             if *count > usage_limit {
-                                log::debug!(
-                                    "Tool {} usage limit ({}) reached, preventing further use",
+                                consecutive_fails += 1;
+                                log::warn!(
+                                    "Agent repeatedly using tool {} (usage limit: {}), preventing further use ({} consecutive fails)",
                                     action.action,
-                                    usage_limit
+                                    usage_limit,
+                                    consecutive_fails
                                 );
-                                steps.push((None, format!("You have used the tool {} too many times, you CANNOT and MUST NOT use it again", action.action)));
-                                continue;
+                                continue 'step;
                             }
                         }
 
-                        let observation_result = tool.call(action.action_input.clone()).await;
-
-                        let observation = match observation_result {
-                            Ok(result) => result,
-                            Err(err) => {
-                                if self.break_if_error {
+                        let observation = match tool.call(action.action_input.clone()).await {
+                            Ok(observation) => observation,
+                            Err(e) => {
+                                log::error!(
+                                    "Tool '{}' encountered an error: {}",
+                                    &action.action,
+                                    e
+                                );
+                                if self.break_if_tool_error {
                                     return Err(ChainError::AgentError(
-                                        AgentError::ToolError(err.to_string()).to_string(),
+                                        AgentError::ToolError(e.to_string()).to_string(),
                                     ));
                                 } else {
-                                    format!("The tool return the following error: {}", err)
+                                    format!(
+                                        indoc! {"
+                                            Tool call failed: {}
+                                            If the error doesn't make sense to you, it means that the tool is broken. DO NOT use this tool again.
+                                        "},
+                                        e
+                                    )
                                 }
                             }
                         };
@@ -163,6 +186,7 @@ where
                         log::debug!("Tool {} result:\n{}", &action.action, &observation);
 
                         steps.push((Some(action), observation));
+                        consecutive_fails = 0;
                     }
                 }
                 Ok(AgentEvent::Finish(final_answer)) => {
@@ -196,8 +220,8 @@ where
                     });
                 }
                 Err(e) => {
-                    log::debug!("Error: {}", e);
-                    steps.push((None, e.to_string()));
+                    consecutive_fails += 1;
+                    log::warn!("Error: {} ({} consecutive fails)", e, consecutive_fails);
                 }
             }
         }
