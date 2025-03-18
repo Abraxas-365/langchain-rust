@@ -85,7 +85,11 @@ impl Default for OpenAI<OpenAIConfig> {
 #[async_trait]
 impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
     async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, LLMError> {
-        let client = Client::with_config(self.config.clone());
+        let client = Client::with_config(self.config.clone()).with_http_client(
+            reqwest::Client::builder()
+                .connection_verbose(true)
+                .build()?,
+        );
         let request = OpenAIRequest::build_request(&self.model, prompt, &self.options)?;
         match &self.options.stream_option {
             Some(stream_option) => {
