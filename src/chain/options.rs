@@ -1,6 +1,9 @@
 use futures::Future;
 
-use crate::{language_models::options::CallOptions, schemas::StreamingFunc};
+use crate::{
+    language_models::options::{CallOptions, StreamOption},
+    schemas::StreamingFunc,
+};
 
 pub struct ChainCallOptions {
     pub max_tokens: Option<u32>,
@@ -62,7 +65,8 @@ impl ChainCallOptions {
         }
 
         if let Some(streaming_func) = options.streaming_func {
-            llm_option = llm_option.with_streaming_func(streaming_func)
+            llm_option =
+                llm_option.with_stream(StreamOption::default().with_streaming_func(streaming_func))
         }
         llm_option
     }

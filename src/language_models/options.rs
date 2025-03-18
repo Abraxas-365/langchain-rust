@@ -4,13 +4,41 @@ use tokio::sync::Mutex;
 
 use crate::schemas::{FunctionCallBehavior, FunctionDefinition, ResponseFormat, StreamingFunc};
 
+#[derive(Clone, Default)]
+pub struct StreamOption {
+    pub streaming_func: Option<Arc<Mutex<StreamingFunc>>>,
+    pub include_usage: bool,
+}
+
+impl StreamOption {
+    //TODO:Check if this should be a &str instead of a String
+    pub fn with_streaming_func<F, Fut>(mut self, mut func: F) -> Self
+    where
+        F: FnMut(String) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<(), ()>> + Send + 'static,
+    {
+        let func = Arc::new(Mutex::new(
+            move |s: String| -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send>> {
+                Box::pin(func(s))
+            },
+        ));
+
+        self.streaming_func = Some(func);
+        self
+    }
+
+    pub fn with_stream_usage(mut self, stream_usage: bool) -> Self {
+        self.include_usage = stream_usage;
+        self
+    }
+}
+
 #[derive(Clone)]
 pub struct CallOptions {
     pub candidate_count: Option<usize>,
     pub max_tokens: Option<u32>,
     pub temperature: Option<f32>,
     pub stop_words: Option<Vec<String>>,
-    pub streaming_func: Option<Arc<Mutex<StreamingFunc>>>,
     pub top_k: Option<usize>,
     pub top_p: Option<f32>,
     pub seed: Option<i64>,
@@ -23,7 +51,7 @@ pub struct CallOptions {
     pub functions: Option<Vec<FunctionDefinition>>,
     pub function_call_behavior: Option<FunctionCallBehavior>,
     pub response_format: Option<ResponseFormat>,
-    pub stream_usage: Option<bool>,
+    pub stream_option: Option<StreamOption>,
 }
 
 impl Default for CallOptions {
@@ -38,7 +66,6 @@ impl CallOptions {
             max_tokens: None,
             temperature: None,
             stop_words: None,
-            streaming_func: None,
             top_k: None,
             top_p: None,
             seed: None,
@@ -51,7 +78,7 @@ impl CallOptions {
             functions: None,
             function_call_behavior: None,
             response_format: None,
-            stream_usage: None,
+            stream_option: None,
         }
     }
 
@@ -73,22 +100,6 @@ impl CallOptions {
 
     pub fn with_stop_words(mut self, stop_words: Vec<String>) -> Self {
         self.stop_words = Some(stop_words);
-        self
-    }
-
-    //TODO:Check if this should be a &str instead of a String
-    pub fn with_streaming_func<F, Fut>(mut self, mut func: F) -> Self
-    where
-        F: FnMut(String) -> Fut + Send + 'static,
-        Fut: Future<Output = Result<(), ()>> + Send + 'static,
-    {
-        let func = Arc::new(Mutex::new(
-            move |s: String| -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send>> {
-                Box::pin(func(s))
-            },
-        ));
-
-        self.streaming_func = Some(func);
         self
     }
 
@@ -152,8 +163,8 @@ impl CallOptions {
         self
     }
 
-    pub fn with_stream_usage(mut self, stream_usage: bool) -> Self {
-        self.stream_usage = Some(stream_usage);
+    pub fn with_stream(mut self, stream: StreamOption) -> Self {
+        self.stream_option = Some(stream);
         self
     }
 
@@ -181,7 +192,6 @@ impl CallOptions {
         self.response_format = incoming_options
             .response_format
             .or(self.response_format.clone());
-        self.stream_usage = incoming_options.stream_usage.or(self.stream_usage);
 
         // For `Vec<String>`, merge if both are Some; prefer incoming if only incoming is Some
         if let Some(mut new_stop_words) = incoming_options.stop_words {
@@ -201,10 +211,8 @@ impl CallOptions {
             }
         }
 
-        // `streaming_func` requires a judgment call on how you want to handle merging.
-        // Here, the incoming option simply replaces the existing one if it's Some.
-        self.streaming_func = incoming_options
-            .streaming_func
-            .or_else(|| self.streaming_func.clone());
+        if let Some(stream) = incoming_options.stream_option {
+            self.stream_option = Some(stream);
+        }
     }
 }

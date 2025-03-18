@@ -77,7 +77,7 @@ impl Claude {
 
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         let client = Client::new();
-        let is_stream = self.options.streaming_func.is_some();
+        let is_stream = self.options.stream_option.is_some();
 
         let payload = self.build_payload(messages, is_stream);
         let res = client
@@ -150,18 +150,17 @@ impl Claude {
 #[async_trait]
 impl LLM for Claude {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
-        match &self.options.streaming_func {
-            Some(func) => {
+        match &self.options.stream_option {
+            Some(stream_option) => {
                 let mut complete_response = String::new();
                 let mut stream = self.stream(messages).await?;
                 while let Some(data) = stream.next().await {
-                    match data {
-                        Ok(value) => {
-                            let mut func = func.lock().await;
-                            complete_response.push_str(&value.content);
-                            let _ = func(value.content).await;
-                        }
-                        Err(e) => return Err(e),
+                    let data = data?;
+                    complete_response.push_str(&data.content);
+
+                    if let Some(streaming_func) = &stream_option.streaming_func {
+                        let mut func = streaming_func.lock().await;
+                        let _ = func(data.content).await;
                     }
                 }
                 let generate_result = GenerateResult {
