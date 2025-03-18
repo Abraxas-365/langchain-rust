@@ -71,6 +71,11 @@ impl From<&Message> for ChatMessage {
         ChatMessage {
             content: message.content.clone(),
             images,
+            tool_calls: message
+                .tool_calls
+                .as_ref()
+                .map(|tool_calls| serde_json::from_value(tool_calls.clone()).unwrap())
+                .unwrap(), // TODO: Fix this
             role: message.message_type.clone().into(),
         }
     }
@@ -100,10 +105,7 @@ impl LLM for Ollama {
         let request = self.generate_request(messages);
         let result = self.client.send_chat_messages(request).await?;
 
-        let generation = match result.message {
-            Some(message) => message.content,
-            None => return Err(OllamaError::from("No message in response".to_string()).into()),
-        };
+        let generation = result.message.content;
 
         let tokens = result.final_data.map(|final_data| {
             let prompt_tokens = final_data.prompt_eval_count as u32;
@@ -125,19 +127,15 @@ impl LLM for Ollama {
         let request = self.generate_request(messages);
         let result = self.client.send_chat_messages_stream(request).await?;
 
-        let stream = result.map(|data| match data {
-            Ok(data) => match data.message.clone() {
-                Some(message) => Ok(StreamData::new(
-                    serde_json::to_value(data).unwrap_or_default(),
+        let stream = result.map(|data| {
+            data.map(|data| {
+                StreamData::new(
+                    serde_json::to_value(&data).unwrap_or_default(),
                     None,
-                    message.content,
-                )),
-                // TODO: no need to return error, see https://github.com/Abraxas-365/langchain-rust/issues/140
-                None => Err(LLMError::ContentNotFound(
-                    "No message in response".to_string(),
-                )),
-            },
-            Err(_) => Err(OllamaError::from("Stream error".to_string()).into()),
+                    data.message.content,
+                )
+            })
+            .map_err(|_| OllamaError::Other("Stream error".to_string()).into())
         });
 
         Ok(Box::pin(stream))
