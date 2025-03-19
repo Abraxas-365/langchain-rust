@@ -9,9 +9,7 @@ use crate::{
     language_models::llm::LLM,
     memory::SimpleMemory,
     output_parsers::OutputParser,
-    prompt::{FormatPrompter, HumanMessagePromptTemplate, PlainPromptArgs},
-    schemas::memory::BaseMemory,
-    template_fstring,
+    schemas::{memory::BaseMemory, MessageTemplate, MessageType, PromptTemplate},
 };
 
 use super::{prompt::DEFAULT_TEMPLATE, ConversationalChain, DEFAULT_INPUT_VARIABLE};
@@ -23,7 +21,7 @@ pub struct ConversationalChainBuilder {
     output_key: Option<String>,
     output_parser: Option<Box<dyn OutputParser>>,
     input_key: Option<String>,
-    prompt: Option<Box<dyn FormatPrompter<PlainPromptArgs>>>,
+    prompt: Option<PromptTemplate>,
 }
 
 impl ConversationalChainBuilder {
@@ -70,7 +68,7 @@ impl ConversationalChainBuilder {
     }
 
     ///If you want to add a custom prompt,keep in mind which variables are obligatory.
-    pub fn prompt<P: Into<Box<dyn FormatPrompter<PlainPromptArgs>>>>(mut self, prompt: P) -> Self {
+    pub fn prompt<P: Into<PromptTemplate>>(mut self, prompt: P) -> Self {
         self.prompt = Some(prompt.into());
         self
     }
@@ -81,11 +79,9 @@ impl ConversationalChainBuilder {
             .ok_or_else(|| ChainError::MissingObject("LLM must be set".into()))?;
         let prompt = match self.prompt {
             Some(prompt) => prompt,
-            None => Box::new(HumanMessagePromptTemplate::new(template_fstring!(
-                DEFAULT_TEMPLATE,
-                "history",
-                "input"
-            ))),
+            None => {
+                MessageTemplate::from_fstring(MessageType::HumanMessage, DEFAULT_TEMPLATE).into()
+            }
         };
         let llm_chain = {
             let mut builder = LLMChainBuilder::new()

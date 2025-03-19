@@ -1,13 +1,10 @@
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
-    fmt_message, fmt_placeholder, fmt_template,
+    input_variables,
     language_models::llm::LLM,
     llm::openai::OpenAI,
-    message_formatter, plain_prompt_args,
-    prompt::{FormatPrompter, HumanMessagePromptTemplate, PlainPromptArgs},
-    prompt_args,
-    schemas::messages::Message,
-    template_fstring,
+    prompt_template,
+    schemas::{messages::Message, MessageOrTemplate, MessageTemplate, MessageType},
 };
 
 #[tokio::main]
@@ -22,19 +19,18 @@ async fn main() {
     println!("{}", resp);
 
     // We can also guide it's response with a prompt template. Prompt templates are used to convert raw user input to a better input to the LLM.
-    let prompt = message_formatter![
-        fmt_message!(Message::new_system_message(
+    let prompt = prompt_template![
+        Message::new(
+            MessageType::SystemMessage,
             "You are world class technical documentation writer."
-        )),
-        fmt_template!(HumanMessagePromptTemplate::new(template_fstring!(
-            "{input}", "input"
-        )))
+        ),
+        MessageTemplate::from_fstring(MessageType::HumanMessage, "{input}",)
     ];
 
     //We can now combine these into a simple LLM chain:
 
     let chain = LLMChainBuilder::new()
-        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
+        .prompt(prompt)
         .llm(open_ai.clone())
         .build()
         .unwrap();
@@ -42,7 +38,7 @@ async fn main() {
     //We can now invoke it and ask the same question. It still won't know the answer, but it should respond in a more proper tone for a technical writer!
 
     match chain
-        .invoke(&mut plain_prompt_args! {
+        .invoke(&mut input_variables! {
             "input" => "Quien es el escritor de 20000 millas de viaje submarino",
         })
         .await
@@ -55,36 +51,35 @@ async fn main() {
 
     //If you want to prompt to have a list of messages you could use the `fmt_placeholder` macro
 
-    let prompt = message_formatter![
-        fmt_message!(Message::new_system_message(
+    let prompt = prompt_template![
+        Message::new(
+            MessageType::SystemMessage,
             "You are world class technical documentation writer."
-        )),
-        fmt_placeholder!("history"),
-        fmt_template!(HumanMessagePromptTemplate::new(template_fstring!(
-            "{input}", "input"
-        ))),
+        ),
+        MessageOrTemplate::Placeholder("history".into()),
+        MessageTemplate::from_fstring(MessageType::HumanMessage, "{input}",)
     ];
 
-    let chain = LLMChainBuilder::new()
-        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
-        .llm(open_ai)
-        .build()
-        .unwrap();
-    match chain
-        .invoke(&mut PlainPromptArgs::new(
-            prompt_args! {
-            "input" => "Who is the writer of 20,000 Leagues Under the Sea, and what is my name?",
-            },
-            vec![
-                Message::new_human_message("My name is: luis"),
-                Message::new_ai_message("Hi luis"),
-            ],
-        ))
-        .await
-    {
-        Ok(result) => {
-            println!("Result: {:?}", result);
-        }
-        Err(e) => panic!("Error invoking LLMChain: {:?}", e),
-    }
+    // let chain = LLMChainBuilder::new()
+    //     .prompt(prompt)
+    //     .llm(open_ai)
+    //     .build()
+    //     .unwrap();
+    // match chain
+    //     .invoke(
+    //         &mut input_variables! {
+    //         "input" => "Who is the writer of 20,000 Leagues Under the Sea, and what is my name?",
+    //         },
+    //         vec![
+    //             Message::new_human_message("My name is: luis"),
+    //             Message::new_ai_message("Hi luis"),
+    //         ],
+    //     )
+    //     .await
+    // {
+    //     Ok(result) => {
+    //         println!("Result: {:?}", result);
+    //     }
+    //     Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+    // }
 }

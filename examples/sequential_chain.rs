@@ -1,33 +1,33 @@
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
+    input_variables,
     llm::openai::{OpenAI, OpenAIModel},
-    plain_prompt_args,
-    prompt::{FormatPrompter, HumanMessagePromptTemplate},
-    sequential_chain, template_jinja2,
+    schemas::{MessageTemplate, MessageType},
+    sequential_chain,
 };
 use std::io::{self, Write}; // Include io Library for terminal input
 
 #[tokio::main]
 async fn main() {
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
-    let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
+    let prompt = MessageTemplate::from_jinja2(
+        MessageType::HumanMessage,
         "Dame un nombre creativo para una tienda que vende: {{producto}}",
-        "producto"
-    ));
+    );
 
     let get_name_chain = LLMChainBuilder::new()
-        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
+        .prompt(prompt)
         .llm(llm.clone())
         .output_key("name")
         .build()
         .unwrap();
 
-    let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
+    let prompt = MessageTemplate::from_jinja2(
+        MessageType::HumanMessage,
         "Dame un slogan para el siguiente nombre: {{name}}",
-        "name"
-    ));
+    );
     let get_slogan_chain = LLMChainBuilder::new()
-        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
+        .prompt(prompt)
         .llm(llm.clone())
         .output_key("slogan")
         .build()
@@ -43,7 +43,7 @@ async fn main() {
 
     let product = product.trim();
     let output = sequential_chain
-        .execute(&mut plain_prompt_args! {
+        .execute(&mut input_variables! {
             "producto" => product
         })
         .await

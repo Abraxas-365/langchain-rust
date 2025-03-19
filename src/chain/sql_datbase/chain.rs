@@ -1,14 +1,13 @@
-use std::pin::Pin;
+use std::{collections::HashSet, pin::Pin};
 
 use async_trait::async_trait;
 use futures::Stream;
 
 use crate::{
     chain::{chain_trait::Chain, llm_chain::LLMChain, ChainError},
+    input_variables,
     language_models::{GenerateResult, TokenUsage},
-    plain_prompt_args,
-    prompt::{PlainPromptArgs, PromptArgs},
-    schemas::StreamData,
+    schemas::{InputVariables, StreamData},
     tools::SQLDatabase,
 };
 
@@ -32,8 +31,8 @@ impl SqlChainPromptBuilder {
         self
     }
 
-    pub fn build(self) -> PlainPromptArgs {
-        plain_prompt_args! {
+    pub fn build(self) -> InputVariables {
+        input_variables! {
           SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY  => self.query,
         }
     }
@@ -46,7 +45,7 @@ impl Default for SqlChainPromptBuilder {
 }
 
 pub struct SQLDatabaseChain {
-    pub(crate) llmchain: LLMChain<PlainPromptArgs>,
+    pub(crate) llmchain: LLMChain,
     pub(crate) top_k: usize,
     pub(crate) database: SQLDatabase,
 }
@@ -94,8 +93,8 @@ impl SQLDatabaseChain {
 
     async fn call_builder_chains(
         &self,
-        input_variables: &PlainPromptArgs,
-    ) -> Result<(PlainPromptArgs, Option<TokenUsage>), ChainError> {
+        input_variables: &InputVariables,
+    ) -> Result<(InputVariables, Option<TokenUsage>), ChainError> {
         let mut token_usage: Option<TokenUsage> = None;
 
         let query = input_variables
@@ -118,7 +117,7 @@ impl SQLDatabaseChain {
             .await
             .map_err(|e| ChainError::DatabaseError(e.to_string()))?;
 
-        let mut llm_inputs = plain_prompt_args! {
+        let mut llm_inputs = input_variables! {
             "input"=> query.clone() + QUERY_PREFIX_WITH,
             "top_k"=> self.top_k,
             "dialect"=> self.database.dialect().to_string(),
@@ -150,14 +149,14 @@ impl SQLDatabaseChain {
 }
 
 #[async_trait]
-impl Chain<PlainPromptArgs> for SQLDatabaseChain {
-    fn get_input_keys(&self) -> Vec<String> {
+impl Chain for SQLDatabaseChain {
+    fn get_input_keys(&self) -> HashSet<String> {
         self.llmchain.get_input_keys()
     }
 
     async fn call(
         &self,
-        input_variables: &mut PlainPromptArgs,
+        input_variables: &mut InputVariables,
     ) -> Result<GenerateResult, ChainError> {
         let (mut llm_inputs, mut token_usage) = self.call_builder_chains(input_variables).await?;
         let output = self.llmchain.call(&mut llm_inputs).await?;
@@ -186,14 +185,14 @@ impl Chain<PlainPromptArgs> for SQLDatabaseChain {
         })
     }
 
-    async fn invoke(&self, input_variables: &mut PlainPromptArgs) -> Result<String, ChainError> {
+    async fn invoke(&self, input_variables: &mut InputVariables) -> Result<String, ChainError> {
         let result = self.call(input_variables).await?;
         Ok(result.generation)
     }
 
     async fn stream(
         &self,
-        input_variables: &mut PlainPromptArgs,
+        input_variables: &mut InputVariables,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let (mut llm_inputs, _) = self.call_builder_chains(input_variables).await?;
@@ -201,7 +200,7 @@ impl Chain<PlainPromptArgs> for SQLDatabaseChain {
         self.llmchain.stream(&mut llm_inputs).await
     }
 
-    fn log_messages(&self, inputs: &PlainPromptArgs) -> Result<(), Box<dyn std::error::Error>> {
+    fn log_messages(&self, inputs: &InputVariables) -> Result<(), Box<dyn std::error::Error>> {
         self.llmchain.log_messages(inputs)
     }
 }

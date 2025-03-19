@@ -1,22 +1,21 @@
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
+    input_variables,
     llm::openai::{OpenAI, OpenAIModel},
-    plain_prompt_args,
-    prompt::{FormatPrompter, HumanMessagePromptTemplate},
-    template_jinja2,
+    schemas::{MessageTemplate, MessageType},
 };
 use std::io::{self, Write}; // Include io Library for terminal input
 
 #[tokio::main]
 async fn main() {
-    let prompt = HumanMessagePromptTemplate::new(template_jinja2!(
+    let prompt = MessageTemplate::from_jinja2(
+        MessageType::HumanMessage,
         "Give me a creative name for a store that sells: {{producto}}",
-        "producto"
-    ));
+    );
 
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt35);
     let chain = LLMChainBuilder::new()
-        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
+        .prompt(prompt)
         .llm(llm)
         .build()
         .unwrap();
@@ -30,7 +29,7 @@ async fn main() {
     let product = product.trim();
 
     let output = chain
-        .invoke(&mut plain_prompt_args! { "producto" => product }) // Use product input here
+        .invoke(&mut input_variables! { "producto" => product }) // Use product input here
         .await
         .unwrap();
 

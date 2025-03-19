@@ -268,7 +268,10 @@ mod tests {
         let cloudia = Claude::new();
 
         let res = cloudia
-            .generate(&[Message::new_human_message("Hi, how are you doing")])
+            .generate(&[Message::new(
+                MessageType::HumanMessage,
+                "Hi, how are you doing",
+            )])
             .await
             .unwrap();
 
@@ -280,7 +283,10 @@ mod tests {
     async fn test_cloudia_stream() {
         let cloudia = Claude::new();
         let mut stream = cloudia
-            .stream(&[Message::new_human_message("Hi, how are you doing")])
+            .stream(&[Message::new(
+                MessageType::HumanMessage,
+                "Hi, how are you doing",
+            )])
             .await
             .unwrap();
         while let Some(data) = stream.next().await {

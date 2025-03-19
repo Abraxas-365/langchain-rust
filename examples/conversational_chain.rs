@@ -3,11 +3,10 @@ use std::io::{stdout, Write};
 use futures_util::StreamExt;
 use langchain_rust::{
     chain::{builder::ConversationalChainBuilder, Chain},
+    input_variables,
     llm::openai::{OpenAI, OpenAIModel},
-    memory::SimpleMemory,
-    plain_prompt_args,
-    // schemas::Message,
-    // template_fstring,
+    memory::SimpleMemory, // schemas::Message,
+                          // template_fstring,
 };
 
 #[tokio::main]
@@ -38,7 +37,7 @@ async fn main() {
         .build()
         .expect("Error building ConversationalChain");
 
-    let mut input_variables = plain_prompt_args! {
+    let mut input_variables = input_variables! {
         "input" => "Im from Peru",
     };
 
@@ -56,7 +55,7 @@ async fn main() {
         }
     }
 
-    let mut input_variables = plain_prompt_args! {
+    let mut input_variables = input_variables! {
         "input" => "Which are the typical dish",
     };
     match chain.invoke(&mut input_variables).await {

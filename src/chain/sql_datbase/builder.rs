@@ -1,11 +1,9 @@
 use crate::{
-    chain::{
-        llm_chain::LLMChainBuilder, options::ChainCallOptions, ChainError, DEFAULT_OUTPUT_KEY,
-    },
+    chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions, ChainError},
     language_models::llm::LLM,
     output_parsers::OutputParser,
-    prompt::{FormatPrompter, HumanMessagePromptTemplate, PlainPromptArgs},
-    template_jinja2,
+    prompt_template,
+    schemas::{MessageTemplate, MessageType, PromptTemplate},
     tools::SQLDatabase,
 };
 
@@ -77,20 +75,13 @@ impl SQLDatabaseChainBuilder {
             .database
             .ok_or_else(|| ChainError::MissingObject("Database must be set".into()))?;
 
-        let prompt: Box<dyn FormatPrompter<PlainPromptArgs>> =
-            Box::new(HumanMessagePromptTemplate::new(template_jinja2!(
-                format!("{}{}", DEFAULT_SQLTEMPLATE, DEFAULT_SQLSUFFIX),
-                "dialect",
-                "table_info",
-                "top_k",
-                "input"
-            )));
+        let prompt: PromptTemplate = prompt_template![MessageTemplate::from_jinja2(
+            MessageType::HumanMessage,
+            &format!("{}{}", DEFAULT_SQLTEMPLATE, DEFAULT_SQLSUFFIX),
+        )];
 
         let llm_chain = {
-            let mut builder = LLMChainBuilder::new()
-                .prompt(prompt)
-                .output_key(self.output_key.unwrap_or_else(|| DEFAULT_OUTPUT_KEY.into()))
-                .llm(llm);
+            let mut builder = LLMChainBuilder::new().prompt(prompt).llm(llm);
 
             let mut options = self.options.unwrap_or_default();
             options = options.with_stop_words(vec![STOP_WORD.to_string()]);

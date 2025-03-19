@@ -4,43 +4,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 
-/// Enum `MessageType` represents the type of a message.
-/// It can be a `SystemMessage`, `AIMessage`, or `HumanMessage`.
-///
-/// # Usage
-/// ```rust,ignore
-/// let system_message_type = MessageType::SystemMessage;
-/// let ai_message_type = MessageType::AIMessage;
-/// let human_message_type = MessageType::HumanMessage;
-/// ```
-#[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
-pub enum MessageType {
-    #[serde(rename = "system")]
-    SystemMessage,
-    #[serde(rename = "ai")]
-    AIMessage,
-    #[serde(rename = "human")]
-    HumanMessage,
-    #[serde(rename = "tool")]
-    ToolMessage,
-}
-
-impl Default for MessageType {
-    fn default() -> Self {
-        Self::SystemMessage
-    }
-}
-
-impl fmt::Display for MessageType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MessageType::SystemMessage => write!(f, "system"),
-            MessageType::AIMessage => write!(f, "ai"),
-            MessageType::HumanMessage => write!(f, "human"),
-            MessageType::ToolMessage => write!(f, "tool"),
-        }
-    }
-}
+use super::MessageType;
 
 /// Struct `ImageContent` represents an image provided to an LLM.
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
@@ -76,43 +40,10 @@ pub struct Message {
 }
 
 impl Message {
-    // Function to create a new Human message with a generic type that implements Display
-    pub fn new_human_message<T: std::fmt::Display>(content: T) -> Self {
+    pub fn new(message_type: MessageType, content: &str) -> Self {
         Message {
-            content: content.to_string(),
-            message_type: MessageType::HumanMessage,
-            id: None,
-            tool_calls: None,
-            images: None,
-        }
-    }
-
-    pub fn new_human_message_with_images<T: Into<ImageContent>>(images: Vec<T>) -> Self {
-        Message {
-            content: String::default(),
-            message_type: MessageType::HumanMessage,
-            id: None,
-            tool_calls: None,
-            images: Some(images.into_iter().map(|i| i.into()).collect()),
-        }
-    }
-
-    // Function to create a new System message with a generic type that implements Display
-    pub fn new_system_message<T: std::fmt::Display>(content: T) -> Self {
-        Message {
-            content: content.to_string(),
-            message_type: MessageType::SystemMessage,
-            id: None,
-            tool_calls: None,
-            images: None,
-        }
-    }
-
-    // Function to create a new AI message with a generic type that implements Display
-    pub fn new_ai_message<T: std::fmt::Display>(content: T) -> Self {
-        Message {
-            content: content.to_string(),
-            message_type: MessageType::AIMessage,
+            content: content.to_owned(),
+            message_type,
             id: None,
             tool_calls: None,
             images: None,
@@ -141,6 +72,11 @@ impl Message {
     /// * `tool_calls` - A `serde_json::Value` representing the tool call configurations.
     pub fn with_tool_calls(mut self, tool_calls: Value) -> Self {
         self.tool_calls = Some(tool_calls);
+        self
+    }
+
+    pub fn with_images<T: Into<ImageContent>>(mut self, images: Vec<T>) -> Self {
+        self.images = Some(images.into_iter().map(|i| i.into()).collect());
         self
     }
 

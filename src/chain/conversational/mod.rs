@@ -1,4 +1,4 @@
-use std::{error::Error, pin::Pin, sync::Arc};
+use std::{collections::HashSet, error::Error, pin::Pin, sync::Arc};
 
 use async_stream::stream;
 use async_trait::async_trait;
@@ -7,10 +7,9 @@ use futures_util::{pin_mut, StreamExt};
 use tokio::sync::Mutex;
 
 use crate::{
+    input_variables,
     language_models::GenerateResult,
-    plain_prompt_args,
-    prompt::{PlainPromptArgs, PromptArgs},
-    schemas::{memory::BaseMemory, messages::Message, StreamData},
+    schemas::{memory::BaseMemory, messages::Message, InputVariables, MessageType, StreamData},
 };
 
 const DEFAULT_INPUT_VARIABLE: &str = "input";
@@ -37,8 +36,8 @@ impl ConversationalChainPromptBuilder {
         self
     }
 
-    pub fn build(self) -> PlainPromptArgs {
-        plain_prompt_args! {
+    pub fn build(self) -> InputVariables {
+        input_variables! {
             DEFAULT_INPUT_VARIABLE => self.input,
         }
     }
@@ -51,7 +50,7 @@ impl Default for ConversationalChainPromptBuilder {
 }
 
 pub struct ConversationalChain {
-    llm: LLMChain<PlainPromptArgs>,
+    llm: LLMChain,
     input_key: String,
     pub memory: Arc<Mutex<dyn BaseMemory>>,
 }
@@ -64,15 +63,15 @@ impl ConversationalChain {
 }
 
 #[async_trait]
-impl Chain<PlainPromptArgs> for ConversationalChain {
+impl Chain for ConversationalChain {
     async fn call(
         &self,
-        input_variables: &mut PlainPromptArgs,
+        input_variables: &mut InputVariables,
     ) -> Result<GenerateResult, ChainError> {
         let input_variable = &input_variables
             .get(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
-        let human_message = Message::new_human_message(input_variable);
+        let human_message = Message::new(MessageType::HumanMessage, input_variable);
 
         let history = {
             let memory = self.memory.lock().await;
@@ -83,19 +82,19 @@ impl Chain<PlainPromptArgs> for ConversationalChain {
 
         let mut memory = self.memory.lock().await;
         memory.add_message(human_message);
-        memory.add_message(Message::new_ai_message(&result.generation));
+        memory.add_message(Message::new(MessageType::AIMessage, &result.generation));
         Ok(result)
     }
 
     async fn stream(
         &self,
-        input_variables: &mut PlainPromptArgs,
+        input_variables: &mut InputVariables,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let input_variable = &input_variables
             .get(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
-        let human_message = Message::new_human_message(input_variable);
+        let human_message = Message::new(MessageType::HumanMessage, input_variable);
 
         let history = {
             let memory = self.memory.lock().await;
@@ -129,17 +128,17 @@ impl Chain<PlainPromptArgs> for ConversationalChain {
 
             let mut memory = memory.lock().await;
             memory.add_message(human_message);
-            memory.add_message(Message::new_ai_message(&complete_ai_message.lock().await));
+            memory.add_message(Message::new(MessageType::AIMessage, &complete_ai_message.lock().await));
         };
 
         Ok(Box::pin(output_stream))
     }
 
-    fn get_input_keys(&self) -> Vec<String> {
-        vec![self.input_key.clone()]
+    fn get_input_keys(&self) -> HashSet<String> {
+        [self.input_key.clone()].into_iter().collect()
     }
 
-    fn log_messages(&self, inputs: &PlainPromptArgs) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &InputVariables) -> Result<(), Box<dyn Error>> {
         self.llm.log_messages(inputs)
     }
 }
@@ -148,8 +147,8 @@ impl Chain<PlainPromptArgs> for ConversationalChain {
 mod tests {
     use crate::{
         chain::conversational::builder::ConversationalChainBuilder,
+        input_variables,
         llm::openai::{OpenAI, OpenAIModel},
-        plain_prompt_args,
     };
 
     use super::*;
@@ -163,7 +162,7 @@ mod tests {
             .build()
             .expect("Error building ConversationalChain");
 
-        let mut input_variables_first = plain_prompt_args! {
+        let mut input_variables_first = input_variables! {
             "input" => "Soy de peru",
         };
         // Execute the first `chain.invoke` and assert that it should succeed
@@ -179,7 +178,7 @@ mod tests {
             println!("Result: {:?}", result);
         }
 
-        let mut input_variables_second = plain_prompt_args! {
+        let mut input_variables_second = input_variables! {
             "input" => "Cuales son platos tipicos de mi pais",
         };
         // Execute the second `chain.invoke` and assert that it should succeed

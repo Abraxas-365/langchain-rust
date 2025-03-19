@@ -6,17 +6,17 @@ use indoc::indoc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::prompt_template;
+use crate::schemas::{
+    InputVariables, Message, MessageOrTemplate, MessageTemplate, MessageType, PromptTemplate,
+};
 use crate::{
     agent::{Agent, AgentError},
     chain::Chain,
-    fmt_message, fmt_placeholder, fmt_template, message_formatter,
-    prompt::{HumanMessagePromptTemplate, MessageFormatterStruct, PlainPromptArgs, PromptArgs},
     schemas::{
         agent::{AgentAction, AgentEvent},
-        messages::Message,
         FunctionCallResponse,
     },
-    template_jinja2,
     tools::Tool,
 };
 
@@ -28,22 +28,20 @@ pub struct LogTools {
 }
 
 pub struct OpenAiToolAgent {
-    pub(crate) chain: Box<dyn Chain<PlainPromptArgs>>,
+    pub(crate) chain: Box<dyn Chain>,
     pub(crate) tools: HashMap<String, Arc<dyn Tool>>,
 }
 
 impl OpenAiToolAgent {
-    pub fn create_prompt(
-        prefix: &str,
-    ) -> Result<MessageFormatterStruct<PlainPromptArgs>, AgentError> {
-        let prompt = message_formatter![
-            fmt_message!(Message::new_system_message(prefix)),
-            fmt_placeholder!("chat_history"),
-            fmt_template!(HumanMessagePromptTemplate::new(template_jinja2!(
-                "{{input}}",
-                "input"
-            ))),
-            fmt_placeholder!("agent_scratchpad")
+    pub fn create_prompt(prefix: &str) -> Result<PromptTemplate, AgentError> {
+        let prompt = prompt_template![
+            MessageOrTemplate::Message(Message::new(MessageType::SystemMessage, prefix)),
+            MessageOrTemplate::Placeholder("chat_history".into()),
+            MessageOrTemplate::Template(MessageTemplate::from_jinja2(
+                MessageType::HumanMessage,
+                "{{input}}"
+            )),
+            MessageOrTemplate::Placeholder("chat_history".into())
         ];
 
         Ok(prompt)
@@ -70,11 +68,11 @@ impl OpenAiToolAgent {
 }
 
 #[async_trait]
-impl Agent<PlainPromptArgs> for OpenAiToolAgent {
+impl Agent for OpenAiToolAgent {
     async fn plan(
         &self,
         intermediate_steps: &[(Option<AgentAction>, String)],
-        inputs: &mut PlainPromptArgs,
+        inputs: &mut InputVariables,
     ) -> Result<AgentEvent, AgentError> {
         let scratchpad = self.construct_scratchpad(intermediate_steps);
         inputs.insert("agent_scratchpad".to_string(), scratchpad);
@@ -98,7 +96,7 @@ impl Agent<PlainPromptArgs> for OpenAiToolAgent {
         self.tools.get(tool_name).cloned()
     }
 
-    fn log_messages(&self, inputs: &PlainPromptArgs) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &InputVariables) -> Result<(), Box<dyn Error>> {
         self.chain.log_messages(inputs)
     }
 }

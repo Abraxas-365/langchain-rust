@@ -1,16 +1,12 @@
-use std::{collections::HashMap, pin::Pin};
+use std::{collections::HashSet, pin::Pin};
 
 use async_trait::async_trait;
-use derive_new::new;
 use futures::Stream;
 
 use crate::{
-    chain::{
-        load_stuff_qa, options::ChainCallOptions, Chain, ChainError, LLMChain, StuffQAPromptBuilder,
-    },
+    chain::{load_stuff_qa, options::ChainCallOptions, Chain, ChainError, LLMChain},
     language_models::{llm::LLM, GenerateResult},
-    prompt::PromptArgs,
-    schemas::{Document, StreamData},
+    schemas::{InputVariables, StreamData},
 };
 
 const COMBINE_DOCUMENTS_DEFAULT_INPUT_KEY: &str = "input_documents";
@@ -18,56 +14,21 @@ const COMBINE_DOCUMENTS_DEFAULT_OUTPUT_KEY: &str = "text";
 const COMBINE_DOCUMENTS_DEFAULT_DOCUMENT_VARIABLE_NAME: &str = "context";
 const STUFF_DOCUMENTS_DEFAULT_SEPARATOR: &str = "\n\n";
 
-#[derive(Clone, new)]
-pub struct StuffQA {
-    documents: Vec<Document>,
-    input: HashMap<String, String>,
-}
-
-impl PromptArgs for StuffQA {
-    fn contains_key(&self, key: &str) -> bool {
-        self.input.contains_key(key)
-    }
-
-    fn get(&self, key: &str) -> Option<&str> {
-        self.input.get(key).map(|s| s.as_str())
-    }
-    fn insert(&mut self, key: String, value: String) -> Option<String> {
-        self.input.insert(key.to_string(), value.to_string())
-    }
-
-    fn iter(&self) -> Box<dyn Iterator<Item = (&String, &String)> + '_> {
-        Box::new(self.input.iter())
-    }
-}
-
 pub struct StuffDocument {
-    llm_chain: LLMChain<StuffQA>,
+    llm_chain: LLMChain,
     input_key: String,
     document_variable_name: String,
     separator: String,
 }
 
 impl StuffDocument {
-    pub fn new(llm_chain: LLMChain<StuffQA>) -> Self {
+    pub fn new(llm_chain: LLMChain) -> Self {
         Self {
             llm_chain,
             input_key: COMBINE_DOCUMENTS_DEFAULT_INPUT_KEY.to_string(),
             document_variable_name: COMBINE_DOCUMENTS_DEFAULT_DOCUMENT_VARIABLE_NAME.to_string(),
             separator: STUFF_DOCUMENTS_DEFAULT_SEPARATOR.to_string(),
         }
-    }
-
-    fn join_documents(&self, docs: Vec<Document>) -> String {
-        docs.iter()
-            .map(|doc| doc.page_content.clone())
-            .collect::<Vec<_>>()
-            .join(&self.separator)
-    }
-
-    ///Inly use thi if you use the deafult prompt
-    pub fn qa_prompt_builder(&self) -> StuffQAPromptBuilder {
-        StuffQAPromptBuilder::new()
     }
 
     /// load_stuff_qa return an instance of StuffDocument
@@ -138,54 +99,27 @@ impl StuffDocument {
 }
 
 #[async_trait]
-impl Chain<StuffQA> for StuffDocument {
-    async fn call(&self, input_variables: &mut StuffQA) -> Result<GenerateResult, ChainError> {
-        let docs = input_variables
-            .get(&self.input_key)
-            .ok_or_else(|| ChainError::MissingInputVariable(self.input_key.clone()))?;
-
-        let documents: Vec<Document> =
-            serde_json::from_str(docs).map_err(|e| ChainError::IncorrectInputVariable {
-                source: e,
-                expected_type: "Vec<Document>".to_string(),
-            })?;
-
-        input_variables.insert(
-            self.document_variable_name.clone(),
-            self.join_documents(documents),
-        );
-
+impl Chain for StuffDocument {
+    async fn call(
+        &self,
+        input_variables: &mut InputVariables,
+    ) -> Result<GenerateResult, ChainError> {
         self.llm_chain.call(input_variables).await
     }
 
     async fn stream(
         &self,
-        input_variables: &mut StuffQA,
+        input_variables: &mut InputVariables,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
-        let docs = input_variables
-            .get(&self.input_key)
-            .ok_or_else(|| ChainError::MissingInputVariable(self.input_key.clone()))?;
-
-        let documents: Vec<Document> =
-            serde_json::from_str(docs).map_err(|e| ChainError::IncorrectInputVariable {
-                source: e,
-                expected_type: "Vec<Document>".to_string(),
-            })?;
-
-        input_variables.insert(
-            self.document_variable_name.clone(),
-            self.join_documents(documents),
-        );
-
         self.llm_chain.stream(input_variables).await
     }
 
-    fn get_input_keys(&self) -> Vec<String> {
-        vec![self.input_key.clone()]
+    fn get_input_keys(&self) -> HashSet<String> {
+        [self.input_key.clone()].into_iter().collect()
     }
 
-    fn log_messages(&self, inputs: &StuffQA) -> Result<(), Box<dyn std::error::Error>> {
+    fn log_messages(&self, inputs: &InputVariables) -> Result<(), Box<dyn std::error::Error>> {
         self.llm_chain.log_messages(inputs)
     }
 }

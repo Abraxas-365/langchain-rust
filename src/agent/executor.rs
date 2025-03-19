@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -8,11 +7,10 @@ use indoc::indoc;
 use tokio::sync::Mutex;
 
 use super::{agent::Agent, AgentError};
-use crate::schemas::Message;
+use crate::schemas::{InputVariables, Message};
 use crate::{
     chain::{chain_trait::Chain, ChainError},
     language_models::GenerateResult,
-    prompt::PromptArgs,
     schemas::{
         agent::{AgentAction, AgentEvent},
         memory::BaseMemory,
@@ -21,23 +19,20 @@ use crate::{
 
 const FORCE_FINAL_ANSWER: &str = "Now it's time you MUST give your absolute best final answer. You'll ignore all previous instructions, stop using any tools, and just return your absolute BEST Final answer.";
 
-pub struct AgentExecutor<A, T>
+pub struct AgentExecutor<A>
 where
-    A: Agent<T>,
-    T: PromptArgs,
+    A: Agent,
 {
     agent: A,
     max_iterations: Option<usize>,
     max_consecutive_fails: Option<usize>,
     break_if_tool_error: bool,
     pub memory: Option<Arc<Mutex<dyn BaseMemory>>>,
-    phantom: PhantomData<T>,
 }
 
-impl<A, T> AgentExecutor<A, T>
+impl<A> AgentExecutor<A>
 where
-    A: Agent<T>,
-    T: PromptArgs,
+    A: Agent,
 {
     pub fn from_agent(agent: A) -> Self {
         Self {
@@ -46,7 +41,6 @@ where
             max_consecutive_fails: Some(3),
             break_if_tool_error: false,
             memory: None,
-            phantom: PhantomData,
         }
     }
 
@@ -67,12 +61,14 @@ where
 }
 
 #[async_trait]
-impl<A, T> Chain<T> for AgentExecutor<A, T>
+impl<A> Chain for AgentExecutor<A>
 where
-    A: Agent<T> + Send + Sync,
-    T: PromptArgs,
+    A: Agent + Send + Sync,
 {
-    async fn call(&self, input_variables: &mut T) -> Result<GenerateResult, ChainError> {
+    async fn call(
+        &self,
+        input_variables: &mut InputVariables,
+    ) -> Result<GenerateResult, ChainError> {
         let mut steps: Vec<(Option<AgentAction>, String)> = Vec::new();
         let mut use_counts: HashMap<String, usize> = HashMap::new();
         let mut consecutive_fails: usize = 0;
@@ -227,12 +223,12 @@ where
         }
     }
 
-    async fn invoke(&self, input_variables: &mut T) -> Result<String, ChainError> {
+    async fn invoke(&self, input_variables: &mut InputVariables) -> Result<String, ChainError> {
         let result = self.call(input_variables).await?;
         Ok(result.generation)
     }
 
-    fn log_messages(&self, inputs: &T) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &InputVariables) -> Result<(), Box<dyn Error>> {
         self.agent.log_messages(inputs)
     }
 }

@@ -1,6 +1,11 @@
 use futures::Stream;
 use futures_util::{pin_mut, StreamExt};
-use std::{collections::HashMap, error::Error, pin::Pin, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    pin::Pin,
+    sync::Arc,
+};
 
 use async_stream::stream;
 use async_trait::async_trait;
@@ -8,13 +13,9 @@ use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
 use crate::{
-    chain::{
-        Chain, ChainError, CondenseQuestionPromptBuilder, StuffQA, StuffQAPromptBuilder,
-        DEFAULT_RESULT_KEY,
-    },
+    chain::{Chain, ChainError, CondenseQuestionPromptBuilder, StuffQABuilder, DEFAULT_RESULT_KEY},
     language_models::{GenerateResult, TokenUsage},
-    prompt::PromptArgs,
-    schemas::{BaseMemory, Message, Retriever, StreamData},
+    schemas::{BaseMemory, InputVariables, Message, MessageType, Retriever, StreamData},
 };
 // _conversationalRetrievalQADefaultInputKey             = "question"
 // _conversationalRetrievalQADefaultSourceDocumentKey    = "source_documents"
@@ -27,8 +28,8 @@ const CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_GENERATED_QUESTION_KEY: &str = "genera
 pub struct ConversationalRetrieverChain {
     pub(crate) retriever: Box<dyn Retriever>,
     pub memory: Arc<Mutex<dyn BaseMemory>>,
-    pub(crate) combine_documents_chain: Box<dyn Chain<StuffQA>>,
-    pub(crate) condense_question_chain: Box<dyn Chain<StuffQA>>,
+    pub(crate) combine_documents_chain: Box<dyn Chain>,
+    pub(crate) condense_question_chain: Box<dyn Chain>,
     pub(crate) rephrase_question: bool,
     pub(crate) return_source_documents: bool,
     pub(crate) input_key: String,  //Default is `question`
@@ -69,8 +70,11 @@ impl ConversationalRetrieverChain {
 }
 
 #[async_trait]
-impl Chain<StuffQA> for ConversationalRetrieverChain {
-    async fn call(&self, input_variables: &mut StuffQA) -> Result<GenerateResult, ChainError> {
+impl Chain for ConversationalRetrieverChain {
+    async fn call(
+        &self,
+        input_variables: &mut InputVariables,
+    ) -> Result<GenerateResult, ChainError> {
         let output = self.execute(input_variables).await?;
         let result: GenerateResult = serde_json::from_value(output[DEFAULT_RESULT_KEY].clone())?;
         Ok(result)
@@ -78,14 +82,14 @@ impl Chain<StuffQA> for ConversationalRetrieverChain {
 
     async fn execute(
         &self,
-        input_variables: &mut StuffQA,
+        input_variables: &mut InputVariables,
     ) -> Result<HashMap<String, Value>, ChainError> {
         let mut token_usage: Option<TokenUsage> = None;
         let input_variable = &input_variables
             .get(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
 
-        let human_message = Message::new_human_message(input_variable);
+        let human_message = Message::new(MessageType::HumanMessage, input_variable);
         let history = {
             let memory = self.memory.lock().await;
             memory.messages()
@@ -105,7 +109,7 @@ impl Chain<StuffQA> for ConversationalRetrieverChain {
         let mut output = self
             .combine_documents_chain
             .call(
-                &mut StuffQAPromptBuilder::new()
+                &mut StuffQABuilder::new()
                     .documents(&documents)
                     .question(question.clone())
                     .build(),
@@ -122,7 +126,7 @@ impl Chain<StuffQA> for ConversationalRetrieverChain {
         {
             let mut memory = self.memory.lock().await;
             memory.add_message(human_message);
-            memory.add_message(Message::new_ai_message(&output.generation));
+            memory.add_message(Message::new(MessageType::AIMessage, &output.generation));
         }
 
         let mut result = HashMap::new();
@@ -149,14 +153,14 @@ impl Chain<StuffQA> for ConversationalRetrieverChain {
 
     async fn stream(
         &self,
-        input_variables: &mut StuffQA,
+        input_variables: &mut InputVariables,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let input_variable = &input_variables
             .get(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
 
-        let human_message = Message::new_human_message(input_variable);
+        let human_message = Message::new(MessageType::HumanMessage, input_variable);
         let history = {
             let memory = self.memory.lock().await;
             memory.messages()
@@ -173,7 +177,7 @@ impl Chain<StuffQA> for ConversationalRetrieverChain {
         let stream = self
             .combine_documents_chain
             .stream(
-                &mut StuffQAPromptBuilder::new()
+                &mut StuffQABuilder::new()
                     .documents(&documents)
                     .question(question.clone())
                     .build(),
@@ -202,14 +206,14 @@ impl Chain<StuffQA> for ConversationalRetrieverChain {
 
             let mut memory = memory.lock().await;
             memory.add_message(human_message);
-            memory.add_message(Message::new_ai_message(&complete_ai_message.lock().await));
+            memory.add_message(Message::new(MessageType::AIMessage, &complete_ai_message.lock().await));
         };
 
         Ok(Box::pin(output_stream))
     }
 
-    fn get_input_keys(&self) -> Vec<String> {
-        vec![self.input_key.clone()]
+    fn get_input_keys(&self) -> HashSet<String> {
+        [self.input_key.clone()].into_iter().collect()
     }
 
     fn get_output_keys(&self) -> Vec<String> {
@@ -228,7 +232,7 @@ impl Chain<StuffQA> for ConversationalRetrieverChain {
         keys
     }
 
-    fn log_messages(&self, inputs: &StuffQA) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &InputVariables) -> Result<(), Box<dyn Error>> {
         self.condense_question_chain.log_messages(inputs)
     }
 }
@@ -241,7 +245,6 @@ mod tests {
         chain::ConversationalRetrieverChainBuilder,
         llm::openai::{OpenAI, OpenAIModel},
         memory::SimpleMemory,
-        prompt_args,
         schemas::Document,
     };
 
@@ -286,12 +289,7 @@ mod tests {
             .build()
             .expect("Error building ConversationalChain");
 
-        let mut input_variables_first = StuffQA::new(
-            vec![],
-            prompt_args! {
-                "question" => "Hola",
-            },
-        );
+        let mut input_variables_first = StuffQABuilder::new().question("Hola").build();
         // Execute the first `chain.invoke` and assert that it should succeed
         let result_first = chain.invoke(&mut input_variables_first).await;
         assert!(
@@ -305,12 +303,9 @@ mod tests {
             println!("Result: {:?}", result);
         }
 
-        let mut input_variables_second = StuffQA::new(
-            vec![],
-            prompt_args! {
-                "question" => "Cual es la comida favorita de luis",
-            },
-        );
+        let mut input_variables_second = StuffQABuilder::new()
+            .question("Cual es la comida favorita de luis")
+            .build();
         // Execute the second `chain.invoke` and assert that it should succeed
         let result_second = chain.invoke(&mut input_variables_second).await;
         assert!(

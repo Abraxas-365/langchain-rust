@@ -4,18 +4,17 @@ use crate::{
     chain::{options::ChainCallOptions, ChainError, LLMChainBuilder},
     language_models::llm::LLM,
     output_parsers::OutputParser,
-    prompt::FormatPrompter,
-    template_jinja2,
+    schemas::{MessageTemplate, MessageType, PromptTemplate},
 };
 
-use super::{StuffDocument, StuffQA};
+use super::StuffDocument;
 
 pub struct StuffDocumentBuilder {
     llm: Option<Box<dyn LLM>>,
     options: Option<ChainCallOptions>,
     output_key: Option<String>,
     output_parser: Option<Box<dyn OutputParser>>,
-    prompt: Option<Box<dyn FormatPrompter<StuffQA>>>,
+    prompt: Option<PromptTemplate>,
 }
 
 impl StuffDocumentBuilder {
@@ -45,7 +44,7 @@ impl StuffDocumentBuilder {
     }
 
     ///If you want to add a custom prompt,keep in mind which variables are obligatory.
-    pub fn prompt<P: Into<Box<dyn FormatPrompter<StuffQA>>>>(mut self, prompt: P) -> Self {
+    pub fn prompt<P: Into<PromptTemplate>>(mut self, prompt: P) -> Self {
         self.prompt = Some(prompt.into());
         self
     }
@@ -56,11 +55,10 @@ impl StuffDocumentBuilder {
             .ok_or_else(|| ChainError::MissingObject("LLM must be set".into()))?;
         let prompt = match self.prompt {
             Some(prompt) => prompt,
-            None => Box::new(template_jinja2!(
-                DEFAULT_STUFF_QA_TEMPLATE,
-                "context",
-                "question"
-            )),
+            None => {
+                MessageTemplate::from_fstring(MessageType::SystemMessage, DEFAULT_STUFF_QA_TEMPLATE)
+                    .into()
+            }
         };
 
         let llm_chain = {

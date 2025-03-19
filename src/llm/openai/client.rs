@@ -12,7 +12,7 @@ use futures::{Stream, StreamExt};
 
 use crate::{
     language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
-    schemas::{messages::Message, StreamData},
+    schemas::{messages::Message, MessageType, StreamData},
 };
 
 use super::request::OpenAIRequest;
@@ -159,7 +159,7 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
     }
 
     async fn invoke(&self, prompt: &str) -> Result<String, LLMError> {
-        self.generate(&[Message::new_human_message(prompt)])
+        self.generate(&[Message::new(MessageType::HumanMessage, prompt)])
             .await
             .map(|res| res.generation)
     }
@@ -214,7 +214,7 @@ impl<C: Config> OpenAI<C> {}
 #[cfg(test)]
 mod tests {
     use crate::language_models::options::StreamOption;
-    use crate::schemas::FunctionDefinition;
+    use crate::schemas::{FunctionDefinition, MessageType};
 
     use super::*;
 
@@ -298,7 +298,10 @@ mod tests {
             .with_options(options);
 
         // Define a set of messages to send to the generate function
-        let messages = vec![Message::new_human_message("Hello, how are you?")];
+        let messages = vec![Message::new(
+            MessageType::HumanMessage,
+            "Hello, how are you?",
+        )];
 
         // Call the generate function
         match open_ai.generate(&messages).await {
@@ -321,7 +324,10 @@ mod tests {
         let open_ai = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
 
         // Define a set of messages to send to the generate function
-        let messages = vec![Message::new_human_message("Hello, how are you?")];
+        let messages = vec![Message::new(
+            MessageType::HumanMessage,
+            "Hello, how are you?",
+        )];
 
         open_ai
             .stream(&messages)
@@ -384,8 +390,8 @@ mod tests {
         // Define a set of messages to send to the generate function
         let image_urls = vec![format!("data:image/jpeg;base64,{image_base64}")];
         let messages = vec![
-            Message::new_human_message("Describe this image"),
-            Message::new_human_message_with_images(image_urls),
+            Message::new(MessageType::HumanMessage, "Describe this image"),
+            Message::new(MessageType::HumanMessage, "").with_images(image_urls),
         ];
 
         // Call the generate function

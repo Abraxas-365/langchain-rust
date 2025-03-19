@@ -1,10 +1,17 @@
-use std::{collections::HashMap, error::Error, pin::Pin};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    pin::Pin,
+};
 
 use async_trait::async_trait;
 use futures::Stream;
 use serde_json::{json, Value};
 
-use crate::{language_models::GenerateResult, prompt::PromptArgs, schemas::StreamData};
+use crate::{
+    language_models::GenerateResult,
+    schemas::{InputVariables, StreamData},
+};
 
 use super::ChainError;
 
@@ -12,10 +19,7 @@ pub(crate) const DEFAULT_OUTPUT_KEY: &str = "output";
 pub(crate) const DEFAULT_RESULT_KEY: &str = "generate_result";
 
 #[async_trait]
-pub trait Chain<T>: Sync + Send
-where
-    T: PromptArgs,
-{
+pub trait Chain: Sync + Send {
     /// Call the `Chain` and receive as output the result of the generation process along with
     /// additional information like token consumption. The input is a set of variables passed
     /// as a `PromptArgs` hashmap.
@@ -45,7 +49,10 @@ where
     /// };
     /// # };
     /// ```
-    async fn call(&self, input_variables: &mut T) -> Result<GenerateResult, ChainError>;
+    async fn call(
+        &self,
+        input_variables: &mut InputVariables,
+    ) -> Result<GenerateResult, ChainError>;
 
     /// Invoke the `Chain` and receive just the generation result as a String.
     /// The input is a set of variables passed as a `PromptArgs` hashmap.
@@ -75,7 +82,7 @@ where
     /// };
     /// # };
     /// ```
-    async fn invoke(&self, input_variables: &mut T) -> Result<String, ChainError> {
+    async fn invoke(&self, input_variables: &mut InputVariables) -> Result<String, ChainError> {
         self.call(input_variables)
             .await
             .map(|result| result.generation)
@@ -113,7 +120,10 @@ where
     /// };
     /// # };
     /// ```
-    async fn execute(&self, input_variables: &mut T) -> Result<HashMap<String, Value>, ChainError> {
+    async fn execute(
+        &self,
+        input_variables: &mut InputVariables,
+    ) -> Result<HashMap<String, Value>, ChainError> {
         let result = self.call(input_variables).await?;
         let mut output = HashMap::new();
         let output_key = self
@@ -172,7 +182,7 @@ where
     ///
     async fn stream(
         &self,
-        _input_variables: &mut T,
+        _input_variables: &mut InputVariables,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         log::warn!("stream not implemented for this chain");
@@ -180,16 +190,18 @@ where
     }
 
     // Get the input keys of the prompt
-    fn get_input_keys(&self) -> Vec<String> {
-        vec![]
+    fn get_input_keys(&self) -> HashSet<String> {
+        HashSet::new()
     }
 
     fn get_output_keys(&self) -> Vec<String> {
-        vec![
+        [
             String::from(DEFAULT_OUTPUT_KEY),
             String::from(DEFAULT_RESULT_KEY),
         ]
+        .into_iter()
+        .collect()
     }
 
-    fn log_messages(&self, inputs: &T) -> Result<(), Box<dyn Error>>;
+    fn log_messages(&self, inputs: &InputVariables) -> Result<(), Box<dyn Error>>;
 }

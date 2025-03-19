@@ -5,8 +5,7 @@ use serde_json::Value;
 use crate::{
     chain::{Chain, LLMChain},
     embedding::Embedder,
-    plain_prompt_args,
-    prompt::PlainPromptArgs,
+    input_variables,
     semantic_router::{Index, RouteLayerError, Router},
 };
 
@@ -39,7 +38,7 @@ pub struct RouteLayer {
     pub(crate) embedder: Arc<dyn Embedder>,
     pub(crate) index: Box<dyn Index>,
     pub(crate) threshold: f64,
-    pub(crate) llm: LLMChain<PlainPromptArgs>,
+    pub(crate) llm: LLMChain,
     pub(crate) top_k: usize,
     pub(crate) aggregation_method: AggregationMethod,
 }
@@ -195,7 +194,7 @@ impl RouteLayer {
     ) -> Result<Value, RouteLayerError> {
         let output = self
             .llm
-            .invoke(&mut plain_prompt_args! {
+            .invoke(&mut input_variables! {
                 "description"=>description,
                 "query"=>query
             })

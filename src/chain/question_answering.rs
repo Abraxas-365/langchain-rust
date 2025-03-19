@@ -1,31 +1,24 @@
 use std::{error::Error, pin::Pin};
 
+use crate::{
+    input_variables,
+    language_models::{llm::LLM, GenerateResult},
+    schemas::{
+        messages::Message, Document, InputVariables, MessageTemplate, MessageType, StreamData,
+    },
+};
 use async_trait::async_trait;
 use futures::Stream;
 
-use crate::{
-    language_models::{llm::LLM, GenerateResult},
-    prompt::FormatPrompter,
-    prompt_args,
-    schemas::{messages::Message, Document, StreamData},
-    template_jinja2,
-};
-
 use super::{
-    options::ChainCallOptions, Chain, ChainError, LLMChain, LLMChainBuilder, StuffDocument, StuffQA,
+    options::ChainCallOptions, Chain, ChainError, LLMChain, LLMChainBuilder, StuffDocument,
 };
-
-const DEFAULTCONDENSEQUESTIONTEMPLATE: &str = r#"Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
-
-Chat History:
-{{chat_history}}
-Follow Up Input: {{question}}
-Standalone question:"#;
 
 pub struct CondenseQuestionPromptBuilder {
     chat_history: String,
     question: String,
 }
+
 impl CondenseQuestionPromptBuilder {
     pub fn new() -> Self {
         Self {
@@ -44,14 +37,11 @@ impl CondenseQuestionPromptBuilder {
         self
     }
 
-    pub fn build(self) -> StuffQA {
-        StuffQA::new(
-            vec![],
-            prompt_args! {
-                "chat_history" => self.chat_history,
-                "question" => self.question
-            },
-        )
+    pub fn build(self) -> InputVariables {
+        input_variables! {
+            "chat_history" => self.chat_history,
+            "question" => self.question
+        }
     }
 }
 
@@ -62,13 +52,21 @@ impl Default for CondenseQuestionPromptBuilder {
 }
 
 pub struct CondenseQuestionGeneratorChain {
-    chain: LLMChain<StuffQA>,
+    chain: LLMChain,
 }
 
 impl CondenseQuestionGeneratorChain {
     pub fn new<L: Into<Box<dyn LLM>>>(llm: L) -> Self {
-        let condense_question_prompt_template: Box<dyn FormatPrompter<StuffQA>> = Box::new(
-            template_jinja2!(DEFAULTCONDENSEQUESTIONTEMPLATE, "chat_history", "question"),
+        let condense_question_prompt_template = MessageTemplate::from_jinja2(
+            MessageType::SystemMessage,
+            r#"
+            Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
+
+            Chat History:
+            {{chat_history}}
+            Follow Up Input: {{question}}
+            Standalone question:
+            "#,
         );
 
         let chain = LLMChainBuilder::new()
@@ -86,38 +84,33 @@ impl CondenseQuestionGeneratorChain {
 }
 
 #[async_trait]
-impl Chain<StuffQA> for CondenseQuestionGeneratorChain {
-    async fn call(&self, input_variables: &mut StuffQA) -> Result<GenerateResult, ChainError> {
+impl Chain for CondenseQuestionGeneratorChain {
+    async fn call(
+        &self,
+        input_variables: &mut InputVariables,
+    ) -> Result<GenerateResult, ChainError> {
         self.chain.call(input_variables).await
     }
 
     async fn stream(
         &self,
-        input_variables: &mut StuffQA,
+        input_variables: &mut InputVariables,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         self.chain.stream(input_variables).await
     }
 
-    fn log_messages(&self, inputs: &StuffQA) -> Result<(), Box<dyn Error>> {
+    fn log_messages(&self, inputs: &InputVariables) -> Result<(), Box<dyn Error>> {
         self.chain.log_messages(inputs)
     }
 }
 
-const DEFAULT_STUFF_QA_TEMPLATE: &str = r#"Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
-
-{{context}}
-
-Question:{{question}}
-Helpful Answer:
-"#;
-
-pub struct StuffQAPromptBuilder {
+pub struct StuffQABuilder {
     input_documents: Vec<Document>,
     question: String,
 }
 
-impl StuffQAPromptBuilder {
+impl StuffQABuilder {
     pub fn new() -> Self {
         Self {
             input_documents: vec![],
@@ -135,15 +128,15 @@ impl StuffQAPromptBuilder {
         self
     }
 
-    pub fn build(self) -> StuffQA {
-        StuffQA::new(
-            self.input_documents,
-            prompt_args! { "question" => self.question },
-        )
+    pub fn build(self) -> InputVariables {
+        input_variables! {
+            "documents" => self.input_documents.iter().map(|doc| doc.page_content.clone()).collect::<Vec<String>>().join("\n"),
+            "question" => self.question
+        }
     }
 }
 
-impl Default for StuffQAPromptBuilder {
+impl Default for StuffQABuilder {
     fn default() -> Self {
         Self::new()
     }
@@ -153,11 +146,17 @@ pub(crate) fn load_stuff_qa<L: Into<Box<dyn LLM>>>(
     llm: L,
     options: Option<ChainCallOptions>,
 ) -> StuffDocument {
-    let default_qa_prompt_template: Box<dyn FormatPrompter<StuffQA>> = Box::new(template_jinja2!(
-        DEFAULT_STUFF_QA_TEMPLATE,
-        "context",
-        "question"
-    ));
+    let default_qa_prompt_template = MessageTemplate::from_jinja2(
+        MessageType::SystemMessage,
+        r#"
+        Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+
+        {{context}}
+        
+        Question:{{question}}
+        Helpful Answer:
+        "#,
+    );
 
     let llm_chain_builder = LLMChainBuilder::new()
         .prompt(default_qa_prompt_template)
@@ -174,7 +173,7 @@ pub(crate) fn load_stuff_qa<L: Into<Box<dyn LLM>>>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        chain::{Chain, StuffDocument},
+        chain::{Chain, StuffDocument, StuffQABuilder},
         llm::openai::OpenAI,
         schemas::Document,
     };
@@ -184,8 +183,7 @@ mod tests {
     async fn test_qa() {
         let llm = OpenAI::default();
         let chain = StuffDocument::load_stuff_qa(llm);
-        let mut input = chain
-            .qa_prompt_builder()
+        let mut input = StuffQABuilder::new()
             .documents(&[
                 Document::new(format!(
                     "\nQuestion: {}\nAnswer: {}\n",

@@ -4,7 +4,6 @@ use crate::{
     agent::AgentError,
     chain::{options::ChainCallOptions, LLMChainBuilder},
     language_models::{llm::LLM, options::CallOptions},
-    prompt::FormatPrompter,
     schemas::FunctionDefinition,
     tools::Tool,
 };
@@ -46,7 +45,7 @@ impl OpenAiToolAgentBuilder {
         let prefix = self.prefix.unwrap_or_else(|| PREFIX.to_string());
         let mut llm = llm;
 
-        let prompt: Box<dyn FormatPrompter<_>> = Box::new(OpenAiToolAgent::create_prompt(&prefix)?);
+        let prompt = OpenAiToolAgent::create_prompt(&prefix)?;
         let default_options = ChainCallOptions::default().with_max_tokens(1000);
         let functions = tools
             .values()

@@ -4,8 +4,20 @@ pub use agent::*;
 pub mod memory;
 pub use memory::*;
 
+mod input_variable;
+pub use input_variable::*;
+
+mod message_template;
+pub use message_template::*;
+
+mod message_type;
+pub use message_type::*;
+
 pub mod messages;
 pub use messages::*;
+
+mod prompt_template;
+pub use prompt_template::*;
 
 pub mod prompt;
 pub use prompt::*;

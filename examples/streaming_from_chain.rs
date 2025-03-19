@@ -1,35 +1,32 @@
 use futures::StreamExt;
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
-    fmt_message, fmt_template,
+    input_variables,
     llm::openai::OpenAI,
-    message_formatter, plain_prompt_args,
-    prompt::{FormatPrompter, HumanMessagePromptTemplate},
-    schemas::messages::Message,
-    template_fstring,
+    prompt_template,
+    schemas::{Message, MessageTemplate, MessageType},
 };
 
 #[tokio::main]
 async fn main() {
     let open_ai = OpenAI::default();
 
-    let prompt = message_formatter![
-        fmt_message!(Message::new_system_message(
+    let prompt = prompt_template![
+        Message::new(
+            MessageType::SystemMessage,
             "You are world class technical documentation writer."
-        )),
-        fmt_template!(HumanMessagePromptTemplate::new(template_fstring!(
-            "{input}", "input"
-        )))
+        ),
+        MessageTemplate::from_fstring(MessageType::HumanMessage, "{input}")
     ];
 
     let chain = LLMChainBuilder::new()
-        .prompt(Box::new(prompt) as Box<dyn FormatPrompter<_>>)
+        .prompt(prompt)
         .llm(open_ai.clone())
         .build()
         .unwrap();
 
     let mut stream = chain
-        .stream(&mut plain_prompt_args! {
+        .stream(&mut input_variables! {
             "input" => "Who is the writer of 20,000 Leagues Under the Sea?",
         })
         .await

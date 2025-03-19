@@ -1,4 +1,4 @@
-use std::{error::Error, pin::Pin};
+use std::{collections::HashSet, error::Error, pin::Pin};
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -7,27 +7,20 @@ use futures_util::TryStreamExt;
 use crate::{
     language_models::{llm::LLM, GenerateResult},
     output_parsers::{OutputParser, SimpleParser},
-    prompt::{FormatPrompter, PromptArgs},
-    schemas::StreamData,
+    schemas::{InputVariables, PromptTemplate, StreamData},
 };
 
 use super::{chain_trait::Chain, options::ChainCallOptions, ChainError};
 
-pub struct LLMChainBuilder<T>
-where
-    T: PromptArgs,
-{
-    prompt: Option<Box<dyn FormatPrompter<T>>>,
+pub struct LLMChainBuilder {
+    prompt: Option<PromptTemplate>,
     llm: Option<Box<dyn LLM>>,
     output_key: Option<String>,
     options: Option<ChainCallOptions>,
     output_parser: Option<Box<dyn OutputParser>>,
 }
 
-impl<T> LLMChainBuilder<T>
-where
-    T: PromptArgs,
-{
+impl LLMChainBuilder {
     pub fn new() -> Self {
         Self {
             prompt: None,
@@ -42,7 +35,7 @@ where
         self
     }
 
-    pub fn prompt<P: Into<Box<dyn FormatPrompter<T>>>>(mut self, prompt: P) -> Self {
+    pub fn prompt<P: Into<PromptTemplate>>(mut self, prompt: P) -> Self {
         self.prompt = Some(prompt.into());
         self
     }
@@ -62,7 +55,7 @@ where
         self
     }
 
-    pub fn build(self) -> Result<LLMChain<T>, ChainError> {
+    pub fn build(self) -> Result<LLMChain, ChainError> {
         let prompt = self
             .prompt
             .ok_or_else(|| ChainError::MissingObject("Prompt must be set".into()))?;
@@ -79,7 +72,6 @@ where
         let chain = LLMChain {
             prompt,
             llm,
-            output_key: self.output_key.unwrap_or("output".to_string()),
             output_parser: self
                 .output_parser
                 .unwrap_or_else(|| Box::new(SimpleParser::default())),
@@ -89,64 +81,49 @@ where
     }
 }
 
-impl<T> Default for LLMChainBuilder<T>
-where
-    T: PromptArgs,
-{
+impl Default for LLMChainBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-pub struct LLMChain<T>
-where
-    T: PromptArgs,
-{
-    prompt: Box<dyn FormatPrompter<T>>,
+pub struct LLMChain {
+    prompt: PromptTemplate,
     llm: Box<dyn LLM>,
-    output_key: String,
     output_parser: Box<dyn OutputParser>,
 }
 
 #[async_trait]
-impl<T> Chain<T> for LLMChain<T>
-where
-    T: PromptArgs,
-{
-    fn get_input_keys(&self) -> Vec<String> {
-        self.prompt.get_input_variables()
+impl Chain for LLMChain {
+    fn get_input_keys(&self) -> HashSet<String> {
+        self.prompt.variables()
     }
 
-    fn get_output_keys(&self) -> Vec<String> {
-        vec![self.output_key.clone()]
-    }
-
-    async fn call(&self, input_variables: &mut T) -> Result<GenerateResult, ChainError> {
-        let prompt = self.prompt.format_prompt(input_variables)?;
-        let mut output = self.llm.generate(&prompt.to_chat_messages()).await?;
+    async fn call(
+        &self,
+        input_variables: &mut InputVariables,
+    ) -> Result<GenerateResult, ChainError> {
+        let prompt = self.prompt.format(input_variables)?;
+        let mut output = self.llm.generate(&prompt.to_messages()).await?;
         output.generation = self.output_parser.parse(&output.generation).await?;
 
         Ok(output)
     }
 
-    async fn invoke(&self, input_variables: &mut T) -> Result<String, ChainError> {
-        let prompt = self.prompt.format_prompt(input_variables)?;
+    async fn invoke(&self, input_variables: &mut InputVariables) -> Result<String, ChainError> {
+        let prompt = self.prompt.format(input_variables)?;
 
-        let output = self
-            .llm
-            .generate(&prompt.to_chat_messages())
-            .await?
-            .generation;
+        let output = self.llm.generate(&prompt.to_messages()).await?.generation;
         Ok(output)
     }
 
     async fn stream(
         &self,
-        input_variables: &mut T,
+        input_variables: &mut InputVariables,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
-        let prompt = self.prompt.format_prompt(input_variables)?;
-        let llm_stream = self.llm.stream(&prompt.to_chat_messages()).await?;
+        let prompt = self.prompt.format(input_variables)?;
+        let llm_stream = self.llm.stream(&prompt.to_messages()).await?;
 
         // Map the errors from LLMError to ChainError
         let mapped_stream = llm_stream.map_err(ChainError::from);
@@ -154,10 +131,10 @@ where
         Ok(Box::pin(mapped_stream))
     }
 
-    fn log_messages(&self, inputs: &T) -> Result<(), Box<dyn Error>> {
-        let prompt = self.prompt.format_prompt(inputs)?;
+    fn log_messages(&self, inputs: &InputVariables) -> Result<(), Box<dyn Error>> {
+        let prompt = self.prompt.format(inputs)?;
 
-        for message in prompt.to_chat_messages() {
+        for message in prompt.to_messages() {
             log::debug!("{}:\n{}", message.message_type, message.content);
         }
 
@@ -169,10 +146,10 @@ where
 mod tests {
     use crate::{
         chain::options::ChainCallOptions,
+        input_variables,
         llm::openai::{OpenAI, OpenAIModel},
-        message_formatter, plain_prompt_args,
-        prompt::{HumanMessagePromptTemplate, MessageOrTemplate, PlainPromptArgs},
-        template_fstring,
+        prompt_template,
+        schemas::{MessageTemplate, MessageType},
     };
 
     use super::*;
@@ -180,26 +157,21 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_invoke_chain() {
-        let mut input_variables = plain_prompt_args! {
+        let mut input_variables = input_variables! {
             "nombre" => "Juan",
         };
 
         // Create an AI message prompt template
-        let human_message_prompt = HumanMessagePromptTemplate::new(template_fstring!(
-            "Mi nombre es: {nombre} ",
-            "nombre",
-        ));
+        let human_message_prompt =
+            MessageTemplate::from_fstring(MessageType::HumanMessage, "Mi nombre es: {nombre} ");
 
         // Use the `message_formatter` macro to construct the formatter
-        let formatter: Box<dyn FormatPrompter<PlainPromptArgs>> =
-            Box::new(message_formatter![MessageOrTemplate::Template(Box::new(
-                human_message_prompt
-            )),]);
+        let prompt = prompt_template!(human_message_prompt);
 
         let options = ChainCallOptions::default();
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
         let chain = LLMChainBuilder::new()
-            .prompt(formatter)
+            .prompt(prompt)
             .llm(llm)
             .options(options)
             .build()
