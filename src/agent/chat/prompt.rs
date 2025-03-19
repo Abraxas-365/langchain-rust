@@ -30,10 +30,7 @@ Once you know the final answer, you must give it using the following format:
 The following is the description of the tools available to you:
 {{tools}}"#;
 
-pub const DEFAULT_INITIAL_PROMPT: &str = r#"
-Current Task: {{input}}
-
-Begin! This is VERY important to you, use the tools available and give your best Final Answer, your job depends on it!"#;
+pub const DEFAULT_INITIAL_PROMPT: &str = r#"{{input}}"#;
 
 pub const INVALID_FORMAT_ERROR: &str =
     r#"Invalid format, remember the instructions regarding the format and try again"#;
