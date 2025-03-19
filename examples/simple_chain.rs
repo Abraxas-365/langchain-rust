@@ -1,9 +1,9 @@
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
-    input_variables,
     llm::openai::{OpenAI, OpenAIModel},
     schemas::MessageType,
     template::MessageTemplate,
+    text_replacements,
 };
 use std::io::{self, Write}; // Include io Library for terminal input
 
@@ -30,7 +30,7 @@ async fn main() {
     let product = product.trim();
 
     let output = chain
-        .invoke(&mut input_variables! { "producto" => product }) // Use product input here
+        .invoke(&mut text_replacements! { "producto" => product }.into()) // Use product input here
         .await
         .unwrap();
 

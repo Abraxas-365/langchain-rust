@@ -4,6 +4,7 @@ use tokio::sync::mpsc;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AgentAction {
+    pub id: String,
     pub action: String,
     pub action_input: Value,
 }
@@ -26,6 +27,10 @@ impl<'de> Deserialize<'de> for AgentEvent {
             value.get_mut("action_input").map(|v| v.take()),
         ) {
             Ok(AgentEvent::Action(vec![AgentAction {
+                id: value
+                    .get_mut("id")
+                    .and_then(|v| Some(v.take().as_str()?.to_string()))
+                    .unwrap_or(uuid::Uuid::new_v4().to_string()),
                 action,
                 action_input,
             }]))

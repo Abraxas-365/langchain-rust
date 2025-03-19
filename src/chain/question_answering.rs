@@ -1,10 +1,12 @@
 use std::{error::Error, pin::Pin};
 
 use crate::{
-    input_variables,
     language_models::{llm::LLM, GenerateResult},
-    schemas::{messages::Message, Document, InputVariables, MessageType, StreamData},
+    schemas::{
+        messages::Message, Document, InputVariables, MessageType, StreamData, TextReplacements,
+    },
     template::MessageTemplate,
+    text_replacements,
 };
 use async_trait::async_trait;
 use futures::Stream;
@@ -36,8 +38,8 @@ impl CondenseQuestionPromptBuilder {
         self
     }
 
-    pub fn build(self) -> InputVariables {
-        input_variables! {
+    pub fn build(self) -> TextReplacements {
+        text_replacements! {
             "chat_history" => self.chat_history,
             "question" => self.question
         }
@@ -127,8 +129,8 @@ impl StuffQABuilder {
         self
     }
 
-    pub fn build(self) -> InputVariables {
-        input_variables! {
+    pub fn build(self) -> TextReplacements {
+        text_replacements! {
             "documents" => self.input_documents.iter().map(|doc| doc.page_content.clone()).collect::<Vec<String>>().join("\n"),
             "question" => self.question
         }
@@ -174,7 +176,7 @@ mod tests {
     use crate::{
         chain::{Chain, StuffDocument, StuffQABuilder},
         llm::openai::OpenAI,
-        schemas::Document,
+        schemas::{Document, InputVariables},
     };
 
     #[tokio::test]
@@ -182,7 +184,7 @@ mod tests {
     async fn test_qa() {
         let llm = OpenAI::default();
         let chain = StuffDocument::load_stuff_qa(llm);
-        let mut input = StuffQABuilder::new()
+        let mut input: InputVariables = StuffQABuilder::new()
             .documents(&[
                 Document::new(format!(
                     "\nQuestion: {}\nAnswer: {}\n",
@@ -194,7 +196,8 @@ mod tests {
                 )),
             ])
             .question("How old is luis and whats his favorite text editor")
-            .build();
+            .build()
+            .into();
 
         let ouput = chain.invoke(&mut input).await.unwrap();
 

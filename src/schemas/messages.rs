@@ -1,8 +1,8 @@
 use std::fmt;
 
+use async_openai::types::ChatCompletionMessageToolCall;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value;
 
 use super::MessageType;
 
@@ -35,14 +35,14 @@ pub struct Message {
     pub content: String,
     pub message_type: MessageType,
     pub id: Option<String>,
-    pub tool_calls: Option<Value>,
+    pub tool_calls: Option<Vec<ChatCompletionMessageToolCall>>,
     pub images: Option<Vec<ImageContent>>,
 }
 
 impl Message {
-    pub fn new(message_type: MessageType, content: &str) -> Self {
+    pub fn new<T: std::fmt::Display>(message_type: MessageType, content: T) -> Self {
         Message {
-            content: content.to_owned(),
+            content: content.to_string(),
             message_type,
             id: None,
             tool_calls: None,
@@ -51,11 +51,14 @@ impl Message {
     }
 
     // Function to create a new Tool message with a generic type that implements Display
-    pub fn new_tool_message<T: std::fmt::Display, S: Into<String>>(content: T, id: S) -> Self {
+    pub fn new_tool_message<T: std::fmt::Display, S: Into<String>>(
+        id: Option<S>,
+        content: T,
+    ) -> Self {
         Message {
             content: content.to_string(),
             message_type: MessageType::ToolMessage,
-            id: Some(id.into()),
+            id: id.map(|id| id.into()),
             tool_calls: None,
             images: None,
         }
@@ -70,7 +73,7 @@ impl Message {
     /// # Arguments
     ///
     /// * `tool_calls` - A `serde_json::Value` representing the tool call configurations.
-    pub fn with_tool_calls(mut self, tool_calls: Value) -> Self {
+    pub fn with_tool_calls(mut self, tool_calls: Vec<ChatCompletionMessageToolCall>) -> Self {
         self.tool_calls = Some(tool_calls);
         self
     }
@@ -80,14 +83,10 @@ impl Message {
         self
     }
 
-    pub fn messages_from_value(value: &Value) -> Result<Vec<Message>, serde_json::error::Error> {
-        serde_json::from_value(value.clone())
-    }
-
     pub fn messages_to_string(messages: &[Message]) -> String {
         messages
             .iter()
-            .map(|m| format!("{:?}: {}", m.message_type, m.content))
+            .map(|m| m.to_string())
             .collect::<Vec<String>>()
             .join("\n")
     }
@@ -95,7 +94,25 @@ impl Message {
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.message_type, self.content)
+        if let Some(tool_calls) = &self.tool_calls {
+            write!(
+                f,
+                "Tool call:\n{}",
+                serde_json::to_string_pretty(&tool_calls)
+                    .unwrap_or("Tool call details unknown".into())
+            )
+        } else if let Some(images) = &self.images {
+            write!(
+                f,
+                "{}: {}\nImages: {:?}",
+                self.message_type, self.content, images
+            )
+        } else if !self.content.is_empty() {
+            write!(f, "{}: {}", self.message_type, self.content)
+        } else {
+            log::warn!("Message without content nor tool calls found, possibly an error");
+            Ok(())
+        }
     }
 }
 

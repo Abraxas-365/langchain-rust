@@ -147,11 +147,11 @@ impl Chain for LLMChain {
 mod tests {
     use crate::{
         chain::options::ChainCallOptions,
-        input_variables,
         llm::openai::{OpenAI, OpenAIModel},
         prompt_template,
         schemas::MessageType,
         template::MessageTemplate,
+        text_replacements,
     };
 
     use super::*;
@@ -159,9 +159,10 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_invoke_chain() {
-        let mut input_variables = input_variables! {
+        let mut input_variables: InputVariables = text_replacements! {
             "nombre" => "Juan",
-        };
+        }
+        .into();
 
         // Create an AI message prompt template
         let human_message_prompt =

@@ -1,5 +1,5 @@
 use futures::Future;
-use std::{pin::Pin, sync::Arc};
+use std::{fmt, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
 use crate::schemas::{FunctionCallBehavior, FunctionDefinition, ResponseFormat, StreamingFunc};
@@ -8,6 +8,15 @@ use crate::schemas::{FunctionCallBehavior, FunctionDefinition, ResponseFormat, S
 pub struct StreamOption {
     pub streaming_func: Option<Arc<Mutex<StreamingFunc>>>,
     pub include_usage: bool,
+}
+
+impl fmt::Debug for StreamOption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StreamOption")
+            .field("streaming_func", &self.streaming_func.is_some())
+            .field("include_usage", &self.include_usage)
+            .finish()
+    }
 }
 
 impl StreamOption {
@@ -33,7 +42,7 @@ impl StreamOption {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CallOptions {
     pub candidate_count: Option<usize>,
     pub max_tokens: Option<u32>,

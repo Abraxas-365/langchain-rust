@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use derive_new::new;
 
-use crate::template::TemplateError;
 use crate::schemas::{InputVariables, Message, MessageType};
+use crate::template::TemplateError;
 
 #[derive(Clone)]
 pub enum TemplateFormat {
@@ -55,12 +55,12 @@ impl MessageTemplate {
 
         // check if all variables are in the input variables
         for key in &self.variables {
-            if !input_variables.contains_key(key.as_str()) {
+            if !input_variables.contains_text_key(key.as_str()) {
                 return Err(TemplateError::MissingVariable(key.clone()));
             }
         }
 
-        for (key, value) in input_variables.iter() {
+        for (key, value) in input_variables.iter_test_replacements() {
             let key = match self.format {
                 TemplateFormat::FString => format!("{{{}}}", key),
                 TemplateFormat::Jinja2 => format!("{{{{{}}}}}", key),

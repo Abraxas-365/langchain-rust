@@ -1,9 +1,10 @@
 use langchain_rust::{
     agent::{AgentExecutor, ConversationalAgentBuilder},
     chain::{options::ChainCallOptions, Chain},
-    input_variables,
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
+    schemas::InputVariables,
+    text_replacements,
     tools::{map_tools, CommandExecutor},
 };
 
@@ -20,9 +21,10 @@ async fn main() {
 
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
 
-    let mut input_variables = input_variables! {
+    let mut input_variables: InputVariables = text_replacements! {
         "input" => "What is the name of the current dir",
-    };
+    }
+    .into();
 
     match executor.invoke(&mut input_variables).await {
         Ok(result) => {

@@ -4,7 +4,7 @@ use langchain_rust::{
     llm::OpenAI,
     schemas::{Message, MessageType},
     template::MessageTemplate,
-    {input_variables, prompt_template},
+    {prompt_template, text_replacements},
 };
 
 #[tokio::main]
@@ -29,7 +29,7 @@ async fn main() {
         .unwrap();
 
     match chain
-        .invoke(&mut input_variables! { "input" => "Describe this image"})
+        .invoke(&mut text_replacements! { "input" => "Describe this image" }.into())
         .await
     {
         Ok(result) => {

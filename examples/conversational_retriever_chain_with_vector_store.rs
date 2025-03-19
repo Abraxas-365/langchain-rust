@@ -22,6 +22,8 @@ use langchain_rust::{
 #[cfg(feature = "postgres")]
 #[tokio::main]
 async fn main() {
+    use langchain_rust::schemas::InputVariables;
+
     let documents = vec![
         Document::new(format!(
             "\nQuestion: {}\nAnswer: {}\n",
@@ -82,16 +84,17 @@ async fn main() {
         .build()
         .expect("Error building ConversationalChain");
 
-    let mut input_variables = StuffQABuilder::new().question("Hi").build();
+    let mut input_variables: InputVariables = StuffQABuilder::new().question("Hi").build().into();
 
     let result = chain.invoke(&mut input_variables).await;
     if let Ok(result) = result {
         println!("Result: {:?}", result);
     }
 
-    let mut input_variables = StuffQABuilder::new()
+    let mut input_variables: InputVariables = StuffQABuilder::new()
         .question("Which is luis Favorite Food")
-        .build();
+        .build()
+        .into();
 
     //If you want to stream
     let mut stream = chain.stream(&mut input_variables).await.unwrap();

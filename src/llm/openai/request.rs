@@ -17,7 +17,7 @@ use crate::{
 
 use super::helper::to_openai_messages;
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct OpenAIRequest {
     pub messages: Vec<ChatCompletionRequestMessage>,
     pub model: String,

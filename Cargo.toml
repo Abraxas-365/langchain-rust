@@ -86,7 +86,7 @@ derive-new = "0.7.0"
 
 
 [features]
-default = []
+default = ["uuid"]
 fastembed = ["dep:fastembed"]
 git = ["gix", "flume"]
 html-to-markdown = ["dep:htmd"]

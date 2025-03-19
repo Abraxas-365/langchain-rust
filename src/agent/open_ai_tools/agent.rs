@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use std::{collections::HashMap, error::Error};
 
+use async_openai::types::{ChatCompletionMessageToolCall, ChatCompletionToolType, FunctionCall};
 use async_trait::async_trait;
-use indoc::indoc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -42,23 +42,26 @@ impl OpenAiToolAgent {
         Ok(prompt)
     }
 
-    fn construct_scratchpad(&self, intermediate_steps: &[(Option<AgentAction>, String)]) -> String {
+    fn construct_scratchpad(&self, intermediate_steps: &[(AgentAction, String)]) -> Vec<Message> {
         intermediate_steps
             .iter()
-            .map(|(action, result)| match action {
-                Some(action) => format!(
-                    indoc! {"
-                        Action: {}
-                        Action input: {}
-                        Result:
-                        {}
-                    "},
-                    &action.action, &action.action_input, result
-                ),
-                None => result.to_string(),
+            .flat_map(|(action, observation)| {
+                vec![
+                    Message::new(MessageType::AIMessage, "").with_tool_calls(vec![
+                        ChatCompletionMessageToolCall {
+                            id: action.id.clone(),
+                            r#type: ChatCompletionToolType::Function,
+                            function: FunctionCall {
+                                name: action.action.clone(),
+                                arguments: serde_json::to_string_pretty(&action.action_input)
+                                    .unwrap_or("Input parameters unknown".into()),
+                            },
+                        },
+                    ]),
+                    Message::new_tool_message(Some(action.id.clone()), observation),
+                ]
             })
             .collect::<Vec<_>>()
-            .join("\n\n")
     }
 }
 
@@ -66,17 +69,18 @@ impl OpenAiToolAgent {
 impl Agent for OpenAiToolAgent {
     async fn plan(
         &self,
-        intermediate_steps: &[(Option<AgentAction>, String)],
+        intermediate_steps: &[(AgentAction, String)],
         inputs: &mut InputVariables,
     ) -> Result<AgentEvent, AgentError> {
         let scratchpad = self.construct_scratchpad(intermediate_steps);
-        inputs.insert("agent_scratchpad".to_string(), scratchpad);
-        let output = self.chain.call(inputs).await?.generation;
+        inputs.insert_placeholder_replacement("agent_scratchpad", scratchpad);
+        let output: String = self.chain.call(inputs).await?.generation;
         match serde_json::from_str::<Vec<FunctionCallResponse>>(&output) {
             Ok(tools) => {
                 let mut actions: Vec<AgentAction> = Vec::new();
                 for tool in tools {
                     actions.push(AgentAction {
+                        id: tool.id,
                         action: tool.function.name.clone(),
                         action_input: Value::String(tool.function.arguments),
                     });

@@ -1,7 +1,6 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use derive_new::new;
-use gix::hashtable::HashMap;
 
 use super::MessageTemplate;
 use crate::schemas::{InputVariables, Message, Prompt};
@@ -40,14 +39,20 @@ impl PromptTemplate {
         let messages = self
             .messages
             .iter()
-            .filter_map(|m| -> Option<Result<Message, TemplateError>> {
+            .flat_map(|m| -> Result<Vec<Message>, TemplateError> {
                 match m {
-                    MessageOrTemplate::Message(m) => Some(Ok(m.clone())),
-                    MessageOrTemplate::Template(t) => Some(t.format(input_variables)),
-                    MessageOrTemplate::Placeholder(_) => None,
+                    MessageOrTemplate::Message(m) => Ok(vec![m.clone()]),
+                    MessageOrTemplate::Template(t) => Ok(vec![t.format(input_variables)?]),
+                    MessageOrTemplate::Placeholder(p) => {
+                        match input_variables.get_placeholder_replacement(p) {
+                            Some(messages) => Ok(messages.clone()),
+                            None => Ok(vec![]),
+                        }
+                    }
                 }
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .flatten()
+            .collect::<Vec<_>>();
 
         Ok(Prompt::new(messages))
     }

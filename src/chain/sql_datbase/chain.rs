@@ -5,9 +5,9 @@ use futures::Stream;
 
 use crate::{
     chain::{chain_trait::Chain, llm_chain::LLMChain, ChainError},
-    input_variables,
     language_models::{GenerateResult, TokenUsage},
-    schemas::{InputVariables, StreamData},
+    schemas::{InputVariables, StreamData, TextReplacements},
+    text_replacements,
     tools::SQLDatabase,
 };
 
@@ -31,8 +31,8 @@ impl SqlChainPromptBuilder {
         self
     }
 
-    pub fn build(self) -> InputVariables {
-        input_variables! {
+    pub fn build(self) -> TextReplacements {
+        text_replacements! {
           SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY  => self.query,
         }
     }
@@ -98,14 +98,16 @@ impl SQLDatabaseChain {
         let mut token_usage: Option<TokenUsage> = None;
 
         let query = input_variables
-            .get(SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY)
+            .get_text_replacement(SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY)
             .ok_or_else(|| {
                 ChainError::MissingInputVariable(SQL_CHAIN_DEFAULT_INPUT_KEY_QUERY.to_string())
             })?
             .to_string();
 
         let mut tables: Vec<String> = Vec::new();
-        if let Some(array) = input_variables.get(SQL_CHAIN_DEFAULT_INPUT_KEY_TABLE_NAMES) {
+        if let Some(array) =
+            input_variables.get_text_replacement(SQL_CHAIN_DEFAULT_INPUT_KEY_TABLE_NAMES)
+        {
             for item in array.split(",") {
                 tables.push(item.to_string());
             }
@@ -117,13 +119,13 @@ impl SQLDatabaseChain {
             .await
             .map_err(|e| ChainError::DatabaseError(e.to_string()))?;
 
-        let mut llm_inputs = input_variables! {
+        let mut llm_inputs: InputVariables = text_replacements! {
             "input"=> query.clone() + QUERY_PREFIX_WITH,
             "top_k"=> self.top_k,
             "dialect"=> self.database.dialect().to_string(),
             "table_info"=> tables_info,
-
-        };
+        }
+        .into();
 
         let output = self.llmchain.call(&mut llm_inputs).await?;
         if let Some(tokens) = output.tokens {
@@ -137,8 +139,8 @@ impl SQLDatabaseChain {
             .await
             .map_err(|e| ChainError::DatabaseError(e.to_string()))?;
 
-        llm_inputs.insert(
-            "input".to_string(),
+        llm_inputs.insert_text_replacement(
+            "input",
             format!(
                 "{}{}{}{}{}",
                 &query, QUERY_PREFIX_WITH, sql_query, STOP_WORD, &query_result,

@@ -7,9 +7,12 @@ use futures_util::{pin_mut, StreamExt};
 use tokio::sync::Mutex;
 
 use crate::{
-    input_variables,
     language_models::GenerateResult,
-    schemas::{memory::BaseMemory, messages::Message, InputVariables, MessageType, StreamData},
+    schemas::{
+        memory::BaseMemory, messages::Message, InputVariables, MessageType, StreamData,
+        TextReplacements,
+    },
+    text_replacements,
 };
 
 const DEFAULT_INPUT_VARIABLE: &str = "input";
@@ -36,8 +39,8 @@ impl ConversationalChainPromptBuilder {
         self
     }
 
-    pub fn build(self) -> InputVariables {
-        input_variables! {
+    pub fn build(self) -> TextReplacements {
+        text_replacements! {
             DEFAULT_INPUT_VARIABLE => self.input,
         }
     }
@@ -69,7 +72,7 @@ impl Chain for ConversationalChain {
         input_variables: &mut InputVariables,
     ) -> Result<GenerateResult, ChainError> {
         let input_variable = &input_variables
-            .get(&self.input_key)
+            .get_text_replacement(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
         let human_message = Message::new(MessageType::HumanMessage, input_variable);
 
@@ -77,7 +80,7 @@ impl Chain for ConversationalChain {
             let memory = self.memory.lock().await;
             memory.to_string()
         };
-        input_variables.insert("history".to_string(), history);
+        input_variables.insert_text_replacement("history", history);
         let result = self.llm.call(input_variables).await?;
 
         let mut memory = self.memory.lock().await;
@@ -92,7 +95,7 @@ impl Chain for ConversationalChain {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let input_variable = &input_variables
-            .get(&self.input_key)
+            .get_text_replacement(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
         let human_message = Message::new(MessageType::HumanMessage, input_variable);
 
@@ -101,7 +104,7 @@ impl Chain for ConversationalChain {
             memory.to_string()
         };
 
-        input_variables.insert("history".to_string(), history);
+        input_variables.insert_text_replacement("history", history);
 
         let complete_ai_message = Arc::new(Mutex::new(String::new()));
         let complete_ai_message_clone = complete_ai_message.clone();
@@ -147,8 +150,8 @@ impl Chain for ConversationalChain {
 mod tests {
     use crate::{
         chain::conversational::builder::ConversationalChainBuilder,
-        input_variables,
         llm::openai::{OpenAI, OpenAIModel},
+        text_replacements,
     };
 
     use super::*;
@@ -162,9 +165,10 @@ mod tests {
             .build()
             .expect("Error building ConversationalChain");
 
-        let mut input_variables_first = input_variables! {
+        let mut input_variables_first: InputVariables = text_replacements! {
             "input" => "Soy de peru",
-        };
+        }
+        .into();
         // Execute the first `chain.invoke` and assert that it should succeed
         let result_first = chain.invoke(&mut input_variables_first).await;
         assert!(
@@ -178,9 +182,10 @@ mod tests {
             println!("Result: {:?}", result);
         }
 
-        let mut input_variables_second = input_variables! {
+        let mut input_variables_second: InputVariables = text_replacements! {
             "input" => "Cuales son platos tipicos de mi pais",
-        };
+        }
+        .into();
         // Execute the second `chain.invoke` and assert that it should succeed
         let result_second = chain.invoke(&mut input_variables_second).await;
         assert!(

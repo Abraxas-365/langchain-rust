@@ -43,6 +43,7 @@ fn parse_with_regex(text: &str) -> Option<AgentEvent> {
         let action = action.get(1)?.as_str();
         let action_input = action_input.get(1)?.as_str();
         Some(AgentEvent::Action(vec![AgentAction {
+            id: uuid::Uuid::new_v4().to_string(),
             action: fix_text(action),
             action_input: serde_json::from_str(action_input).ok()?,
         }]))

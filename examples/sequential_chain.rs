@@ -1,10 +1,10 @@
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
-    input_variables,
     llm::openai::{OpenAI, OpenAIModel},
     schemas::MessageType,
     sequential_chain,
     template::MessageTemplate,
+    text_replacements,
 };
 use std::io::{self, Write}; // Include io Library for terminal input
 
@@ -44,9 +44,12 @@ async fn main() {
 
     let product = product.trim();
     let output = sequential_chain
-        .execute(&mut input_variables! {
-            "producto" => product
-        })
+        .execute(
+            &mut text_replacements! {
+                "producto" => product
+            }
+            .into(),
+        )
         .await
         .unwrap();
 

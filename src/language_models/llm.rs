@@ -29,7 +29,7 @@ pub trait LLM: Sync + Send + LLMClone {
     fn messages_to_string(&self, messages: &[Message]) -> String {
         messages
             .iter()
-            .map(|m| format!("{:?}: {}", m.message_type, m.content))
+            .map(|m| m.to_string())
             .collect::<Vec<String>>()
             .join("\n")
     }

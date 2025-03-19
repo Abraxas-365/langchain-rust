@@ -4,9 +4,10 @@ use async_trait::async_trait;
 use langchain_rust::{
     agent::{AgentExecutor, OpenAiToolAgentBuilder},
     chain::{options::ChainCallOptions, Chain},
-    input_variables,
     llm::openai::OpenAI,
     memory::SimpleMemory,
+    schemas::InputVariables,
+    text_replacements,
     tools::{
         map_tools, CommandExecutor, DuckDuckGoSearch, SerpApi, Tool, ToolFunction, ToolWrapper,
     },
@@ -66,9 +67,10 @@ async fn main() {
 
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
 
-    let mut input_variables = input_variables! {
+    let mut input_variables: InputVariables = text_replacements! {
         "input" => "What the name of the current dir, And what date is today",
-    };
+    }
+    .into();
 
     match executor.invoke(&mut input_variables).await {
         Ok(result) => {

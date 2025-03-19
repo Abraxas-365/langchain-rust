@@ -6,7 +6,7 @@ use langchain_rust::{
     llm::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     prompt_template,
-    schemas::{Document, Message, MessageType, Retriever},
+    schemas::{Document, InputVariables, Message, MessageType, Retriever},
     template::MessageTemplate,
 };
 use std::error::Error;
@@ -67,16 +67,17 @@ async fn main() {
         .build()
         .expect("Error building ConversationalChain");
 
-    let mut input_variables = StuffQABuilder::new().question("Hi").build();
+    let mut input_variables: InputVariables = StuffQABuilder::new().question("Hi").build().into();
 
     let result = chain.invoke(&mut input_variables).await;
     if let Ok(result) = result {
         println!("Result: {:?}", result);
     }
 
-    let mut input_variables = StuffQABuilder::new()
+    let mut input_variables: InputVariables = StuffQABuilder::new()
         .question("Which is luis Favorite Food")
-        .build();
+        .build()
+        .into();
 
     //If you want to stream
     let mut stream = chain.stream(&mut input_variables).await.unwrap();

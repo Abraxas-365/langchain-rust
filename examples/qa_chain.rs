@@ -1,7 +1,7 @@
 use langchain_rust::{
     chain::{Chain, StuffDocumentBuilder, StuffQABuilder},
     llm::openai::OpenAI,
-    schemas::Document,
+    schemas::{Document, InputVariables},
 };
 
 #[tokio::main]
@@ -13,7 +13,7 @@ async fn main() {
         // .prompt() you can add a custom prompt if you want
         .build()
         .unwrap();
-    let mut input = StuffQABuilder::new()
+    let mut input: InputVariables = StuffQABuilder::new()
         .question("How old is luis and whats his favorite text editor")
         .documents(&[
             Document::new(format!(
@@ -25,7 +25,8 @@ async fn main() {
                 "How old is Luis", "24"
             )),
         ])
-        .build();
+        .build()
+        .into();
 
     let output = chain.invoke(&mut input).await.unwrap();
 

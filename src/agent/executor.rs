@@ -2,12 +2,13 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
 
+use async_openai::types::{ChatCompletionMessageToolCall, ChatCompletionToolType, FunctionCall};
 use async_trait::async_trait;
 use indoc::indoc;
 use tokio::sync::Mutex;
 
 use super::{agent::Agent, AgentError};
-use crate::schemas::{InputVariables, Message};
+use crate::schemas::{InputVariables, Message, MessageType};
 use crate::{
     chain::{chain_trait::Chain, ChainError},
     language_models::GenerateResult,
@@ -69,21 +70,21 @@ where
         &self,
         input_variables: &mut InputVariables,
     ) -> Result<GenerateResult, ChainError> {
-        let mut steps: Vec<(Option<AgentAction>, String)> = Vec::new();
+        let mut steps: Vec<(AgentAction, String)> = Vec::new();
         let mut use_counts: HashMap<String, usize> = HashMap::new();
         let mut consecutive_fails: usize = 0;
 
         if let Some(memory) = &self.memory {
             let memory: tokio::sync::MutexGuard<'_, dyn BaseMemory> = memory.lock().await;
-            input_variables.insert("chat_history".to_string(), memory.to_string());
+            input_variables.insert_placeholder_replacement("chat_history", memory.messages());
         // TODO: Possibly implement messages parsing
         } else {
-            input_variables.insert("chat_history".to_string(), "".to_string());
+            input_variables.insert_placeholder_replacement("chat_history", vec![]);
         }
 
         {
             let mut input_variables_demo = input_variables.clone();
-            input_variables_demo.insert("agent_scratchpad".to_string(), "".to_string());
+            input_variables_demo.insert_placeholder_replacement("agent_scratchpad", vec![]);
             self.log_messages(&input_variables_demo).map_err(|e| {
                 ChainError::AgentError(format!("Error formatting initial messages: {e}"))
             })?;
@@ -114,7 +115,14 @@ where
                                 "Max iteration ({}) reached, forcing final answer",
                                 self.max_iterations.unwrap()
                             );
-                            steps.push((None, FORCE_FINAL_ANSWER.to_string()));
+                            input_variables.insert_placeholder_replacement(
+                                "ultimatum",
+                                vec![
+                                    Message::new(MessageType::AIMessage, ""),
+                                    Message::new(MessageType::HumanMessage, FORCE_FINAL_ANSWER),
+                                ],
+                            );
+                            // TODO: Add ultimatum template
                             continue 'step;
                         }
 
@@ -181,7 +189,7 @@ where
 
                         log::debug!("Tool {} result:\n{}", &action.action, &observation);
 
-                        steps.push((Some(action), observation));
+                        steps.push((action, observation));
                         consecutive_fails = 0;
                     }
                 }
@@ -189,20 +197,33 @@ where
                     if let Some(memory) = &self.memory {
                         let mut memory = memory.lock().await;
 
-                        memory.add_user_message(match &input_variables.get("input") {
-                            Some(input) => input,
-                            None => &"",
-                        });
+                        memory.add_user_message(
+                            match &input_variables.get_text_replacement("input") {
+                                Some(input) => input,
+                                None => &"",
+                            },
+                        );
 
                         for (action, observation) in steps {
-                            if let Some(action) = action {
-                                // TODO: change message type entirely
-                                memory.add_ai_message(&action.action);
-                                memory.add_message(Message::new_tool_message(
-                                    observation,
-                                    action.action,
-                                ));
-                            }
+                            memory.add_message(
+                                Message::new(MessageType::AIMessage, "").with_tool_calls(vec![
+                                    ChatCompletionMessageToolCall {
+                                        id: action.id.clone(),
+                                        r#type: ChatCompletionToolType::Function,
+                                        function: FunctionCall {
+                                            name: action.action,
+                                            arguments: serde_json::to_string_pretty(
+                                                &action.action_input,
+                                            )
+                                            .unwrap_or("Input parameters unknown".into()),
+                                        },
+                                    },
+                                ]),
+                            );
+                            memory.add_message(Message::new_tool_message::<_, &str>(
+                                Some(&action.id),
+                                observation,
+                            ));
                         }
 
                         memory.add_ai_message(&final_answer);

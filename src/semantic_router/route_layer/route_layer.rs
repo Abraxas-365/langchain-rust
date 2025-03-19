@@ -5,8 +5,8 @@ use serde_json::Value;
 use crate::{
     chain::{Chain, LLMChain},
     embedding::Embedder,
-    input_variables,
     semantic_router::{Index, RouteLayerError, Router},
+    text_replacements,
 };
 
 pub enum AggregationMethod {
@@ -194,10 +194,13 @@ impl RouteLayer {
     ) -> Result<Value, RouteLayerError> {
         let output = self
             .llm
-            .invoke(&mut input_variables! {
-                "description"=>description,
-                "query"=>query
-            })
+            .invoke(
+                &mut text_replacements! {
+                    "description"=>description,
+                    "query"=>query
+                }
+                .into(),
+            )
             .await?;
         match serde_json::from_str::<Value>(&output) {
             Ok(value_result) => Ok(value_result),

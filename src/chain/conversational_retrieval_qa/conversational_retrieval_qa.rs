@@ -54,7 +54,8 @@ impl ConversationalRetrieverChain {
                         &mut CondenseQuestionPromptBuilder::new()
                             .question(input)
                             .chat_history(history)
-                            .build(),
+                            .build()
+                            .into(),
                     )
                     .await?;
                 if let Some(tokens) = result.tokens {
@@ -86,7 +87,7 @@ impl Chain for ConversationalRetrieverChain {
     ) -> Result<HashMap<String, Value>, ChainError> {
         let mut token_usage: Option<TokenUsage> = None;
         let input_variable = &input_variables
-            .get(&self.input_key)
+            .get_text_replacement(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
 
         let human_message = Message::new(MessageType::HumanMessage, input_variable);
@@ -112,7 +113,8 @@ impl Chain for ConversationalRetrieverChain {
                 &mut StuffQABuilder::new()
                     .documents(&documents)
                     .question(question.clone())
-                    .build(),
+                    .build()
+                    .into(),
             )
             .await?;
 
@@ -157,7 +159,7 @@ impl Chain for ConversationalRetrieverChain {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let input_variable = &input_variables
-            .get(&self.input_key)
+            .get_text_replacement(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
 
         let human_message = Message::new(MessageType::HumanMessage, input_variable);
@@ -180,7 +182,8 @@ impl Chain for ConversationalRetrieverChain {
                 &mut StuffQABuilder::new()
                     .documents(&documents)
                     .question(question.clone())
-                    .build(),
+                    .build()
+                    .into(),
             )
             .await?;
 
@@ -289,7 +292,8 @@ mod tests {
             .build()
             .expect("Error building ConversationalChain");
 
-        let mut input_variables_first = StuffQABuilder::new().question("Hola").build();
+        let mut input_variables_first: InputVariables =
+            StuffQABuilder::new().question("Hola").build().into();
         // Execute the first `chain.invoke` and assert that it should succeed
         let result_first = chain.invoke(&mut input_variables_first).await;
         assert!(
@@ -303,9 +307,10 @@ mod tests {
             println!("Result: {:?}", result);
         }
 
-        let mut input_variables_second = StuffQABuilder::new()
+        let mut input_variables_second: InputVariables = StuffQABuilder::new()
             .question("Cual es la comida favorita de luis")
-            .build();
+            .build()
+            .into();
         // Execute the second `chain.invoke` and assert that it should succeed
         let result_second = chain.invoke(&mut input_variables_second).await;
         assert!(

@@ -16,7 +16,7 @@ use super::AgentError;
 pub trait Agent: Send + Sync {
     async fn plan(
         &self,
-        intermediate_steps: &[(Option<AgentAction>, String)],
+        intermediate_steps: &[(AgentAction, String)],
         inputs: &mut InputVariables,
     ) -> Result<AgentEvent, AgentError>;
 

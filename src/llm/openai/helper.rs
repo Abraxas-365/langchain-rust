@@ -17,8 +17,7 @@ fn to_openai_message(message: &Message) -> Result<ChatCompletionRequestMessage, 
     match message.message_type {
         MessageType::AIMessage => Ok(match &message.tool_calls {
             Some(value) => {
-                let function: Vec<ChatCompletionMessageToolCall> =
-                    serde_json::from_value(value.clone())?;
+                let function: Vec<ChatCompletionMessageToolCall> = value.clone();
                 ChatCompletionRequestAssistantMessageArgs::default()
                     .tool_calls(function)
                     .content(message.content.clone())

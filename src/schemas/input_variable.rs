@@ -1,33 +1,69 @@
 use std::collections::HashMap;
 
-pub type InputVariables = HashMap<String, String>;
+use derive_new::new;
 
-/// `input_variables!` is a utility macro used for creating a `std::collections::HashMap<String, serde_json::Value>`.
-/// This HashMap can then be passed as arguments to a function or method.
-///
-/// # Usage
-/// In this macro, the keys are `&str` and values are arbitrary types that get serialized into `serde_json::Value`:
-/// ```rust,ignore
-/// prompt_args! {
-///     "input" => "Who is the writer of 20,000 Leagues Under the Sea, and what is my name?",
-///     "history" => vec![
-///         Message::new_human_message("My name is: Luis"),
-///         Message::new_ai_message("Hi Luis"),
-///     ],
-/// }
-/// ```
-///
-/// # Arguments
-/// * `key` - A `&str` that will be used as the key in the resulting HashMap.<br>
-/// * `value` - An arbitrary type that will be serialized into `serde_json::Value` and associated with the corresponding key.
-///
-/// The precise keys and values are dependent on your specific use case. In this example, "input" and "history" are keys,
-/// and
+use super::Message;
+
+#[derive(Clone, new)]
+pub struct InputVariables(TextReplacements, PlaceholderReplacements);
+pub type TextReplacements = HashMap<String, String>;
+pub type PlaceholderReplacements = HashMap<String, Vec<Message>>;
+
+impl InputVariables {
+    pub fn contains_text_key(&self, key: &str) -> bool {
+        self.0.contains_key(key)
+    }
+
+    pub fn iter_test_replacements(&self) -> impl Iterator<Item = (&String, &String)> {
+        self.0.iter()
+    }
+
+    pub fn get_text_replacement(&self, key: &str) -> Option<&String> {
+        self.0.get(key)
+    }
+
+    pub fn insert_text_replacement(&mut self, key: &str, value: String) {
+        self.0.insert(key.to_string(), value);
+    }
+
+    pub fn contains_placeholder_key(&self, key: &str) -> bool {
+        self.1.contains_key(key)
+    }
+
+    pub fn get_placeholder_replacement(&self, key: &str) -> Option<&Vec<Message>> {
+        self.1.get(key)
+    }
+
+    pub fn insert_placeholder_replacement(&mut self, key: &str, value: Vec<Message>) {
+        self.1.insert(key.to_string(), value);
+    }
+}
+
+impl From<TextReplacements> for InputVariables {
+    fn from(text_replacements: TextReplacements) -> Self {
+        Self(text_replacements, PlaceholderReplacements::new())
+    }
+}
+impl From<PlaceholderReplacements> for InputVariables {
+    fn from(placeholder_replacements: PlaceholderReplacements) -> Self {
+        Self(TextReplacements::new(), placeholder_replacements)
+    }
+}
+
 #[macro_export]
-macro_rules! input_variables {
+macro_rules! text_replacements {
     ( $($key:expr => $value:expr),* $(,)? ) => {
-        std::collections::HashMap::<String, String>::from([$(
+        $crate::schemas::TextReplacements::from([$(
             ($key.into(), $value.to_string()),
+        )*])
+    };
+}
+
+#[macro_export]
+macro_rules! placeholder_replacements {
+    ( $($key:expr => $value:expr),* $(,)? ) => {
+        $crate::schemas::PlaceholderReplacements::from([$(
+            ($key.into(), $value),
         )*])
     };
 }

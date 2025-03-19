@@ -67,7 +67,7 @@ impl Chain for SequentialChain {
             let result: GenerateResult = serde_json::from_value(result)?;
             //Insert the output chain to the final output
             output_result.insert(output_key.clone(), json!(result.generation.clone()));
-            input_variables.insert(output_key, result.generation.clone());
+            input_variables.insert_text_replacement(&output_key, result.generation.clone());
 
             //add the generation to keep track of the final generation
             final_result.generation = result.generation;
@@ -102,11 +102,11 @@ impl Chain for SequentialChain {
 mod tests {
     use crate::{
         chain::{Chain, LLMChainBuilder},
-        input_variables,
         llm::openai::OpenAI,
         schemas::MessageType,
         sequential_chain,
         template::MessageTemplate,
+        text_replacements,
     };
 
     #[tokio::test]
@@ -135,10 +135,13 @@ mod tests {
 
         let chain = sequential_chain!(chain1, chain2);
         let result = chain
-            .execute(&mut input_variables! {
-                "input" => "medias",
-                "palabra" => "arroz"
-            })
+            .execute(
+                &mut text_replacements! {
+                    "input" => "medias",
+                    "palabra" => "arroz"
+                }
+                .into(),
+            )
             .await;
         assert!(
             result.is_ok(),

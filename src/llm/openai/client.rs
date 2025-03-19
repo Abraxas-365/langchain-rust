@@ -90,7 +90,10 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
                 .connection_verbose(true)
                 .build()?,
         );
+        println!("{:#?}", prompt);
+        println!("{:#?}", self.options);
         let request = OpenAIRequest::build_request(&self.model, prompt, &self.options)?;
+        println!("{:#?}", request);
         match &self.options.stream_option {
             Some(stream_option) => {
                 let mut stream = client
@@ -391,7 +394,7 @@ mod tests {
         let image_urls = vec![format!("data:image/jpeg;base64,{image_base64}")];
         let messages = vec![
             Message::new(MessageType::HumanMessage, "Describe this image"),
-            Message::new(MessageType::HumanMessage, "").with_images(image_urls),
+            Message::new::<&str>(MessageType::HumanMessage, "").with_images(image_urls),
         ];
 
         // Call the generate function

@@ -1,11 +1,11 @@
 use futures::StreamExt;
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
-    input_variables,
     llm::openai::OpenAI,
     prompt_template,
     schemas::{Message, MessageType},
     template::MessageTemplate,
+    text_replacements,
 };
 
 #[tokio::main]
@@ -27,9 +27,12 @@ async fn main() {
         .unwrap();
 
     let mut stream = chain
-        .stream(&mut input_variables! {
-            "input" => "Who is the writer of 20,000 Leagues Under the Sea?",
-        })
+        .stream(
+            &mut text_replacements! {
+                "input" => "Who is the writer of 20,000 Leagues Under the Sea?",
+            }
+            .into(),
+        )
         .await
         .unwrap();
 

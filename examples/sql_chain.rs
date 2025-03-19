@@ -13,6 +13,8 @@ use std::io::{self, Write}; // Include io Library for terminal input
 #[cfg(feature = "postgres")]
 #[tokio::main]
 async fn main() {
+    use langchain_rust::schemas::InputVariables;
+
     let options = ChainCallOptions::default();
     let llm = OpenAI::default();
 
@@ -34,7 +36,7 @@ async fn main() {
     io::stdin().read_line(&mut input).unwrap();
 
     let input = input.trim();
-    let mut input_variables = chain.prompt_builder().query(input).build();
+    let mut input_variables: InputVariables = chain.prompt_builder().query(input).build().into();
     match chain.invoke(&mut input_variables).await {
         Ok(result) => {
             println!("Result: {:?}", result);

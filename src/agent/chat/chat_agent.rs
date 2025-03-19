@@ -1,17 +1,18 @@
 use std::{collections::HashMap, error::Error, sync::Arc};
 
+use async_openai::types::{ChatCompletionMessageToolCall, ChatCompletionToolType, FunctionCall};
 use async_trait::async_trait;
-use indoc::indoc;
 
 use crate::{
     agent::{agent::Agent, AgentError},
     chain::chain_trait::Chain,
-    input_variables, prompt_template,
+    prompt_template,
     schemas::{
         agent::{AgentAction, AgentEvent},
-        InputVariables, MessageType,
+        InputVariables, Message, MessageType,
     },
     template::{MessageOrTemplate, MessageTemplate, PromptTemplate},
+    text_replacements,
     tools::Tool,
 };
 
@@ -34,10 +35,11 @@ impl ConversationalAgent {
             .collect::<Vec<_>>()
             .join("\n");
         let tool_names = tools.keys().cloned().collect::<Vec<_>>().join(", ");
-        let input_variables_fstring = input_variables! {
+        let input_variables_fstring: InputVariables = text_replacements! {
             "tools" => tool_string,
             "tool_names" => tool_names
-        };
+        }
+        .into();
 
         let system_prompt = MessageTemplate::from_jinja2(
             MessageType::SystemMessage,
@@ -54,23 +56,26 @@ impl ConversationalAgent {
         Ok(formatter)
     }
 
-    fn construct_scratchpad(&self, intermediate_steps: &[(Option<AgentAction>, String)]) -> String {
+    fn construct_scratchpad(&self, intermediate_steps: &[(AgentAction, String)]) -> Vec<Message> {
         intermediate_steps
             .iter()
-            .map(|(action, result)| match action {
-                Some(action) => format!(
-                    indoc! {"
-                        Action: {}
-                        Action input: {}
-                        Result:
-                        {}
-                    "},
-                    &action.action, &action.action_input, result
-                ),
-                None => result.to_string(),
+            .flat_map(|(action, result)| {
+                vec![
+                    Message::new(MessageType::AIMessage, "").with_tool_calls(vec![
+                        ChatCompletionMessageToolCall {
+                            id: action.id.clone(),
+                            r#type: ChatCompletionToolType::Function,
+                            function: FunctionCall {
+                                name: action.action.clone(),
+                                arguments: serde_json::to_string_pretty(&action.action_input)
+                                    .unwrap_or("Input parameters unknown".into()),
+                            },
+                        },
+                    ]),
+                    Message::new_tool_message(Some(action.id.clone()), result),
+                ]
             })
             .collect::<Vec<_>>()
-            .join("\n\n")
     }
 }
 
@@ -78,11 +83,11 @@ impl ConversationalAgent {
 impl Agent for ConversationalAgent {
     async fn plan(
         &self,
-        intermediate_steps: &[(Option<AgentAction>, String)],
+        intermediate_steps: &[(AgentAction, String)],
         inputs: &mut InputVariables,
     ) -> Result<AgentEvent, AgentError> {
         let scratchpad = self.construct_scratchpad(intermediate_steps);
-        inputs.insert("agent_scratchpad".to_string(), scratchpad);
+        inputs.insert_placeholder_replacement("agent_scratchpad", scratchpad);
         let output = self.chain.call(inputs).await?.generation;
         log::trace!("Agent output: {}", output);
         let parsed_output = parse_agent_output(&output)?;
@@ -108,9 +113,10 @@ mod tests {
     use crate::{
         agent::{chat::builder::ConversationalAgentBuilder, executor::AgentExecutor},
         chain::chain_trait::Chain,
-        input_variables,
         llm::openai::{OpenAI, OpenAIModel},
         memory::SimpleMemory,
+        schemas::InputVariables,
+        text_replacements,
         tools::{map_tools, Tool, ToolFunction, ToolWrapper},
     };
 
@@ -152,9 +158,10 @@ mod tests {
             .tools(map_tools(vec![tool_calc.into()]))
             .build(llm)
             .unwrap();
-        let mut input_variables = input_variables! {
+        let mut input_variables: InputVariables = text_replacements! {
             "input" => "hola,Me llamo luis, y tengo 10 anos, y estudio Computer scinence",
-        };
+        }
+        .into();
         let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
         match executor.invoke(&mut input_variables).await {
             Ok(result) => {
@@ -162,9 +169,10 @@ mod tests {
             }
             Err(e) => panic!("Error invoking LLMChain: {:?}", e),
         }
-        let mut input_variables = input_variables! {
+        let mut input_variables: InputVariables = text_replacements! {
             "input" => "cuanta es la edad de luis +10 y que estudia",
-        };
+        }
+        .into();
         match executor.invoke(&mut input_variables).await {
             Ok(result) => {
                 println!("Result: {:?}", result);

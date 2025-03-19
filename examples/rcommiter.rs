@@ -3,8 +3,8 @@ use std::process::{Command, Stdio};
 
 use indoc::indoc;
 use langchain_rust::{
-    chain::chain_trait::Chain, chain::llm_chain::LLMChainBuilder, input_variables,
-    llm::openai::OpenAI, schemas::MessageType, template::MessageTemplate,
+    chain::chain_trait::Chain, chain::llm_chain::LLMChainBuilder, llm::openai::OpenAI,
+    schemas::MessageType, template::MessageTemplate, text_replacements,
 };
 
 //to try this in action , add something to this file stage it an run it
@@ -50,9 +50,12 @@ git diff --cached --name-only --diff-filter=ACM | while read -r file; do echo "\
         .join("\n");
 
     let res = chain
-        .invoke(&mut input_variables! {
-            "input" => complete_changes,
-        })
+        .invoke(
+            &mut text_replacements! {
+                "input" => complete_changes,
+            }
+            .into(),
+        )
         .await
         .expect("Failed to invoke chain");
 

@@ -1,11 +1,11 @@
 use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
-    input_variables,
     language_models::llm::LLM,
     llm::openai::OpenAI,
-    prompt_template,
-    schemas::{messages::Message, MessageType},
+    placeholder_replacements, prompt_template,
+    schemas::{messages::Message, InputVariables, MessageType},
     template::{MessageOrTemplate, MessageTemplate},
+    text_replacements,
 };
 
 #[tokio::main]
@@ -39,9 +39,12 @@ async fn main() {
     //We can now invoke it and ask the same question. It still won't know the answer, but it should respond in a more proper tone for a technical writer!
 
     match chain
-        .invoke(&mut input_variables! {
-            "input" => "Quien es el escritor de 20000 millas de viaje submarino",
-        })
+        .invoke(
+            &mut text_replacements! {
+                "input" => "Quien es el escritor de 20000 millas de viaje submarino",
+            }
+            .into(),
+        )
         .await
     {
         Ok(result) => {
@@ -61,26 +64,28 @@ async fn main() {
         MessageTemplate::from_fstring(MessageType::HumanMessage, "{input}",)
     ];
 
-    // let chain = LLMChainBuilder::new()
-    //     .prompt(prompt)
-    //     .llm(open_ai)
-    //     .build()
-    //     .unwrap();
-    // match chain
-    //     .invoke(
-    //         &mut input_variables! {
-    //         "input" => "Who is the writer of 20,000 Leagues Under the Sea, and what is my name?",
-    //         },
-    //         vec![
-    //             Message::new_human_message("My name is: luis"),
-    //             Message::new_ai_message("Hi luis"),
-    //         ],
-    //     )
-    //     .await
-    // {
-    //     Ok(result) => {
-    //         println!("Result: {:?}", result);
-    //     }
-    //     Err(e) => panic!("Error invoking LLMChain: {:?}", e),
-    // }
+    let chain = LLMChainBuilder::new()
+        .prompt(prompt)
+        .llm(open_ai)
+        .build()
+        .unwrap();
+    match chain
+        .invoke(&mut InputVariables::new(
+            text_replacements! {
+                "input" => "Who is the writer of 20,000 Leagues Under the Sea, and what is my name?",
+            },
+            placeholder_replacements! {
+                "history" => vec![
+                    Message::new(MessageType::HumanMessage, "My name is: luis"),
+                    Message::new(MessageType::AIMessage, "Hi luis"),
+                ],
+            },
+        ))
+        .await
+    {
+        Ok(result) => {
+            println!("Result: {:?}", result);
+        }
+        Err(e) => panic!("Error invoking LLMChain: {:?}", e),
+    }
 }

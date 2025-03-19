@@ -4,7 +4,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::Stream;
-use ollama_rs::generation::images::Image;
+use ollama_rs::generation::{images::Image, tools::ToolCall};
 pub use ollama_rs::{
     error::OllamaError,
     generation::{
@@ -74,8 +74,17 @@ impl From<&Message> for ChatMessage {
             tool_calls: message
                 .tool_calls
                 .as_ref()
-                .map(|tool_calls| serde_json::from_value(tool_calls.clone()).unwrap())
-                .unwrap(), // TODO: Fix this
+                .and_then(|tool_calls| {
+                    tool_calls
+                        .clone()
+                        .into_iter()
+                        .map(|tc| {
+                            serde_json::from_value::<ToolCall>(serde_json::to_value(tc.clone())?)
+                        }) // TODO: FIX THIS
+                        .collect::<Result<_, _>>()
+                        .ok()
+                })
+                .unwrap_or_default(),
             role: message.message_type.clone().into(),
         }
     }
