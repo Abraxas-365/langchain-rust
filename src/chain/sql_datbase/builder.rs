@@ -3,7 +3,8 @@ use crate::{
     language_models::llm::LLM,
     output_parsers::OutputParser,
     prompt_template,
-    schemas::{MessageTemplate, MessageType, PromptTemplate},
+    schemas::MessageType,
+    template::{MessageTemplate, PromptTemplate},
     tools::SQLDatabase,
 };
 

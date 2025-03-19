@@ -4,7 +4,8 @@ use crate::{
     chain::{options::ChainCallOptions, ChainError, LLMChainBuilder},
     language_models::llm::LLM,
     output_parsers::OutputParser,
-    schemas::{MessageTemplate, MessageType, PromptTemplate},
+    schemas::MessageType,
+    template::{MessageTemplate, PromptTemplate},
 };
 
 use super::StuffDocument;

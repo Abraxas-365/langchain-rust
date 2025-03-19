@@ -4,7 +4,8 @@ use langchain_rust::{
     input_variables,
     llm::openai::OpenAI,
     prompt_template,
-    schemas::{Message, MessageTemplate, MessageType},
+    schemas::{Message, MessageType},
+    template::MessageTemplate,
 };
 
 #[tokio::main]

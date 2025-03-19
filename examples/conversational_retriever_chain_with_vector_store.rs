@@ -7,23 +7,21 @@ use indoc::indoc;
 #[cfg(feature = "postgres")]
 use langchain_rust::{
     add_documents,
+    chain::StuffQABuilder,
     chain::{Chain, ConversationalRetrieverChainBuilder},
     embedding::openai::openai_embedder::OpenAiEmbedder,
     llm::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
+    prompt_template,
     schemas::Document,
+    schemas::{Message, MessageType},
+    template::MessageTemplate,
     vectorstore::{pgvector::StoreBuilder, Retriever, VectorStore},
 };
 
 #[cfg(feature = "postgres")]
 #[tokio::main]
 async fn main() {
-    use langchain_rust::{
-        chain::StuffQABuilder,
-        prompt_template,
-        schemas::{Message, MessageTemplate, MessageType},
-    };
-
     let documents = vec![
         Document::new(format!(
             "\nQuestion: {}\nAnswer: {}\n",

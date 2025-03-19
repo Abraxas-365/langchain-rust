@@ -6,17 +6,15 @@ use indoc::indoc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::prompt_template;
-use crate::schemas::{
-    InputVariables, Message, MessageOrTemplate, MessageTemplate, MessageType, PromptTemplate,
-};
 use crate::{
     agent::{Agent, AgentError},
     chain::Chain,
+    prompt_template,
     schemas::{
         agent::{AgentAction, AgentEvent},
-        FunctionCallResponse,
+        FunctionCallResponse, InputVariables, Message, MessageType,
     },
+    template::{MessageOrTemplate, MessageTemplate, PromptTemplate},
     tools::Tool,
 };
 
@@ -35,12 +33,9 @@ pub struct OpenAiToolAgent {
 impl OpenAiToolAgent {
     pub fn create_prompt(prefix: &str) -> Result<PromptTemplate, AgentError> {
         let prompt = prompt_template![
-            MessageOrTemplate::Message(Message::new(MessageType::SystemMessage, prefix)),
+            Message::new(MessageType::SystemMessage, prefix),
             MessageOrTemplate::Placeholder("chat_history".into()),
-            MessageOrTemplate::Template(MessageTemplate::from_jinja2(
-                MessageType::HumanMessage,
-                "{{input}}"
-            )),
+            MessageTemplate::from_jinja2(MessageType::HumanMessage, "{{input}}"),
             MessageOrTemplate::Placeholder("chat_history".into())
         ];
 

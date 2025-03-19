@@ -9,7 +9,8 @@ use crate::{
     language_models::llm::LLM,
     memory::SimpleMemory,
     output_parsers::OutputParser,
-    schemas::{memory::BaseMemory, MessageTemplate, MessageType, PromptTemplate},
+    schemas::{memory::BaseMemory, MessageType},
+    template::{MessageTemplate, PromptTemplate},
 };
 
 use super::{prompt::DEFAULT_TEMPLATE, ConversationalChain, DEFAULT_INPUT_VARIABLE};

@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{language_models::LLMError, output_parsers::OutputParserError, prompt::PromptError};
+use crate::{language_models::LLMError, output_parsers::OutputParserError, template::TemplateError};
 
 #[derive(Error, Debug)]
 pub enum ChainError {
@@ -14,7 +14,7 @@ pub enum ChainError {
     OutputParser(#[from] OutputParserError),
 
     #[error("Prompt error: {0}")]
-    PromptError(#[from] PromptError),
+    PromptError(#[from] TemplateError),
 
     #[error("Missing Object On Builder: {0}")]
     MissingObject(String),

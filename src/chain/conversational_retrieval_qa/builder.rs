@@ -7,7 +7,8 @@ use crate::{
     },
     language_models::llm::LLM,
     memory::SimpleMemory,
-    schemas::{BaseMemory, PromptTemplate, Retriever},
+    schemas::{BaseMemory, Retriever},
+    template::PromptTemplate,
 };
 
 use super::ConversationalRetrieverChain;

@@ -6,7 +6,8 @@ use langchain_rust::{
     llm::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     prompt_template,
-    schemas::{Document, Message, MessageTemplate, MessageType, Retriever},
+    schemas::{Document, Message, MessageType, Retriever},
+    template::MessageTemplate,
 };
 use std::error::Error;
 

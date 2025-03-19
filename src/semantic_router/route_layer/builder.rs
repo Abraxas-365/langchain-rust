@@ -7,8 +7,9 @@ use crate::{
     embedding::{openai::OpenAiEmbedder, Embedder},
     language_models::llm::LLM,
     llm::openai::OpenAI,
-    schemas::{MessageTemplate, MessageType},
+    schemas::MessageType,
     semantic_router::{Index, MemoryIndex, RouteLayerBuilderError, Router},
+    template::MessageTemplate,
 };
 
 use super::{AggregationMethod, RouteLayer};

@@ -104,8 +104,9 @@ mod tests {
         chain::{Chain, LLMChainBuilder},
         input_variables,
         llm::openai::OpenAI,
-        schemas::{MessageTemplate, MessageType},
+        schemas::MessageType,
         sequential_chain,
+        template::MessageTemplate,
     };
 
     #[tokio::test]

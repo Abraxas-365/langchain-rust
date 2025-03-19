@@ -1,8 +1,11 @@
 use base64::prelude::*;
-use langchain_rust::chain::{Chain, LLMChainBuilder};
-use langchain_rust::llm::OpenAI;
-use langchain_rust::schemas::{Message, MessageTemplate, MessageType};
-use langchain_rust::{input_variables, prompt_template};
+use langchain_rust::{
+    chain::{Chain, LLMChainBuilder},
+    llm::OpenAI,
+    schemas::{Message, MessageType},
+    template::MessageTemplate,
+    {input_variables, prompt_template},
+};
 
 #[tokio::main]
 async fn main() {

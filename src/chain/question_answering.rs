@@ -3,9 +3,8 @@ use std::{error::Error, pin::Pin};
 use crate::{
     input_variables,
     language_models::{llm::LLM, GenerateResult},
-    schemas::{
-        messages::Message, Document, InputVariables, MessageTemplate, MessageType, StreamData,
-    },
+    schemas::{messages::Message, Document, InputVariables, MessageType, StreamData},
+    template::MessageTemplate,
 };
 use async_trait::async_trait;
 use futures::Stream;

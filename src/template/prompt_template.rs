@@ -3,9 +3,9 @@ use std::collections::HashSet;
 use derive_new::new;
 use gix::hashtable::HashMap;
 
-use crate::prompt::PromptError;
-
-use super::{InputVariables, Message, MessageTemplate, Prompt};
+use super::MessageTemplate;
+use crate::schemas::{InputVariables, Message, Prompt};
+use crate::template::TemplateError;
 
 #[derive(Clone)]
 pub enum MessageOrTemplate {
@@ -36,11 +36,11 @@ impl PromptTemplate {
     /// Insert variables into a prompt template to create a full-fletched prompt.
     ///
     /// replace_placeholder() must be called before format().
-    pub fn format(&self, input_variables: &InputVariables) -> Result<Prompt, PromptError> {
+    pub fn format(&self, input_variables: &InputVariables) -> Result<Prompt, TemplateError> {
         let messages = self
             .messages
             .iter()
-            .filter_map(|m| -> Option<Result<Message, PromptError>> {
+            .filter_map(|m| -> Option<Result<Message, TemplateError>> {
                 match m {
                     MessageOrTemplate::Message(m) => Some(Ok(m.clone())),
                     MessageOrTemplate::Template(t) => Some(t.format(input_variables)),
@@ -122,6 +122,6 @@ impl From<MessageTemplate> for MessageOrTemplate {
 #[macro_export]
 macro_rules! prompt_template {
     ($($x:expr),*) => {
-        $crate::schemas::PromptTemplate::new(vec![$($x.into()),*])
+        $crate::template::PromptTemplate::new(vec![$($x.into()),*])
     };
 }

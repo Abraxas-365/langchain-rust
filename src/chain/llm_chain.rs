@@ -7,7 +7,8 @@ use futures_util::TryStreamExt;
 use crate::{
     language_models::{llm::LLM, GenerateResult},
     output_parsers::{OutputParser, SimpleParser},
-    schemas::{InputVariables, PromptTemplate, StreamData},
+    schemas::{InputVariables, StreamData},
+    template::PromptTemplate,
 };
 
 use super::{chain_trait::Chain, options::ChainCallOptions, ChainError};
@@ -149,7 +150,8 @@ mod tests {
         input_variables,
         llm::openai::{OpenAI, OpenAIModel},
         prompt_template,
-        schemas::{MessageTemplate, MessageType},
+        schemas::MessageType,
+        template::MessageTemplate,
     };
 
     use super::*;

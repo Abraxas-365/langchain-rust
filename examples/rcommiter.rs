@@ -2,11 +2,10 @@ use std::io::{self, BufRead};
 use std::process::{Command, Stdio};
 
 use indoc::indoc;
-use langchain_rust::chain::chain_trait::Chain;
-use langchain_rust::chain::llm_chain::LLMChainBuilder;
-use langchain_rust::input_variables;
-use langchain_rust::llm::openai::OpenAI;
-use langchain_rust::schemas::{MessageTemplate, MessageType};
+use langchain_rust::{
+    chain::chain_trait::Chain, chain::llm_chain::LLMChainBuilder, input_variables,
+    llm::openai::OpenAI, schemas::MessageType, template::MessageTemplate,
+};
 
 //to try this in action , add something to this file stage it an run it
 #[tokio::main]

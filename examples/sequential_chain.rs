@@ -2,8 +2,9 @@ use langchain_rust::{
     chain::{Chain, LLMChainBuilder},
     input_variables,
     llm::openai::{OpenAI, OpenAIModel},
-    schemas::{MessageTemplate, MessageType},
+    schemas::MessageType,
     sequential_chain,
+    template::MessageTemplate,
 };
 use std::io::{self, Write}; // Include io Library for terminal input
 

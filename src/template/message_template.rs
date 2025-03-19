@@ -2,9 +2,8 @@ use std::collections::HashSet;
 
 use derive_new::new;
 
-use crate::prompt::PromptError;
-
-use super::{InputVariables, Message, MessageType};
+use crate::template::TemplateError;
+use crate::schemas::{InputVariables, Message, MessageType};
 
 #[derive(Clone)]
 pub enum TemplateFormat {
@@ -51,13 +50,13 @@ impl MessageTemplate {
         )
     }
 
-    pub fn format(&self, input_variables: &InputVariables) -> Result<Message, PromptError> {
+    pub fn format(&self, input_variables: &InputVariables) -> Result<Message, TemplateError> {
         let mut content = self.template.clone();
 
         // check if all variables are in the input variables
         for key in &self.variables {
             if !input_variables.contains_key(key.as_str()) {
-                return Err(PromptError::MissingVariable(key.clone()));
+                return Err(TemplateError::MissingVariable(key.clone()));
             }
         }
 

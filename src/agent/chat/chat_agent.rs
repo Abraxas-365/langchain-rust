@@ -9,8 +9,9 @@ use crate::{
     input_variables, prompt_template,
     schemas::{
         agent::{AgentAction, AgentEvent},
-        InputVariables, MessageOrTemplate, MessageTemplate, MessageType, PromptTemplate,
+        InputVariables, MessageType,
     },
+    template::{MessageOrTemplate, MessageTemplate, PromptTemplate},
     tools::Tool,
 };
 
@@ -45,12 +46,9 @@ impl ConversationalAgent {
         .format(&input_variables_fstring)?;
 
         let formatter = prompt_template![
-            MessageOrTemplate::Message(system_prompt),
+            system_prompt,
             MessageOrTemplate::Placeholder("chat_history".into()),
-            MessageOrTemplate::Template(MessageTemplate::from_jinja2(
-                MessageType::HumanMessage,
-                initial_prompt
-            )),
+            MessageTemplate::from_jinja2(MessageType::HumanMessage, initial_prompt),
             MessageOrTemplate::Placeholder("agent_scratchpad".into())
         ];
         Ok(formatter)
