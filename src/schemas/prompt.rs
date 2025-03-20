@@ -18,8 +18,8 @@ impl Prompt {
         }
     }
 
-    pub fn to_messages(&self) -> Vec<Message> {
-        self.messages.clone()
+    pub fn to_messages(self) -> Vec<Message> {
+        self.messages
     }
 }
 

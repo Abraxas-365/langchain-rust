@@ -9,15 +9,15 @@ use super::{options::CallOptions, GenerateResult, LLMError};
 
 #[async_trait]
 pub trait LLM: Sync + Send + LLMClone {
-    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError>;
+    async fn generate(&self, messages: Vec<Message>) -> Result<GenerateResult, LLMError>;
     async fn invoke(&self, prompt: &str) -> Result<String, LLMError> {
-        self.generate(&[Message::new(MessageType::HumanMessage, prompt)])
+        self.generate(vec![Message::new(MessageType::HumanMessage, prompt)])
             .await
             .map(|res| res.generation)
     }
     async fn stream(
         &self,
-        _messages: &[Message],
+        _messages: Vec<Message>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError>;
 
     /// This is usefull when you want to create a chain and override

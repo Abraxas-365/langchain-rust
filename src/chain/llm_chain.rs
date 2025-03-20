@@ -105,7 +105,7 @@ impl Chain for LLMChain {
         input_variables: &mut InputVariables,
     ) -> Result<GenerateResult, ChainError> {
         let prompt = self.prompt.format(input_variables)?;
-        let mut output = self.llm.generate(&prompt.to_messages()).await?;
+        let mut output = self.llm.generate(prompt.to_messages()).await?;
         output.generation = self.output_parser.parse(&output.generation).await?;
 
         Ok(output)
@@ -114,7 +114,7 @@ impl Chain for LLMChain {
     async fn invoke(&self, input_variables: &mut InputVariables) -> Result<String, ChainError> {
         let prompt = self.prompt.format(input_variables)?;
 
-        let output = self.llm.generate(&prompt.to_messages()).await?.generation;
+        let output = self.llm.generate(prompt.to_messages()).await?.generation;
         Ok(output)
     }
 
@@ -124,7 +124,7 @@ impl Chain for LLMChain {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let prompt = self.prompt.format(input_variables)?;
-        let llm_stream = self.llm.stream(&prompt.to_messages()).await?;
+        let llm_stream = self.llm.stream(prompt.to_messages()).await?;
 
         // Map the errors from LLMError to ChainError
         let mapped_stream = llm_stream.map_err(ChainError::from);

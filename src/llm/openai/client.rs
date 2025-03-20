@@ -84,7 +84,7 @@ impl Default for OpenAI<OpenAIConfig> {
 
 #[async_trait]
 impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
-    async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, LLMError> {
+    async fn generate(&self, prompt: Vec<Message>) -> Result<GenerateResult, LLMError> {
         let client = Client::with_config(self.config.clone()).with_http_client(
             reqwest::Client::builder()
                 .connection_verbose(true)
@@ -162,14 +162,14 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
     }
 
     async fn invoke(&self, prompt: &str) -> Result<String, LLMError> {
-        self.generate(&[Message::new(MessageType::HumanMessage, prompt)])
+        self.generate(vec![Message::new(MessageType::HumanMessage, prompt)])
             .await
             .map(|res| res.generation)
     }
 
     async fn stream(
         &self,
-        messages: &[Message],
+        messages: Vec<Message>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
         let client = Client::with_config(self.config.clone());
         let request = OpenAIRequest::build_request(&self.model, messages, &self.options)?;
@@ -307,7 +307,7 @@ mod tests {
         )];
 
         // Call the generate function
-        match open_ai.generate(&messages).await {
+        match open_ai.generate(messages).await {
             Ok(result) => {
                 // Print the response from the generate function
                 println!("Generate Result: {:?}", result);
@@ -333,7 +333,7 @@ mod tests {
         )];
 
         open_ai
-            .stream(&messages)
+            .stream(messages)
             .await
             .unwrap()
             .for_each(|result| async {
@@ -398,7 +398,7 @@ mod tests {
         ];
 
         // Call the generate function
-        let response = open_ai.generate(&messages).await.unwrap();
+        let response = open_ai.generate(messages).await.unwrap();
         println!("Response: {:?}", response);
     }
 }

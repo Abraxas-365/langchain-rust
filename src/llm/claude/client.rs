@@ -75,7 +75,7 @@ impl Claude {
         self
     }
 
-    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+    async fn generate(&self, messages: Vec<Message>) -> Result<GenerateResult, LLMError> {
         let client = Client::new();
         let is_stream = self.options.stream_option.is_some();
 
@@ -122,7 +122,7 @@ impl Claude {
         Ok(GenerateResult { tokens, generation })
     }
 
-    fn build_payload(&self, messages: &[Message], stream: bool) -> Payload {
+    fn build_payload(&self, messages: Vec<Message>, stream: bool) -> Payload {
         let (system_message, other_messages): (Vec<_>, Vec<_>) = messages
             .iter()
             .partition(|m| m.message_type == MessageType::SystemMessage);
@@ -149,7 +149,7 @@ impl Claude {
 
 #[async_trait]
 impl LLM for Claude {
-    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+    async fn generate(&self, messages: Vec<Message>) -> Result<GenerateResult, LLMError> {
         match &self.options.stream_option {
             Some(stream_option) => {
                 let mut complete_response = String::new();
@@ -174,7 +174,7 @@ impl LLM for Claude {
     }
     async fn stream(
         &self,
-        messages: &[Message],
+        messages: Vec<Message>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
         let client = Client::new();
         let payload = self.build_payload(messages, true);
@@ -268,7 +268,7 @@ mod tests {
         let cloudia = Claude::new();
 
         let res = cloudia
-            .generate(&[Message::new(
+            .generate(vec![Message::new(
                 MessageType::HumanMessage,
                 "Hi, how are you doing",
             )])
@@ -283,7 +283,7 @@ mod tests {
     async fn test_cloudia_stream() {
         let cloudia = Claude::new();
         let mut stream = cloudia
-            .stream(&[Message::new(
+            .stream(vec![Message::new(
                 MessageType::HumanMessage,
                 "Hi, how are you doing",
             )])

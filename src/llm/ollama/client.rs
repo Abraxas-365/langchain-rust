@@ -50,7 +50,7 @@ impl Ollama {
         self
     }
 
-    fn generate_request(&self, messages: &[Message]) -> ChatMessageRequest {
+    fn generate_request(&self, messages: Vec<Message>) -> ChatMessageRequest {
         let mapped_messages = messages.iter().map(|message| message.into()).collect();
         ChatMessageRequest::new(self.model.clone(), mapped_messages)
     }
@@ -110,7 +110,7 @@ impl Default for Ollama {
 
 #[async_trait]
 impl LLM for Ollama {
-    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+    async fn generate(&self, messages: Vec<Message>) -> Result<GenerateResult, LLMError> {
         let request = self.generate_request(messages);
         let result = self.client.send_chat_messages(request).await?;
 
@@ -131,7 +131,7 @@ impl LLM for Ollama {
 
     async fn stream(
         &self,
-        messages: &[Message],
+        messages: Vec<Message>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
         let request = self.generate_request(messages);
         let result = self.client.send_chat_messages_stream(request).await?;
@@ -174,7 +174,7 @@ mod tests {
             MessageType::HumanMessage,
             "Why does water boil at 100 degrees?",
         );
-        let mut stream = ollama.stream(&[message]).await.unwrap();
+        let mut stream = ollama.stream(vec![message]).await.unwrap();
         let mut stdout = tokio::io::stdout();
         while let Some(res) = stream.next().await {
             let data = res.unwrap();

@@ -62,7 +62,7 @@ pub struct OpenAIRequest {
 impl OpenAIRequest {
     pub fn build_request<S: Into<String>>(
         model: S,
-        messages: &[Message],
+        messages: Vec<Message>,
         call_options: &CallOptions,
     ) -> Result<OpenAIRequest, LLMError> {
         let messages = to_openai_messages(messages)?;
