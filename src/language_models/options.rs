@@ -61,6 +61,7 @@ pub struct CallOptions {
     pub function_call_behavior: Option<FunctionCallBehavior>,
     pub response_format: Option<ResponseFormat>,
     pub stream_option: Option<StreamOption>,
+    pub system_is_assistant: bool,
 }
 
 impl Default for CallOptions {
@@ -88,6 +89,7 @@ impl CallOptions {
             function_call_behavior: None,
             response_format: None,
             stream_option: None,
+            system_is_assistant: false,
         }
     }
 
@@ -177,6 +179,11 @@ impl CallOptions {
         self
     }
 
+    pub fn with_system_is_assistant(mut self, system_is_assistant: bool) -> Self {
+        self.system_is_assistant = system_is_assistant;
+        self
+    }
+
     pub fn merge_options(&mut self, incoming_options: CallOptions) {
         // For simple scalar types wrapped in Option, prefer incoming option if it is Some
         self.candidate_count = incoming_options.candidate_count.or(self.candidate_count);
@@ -223,5 +230,7 @@ impl CallOptions {
         if let Some(stream) = incoming_options.stream_option {
             self.stream_option = Some(stream);
         }
+
+        self.system_is_assistant = self.system_is_assistant || incoming_options.system_is_assistant;
     }
 }

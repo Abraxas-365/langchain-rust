@@ -74,6 +74,22 @@ impl<C: Config> OpenAI<C> {
         self.options = options;
         self
     }
+
+    fn process_prompt(&self, prompt: Vec<Message>) -> Vec<Message> {
+        if self.options.system_is_assistant {
+            prompt
+                .into_iter()
+                .map(|message| match message.message_type {
+                    MessageType::SystemMessage => {
+                        Message::new(MessageType::AIMessage, message.content.clone())
+                    }
+                    _ => message.clone(),
+                })
+                .collect::<Vec<Message>>()
+        } else {
+            prompt.to_vec()
+        }
+    }
 }
 
 impl Default for OpenAI<OpenAIConfig> {
@@ -85,6 +101,8 @@ impl Default for OpenAI<OpenAIConfig> {
 #[async_trait]
 impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
     async fn generate(&self, prompt: Vec<Message>) -> Result<GenerateResult, LLMError> {
+        let prompt = self.process_prompt(prompt);
+
         let client = Client::with_config(self.config.clone()).with_http_client(
             reqwest::Client::builder()
                 .connection_verbose(true)
@@ -169,6 +187,8 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
         &self,
         messages: Vec<Message>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
+        let messages = self.process_prompt(messages);
+
         let client = Client::with_config(self.config.clone());
         let request = OpenAIRequest::build_request(&self.model, messages, &self.options)?;
 
