@@ -34,7 +34,7 @@ pub trait Tool: Send + Sync {
     fn parameters(&self) -> Value {
         json!({
             "type": "object",
-                "properties": {
+            "properties": {
                 "input": {
                     "type": "string",
                     "description":self.description()
@@ -67,7 +67,7 @@ pub trait ToolFunction: Default + Send + Sync + Into<Arc<dyn Tool>> {
     fn parameters(&self) -> Value {
         json!({
             "type": "object",
-                "properties": {
+            "properties": {
                 "input": {
                     "type": "string",
                     "description":self.description()
