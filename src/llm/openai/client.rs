@@ -90,10 +90,8 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
                 .connection_verbose(true)
                 .build()?,
         );
-        println!("{:#?}", prompt);
-        println!("{:#?}", self.options);
         let request = OpenAIRequest::build_request(&self.model, prompt, &self.options)?;
-        println!("{:#?}", request);
+
         match &self.options.stream_option {
             Some(stream_option) => {
                 let mut stream = client
