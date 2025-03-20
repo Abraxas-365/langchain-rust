@@ -24,5 +24,3 @@ pub use conversational_retrieval_qa::*;
 
 mod error;
 pub use error::*;
-
-pub mod options;

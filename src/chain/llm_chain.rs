@@ -11,13 +11,12 @@ use crate::{
     template::PromptTemplate,
 };
 
-use super::{chain_trait::Chain, options::ChainCallOptions, ChainError};
+use super::{chain_trait::Chain, ChainError};
 
 pub struct LLMChainBuilder {
     prompt: Option<PromptTemplate>,
     llm: Option<Box<dyn LLM>>,
     output_key: Option<String>,
-    options: Option<ChainCallOptions>,
     output_parser: Option<Box<dyn OutputParser>>,
 }
 
@@ -26,14 +25,9 @@ impl LLMChainBuilder {
         Self {
             prompt: None,
             llm: None,
-            options: None,
             output_key: None,
             output_parser: None,
         }
-    }
-    pub fn options(mut self, options: ChainCallOptions) -> Self {
-        self.options = Some(options);
-        self
     }
 
     pub fn prompt<P: Into<PromptTemplate>>(mut self, prompt: P) -> Self {
@@ -61,14 +55,9 @@ impl LLMChainBuilder {
             .prompt
             .ok_or_else(|| ChainError::MissingObject("Prompt must be set".into()))?;
 
-        let mut llm = self
+        let llm = self
             .llm
             .ok_or_else(|| ChainError::MissingObject("LLM must be set".into()))?;
-
-        if let Some(options) = self.options {
-            let llm_options = ChainCallOptions::to_llm_options(options);
-            llm.add_options(llm_options);
-        }
 
         let chain = LLMChain {
             prompt,
@@ -146,7 +135,6 @@ impl Chain for LLMChain {
 #[cfg(test)]
 mod tests {
     use crate::{
-        chain::options::ChainCallOptions,
         llm::openai::{OpenAI, OpenAIModel},
         prompt_template,
         schemas::MessageType,
@@ -171,12 +159,10 @@ mod tests {
         // Use the `message_formatter` macro to construct the formatter
         let prompt = prompt_template!(human_message_prompt);
 
-        let options = ChainCallOptions::default();
         let llm = OpenAI::default().with_model(OpenAIModel::Gpt35.to_string());
         let chain = LLMChainBuilder::new()
             .prompt(prompt)
             .llm(llm)
-            .options(options)
             .build()
             .expect("Failed to build LLMChain");
 

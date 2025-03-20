@@ -1,10 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    agent::AgentError,
-    chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions},
-    language_models::llm::LLM,
-    tools::Tool,
+    agent::AgentError, chain::llm_chain::LLMChainBuilder, language_models::llm::LLM, tools::Tool,
 };
 
 use super::{
@@ -16,7 +13,6 @@ pub struct ConversationalAgentBuilder<'a, 'b> {
     tools: Option<HashMap<String, Arc<dyn Tool>>>,
     system_prompt: Option<&'a str>,
     initial_prompt: Option<&'b str>,
-    options: Option<ChainCallOptions>,
 }
 
 impl<'a, 'b> ConversationalAgentBuilder<'a, 'b> {
@@ -25,7 +21,6 @@ impl<'a, 'b> ConversationalAgentBuilder<'a, 'b> {
             tools: None,
             system_prompt: None,
             initial_prompt: None,
-            options: None,
         }
     }
 
@@ -44,25 +39,13 @@ impl<'a, 'b> ConversationalAgentBuilder<'a, 'b> {
         self
     }
 
-    pub fn options(mut self, options: ChainCallOptions) -> Self {
-        self.options = Some(options);
-        self
-    }
-
     pub fn build<L: Into<Box<dyn LLM>>>(self, llm: L) -> Result<ConversationalAgent, AgentError> {
         let tools = self.tools.unwrap_or_default();
         let system_prompt = self.system_prompt.unwrap_or(DEFAULT_SYSTEM_PROMPT);
         let initial_prompt = self.initial_prompt.unwrap_or(DEFAULT_INITIAL_PROMPT);
 
         let prompt = ConversationalAgent::create_prompt(system_prompt, initial_prompt, &tools)?;
-        let default_options = ChainCallOptions::default();
-        let chain = Box::new(
-            LLMChainBuilder::new()
-                .prompt(prompt)
-                .llm(llm)
-                .options(self.options.unwrap_or(default_options))
-                .build()?,
-        );
+        let chain = Box::new(LLMChainBuilder::new().prompt(prompt).llm(llm).build()?);
 
         Ok(ConversationalAgent { chain, tools })
     }

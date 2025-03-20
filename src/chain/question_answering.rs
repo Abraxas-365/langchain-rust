@@ -11,9 +11,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::Stream;
 
-use super::{
-    options::ChainCallOptions, Chain, ChainError, LLMChain, LLMChainBuilder, StuffDocument,
-};
+use super::{Chain, ChainError, LLMChain, LLMChainBuilder, StuffDocument};
 
 pub struct CondenseQuestionPromptBuilder {
     chat_history: String,
@@ -143,10 +141,7 @@ impl Default for StuffQABuilder {
     }
 }
 
-pub(crate) fn load_stuff_qa<L: Into<Box<dyn LLM>>>(
-    llm: L,
-    options: Option<ChainCallOptions>,
-) -> StuffDocument {
+pub(crate) fn load_stuff_qa<L: Into<Box<dyn LLM>>>(llm: L) -> StuffDocument {
     let default_qa_prompt_template = MessageTemplate::from_jinja2(
         MessageType::SystemMessage,
         r#"
@@ -161,7 +156,6 @@ pub(crate) fn load_stuff_qa<L: Into<Box<dyn LLM>>>(
 
     let llm_chain_builder = LLMChainBuilder::new()
         .prompt(default_qa_prompt_template)
-        .options(options.unwrap_or_default())
         .llm(llm)
         .build()
         .unwrap();

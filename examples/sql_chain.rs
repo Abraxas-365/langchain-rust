@@ -2,7 +2,7 @@
 
 #[cfg(feature = "postgres")]
 use langchain_rust::{
-    chain::{options::ChainCallOptions, Chain, SQLDatabaseChainBuilder},
+    chain::{Chain, SQLDatabaseChainBuilder},
     llm::openai::OpenAI,
     tools::{postgres::PostgreSQLEngine, SQLDatabaseBuilder},
 };
@@ -15,7 +15,6 @@ use std::io::{self, Write}; // Include io Library for terminal input
 async fn main() {
     use langchain_rust::schemas::InputVariables;
 
-    let options = ChainCallOptions::default();
     let llm = OpenAI::default();
 
     let db = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -25,7 +24,6 @@ async fn main() {
         .llm(llm)
         .top_k(4)
         .database(db)
-        .options(options)
         .build()
         .expect("Failed to build LLMChain");
 

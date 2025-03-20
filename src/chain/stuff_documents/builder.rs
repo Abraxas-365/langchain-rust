@@ -1,7 +1,7 @@
 use indoc::indoc;
 
 use crate::{
-    chain::{options::ChainCallOptions, ChainError, LLMChainBuilder},
+    chain::{ChainError, LLMChainBuilder},
     language_models::llm::LLM,
     output_parsers::OutputParser,
     schemas::MessageType,
@@ -12,7 +12,6 @@ use super::StuffDocument;
 
 pub struct StuffDocumentBuilder {
     llm: Option<Box<dyn LLM>>,
-    options: Option<ChainCallOptions>,
     output_key: Option<String>,
     output_parser: Option<Box<dyn OutputParser>>,
     prompt: Option<PromptTemplate>,
@@ -22,7 +21,6 @@ impl StuffDocumentBuilder {
     pub fn new() -> Self {
         Self {
             llm: None,
-            options: None,
             output_key: None,
             output_parser: None,
             prompt: None,
@@ -31,11 +29,6 @@ impl StuffDocumentBuilder {
 
     pub fn llm<L: Into<Box<dyn LLM>>>(mut self, llm: L) -> Self {
         self.llm = Some(llm.into());
-        self
-    }
-
-    pub fn options(mut self, options: ChainCallOptions) -> Self {
-        self.options = Some(options);
         self
     }
 
@@ -63,10 +56,7 @@ impl StuffDocumentBuilder {
         };
 
         let llm_chain = {
-            let mut builder = LLMChainBuilder::new()
-                .prompt(prompt)
-                .options(self.options.unwrap_or_default())
-                .llm(llm);
+            let mut builder = LLMChainBuilder::new().prompt(prompt).llm(llm);
             if let Some(output_parser) = self.output_parser {
                 builder = builder.output_parser(output_parser);
             }

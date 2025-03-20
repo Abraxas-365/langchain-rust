@@ -3,7 +3,7 @@ use std::{error::Error, sync::Arc};
 use async_trait::async_trait;
 use langchain_rust::{
     agent::{AgentExecutor, OpenAiToolAgentBuilder},
-    chain::{options::ChainCallOptions, Chain},
+    chain::Chain,
     llm::openai::OpenAI,
     memory::SimpleMemory,
     schemas::InputVariables,
@@ -61,7 +61,6 @@ async fn main() {
             command_executor.into(),
             duckduckgo_tool.into(),
         ]))
-        .options(ChainCallOptions::new().with_max_tokens(1000))
         .build(llm)
         .unwrap();
 

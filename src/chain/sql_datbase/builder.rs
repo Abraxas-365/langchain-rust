@@ -1,6 +1,6 @@
 use crate::{
-    chain::{llm_chain::LLMChainBuilder, options::ChainCallOptions, ChainError},
-    language_models::llm::LLM,
+    chain::{llm_chain::LLMChainBuilder, ChainError},
+    language_models::{llm::LLM, options::CallOptions},
     output_parsers::OutputParser,
     prompt_template,
     schemas::MessageType,
@@ -16,7 +16,6 @@ use super::{
 
 pub struct SQLDatabaseChainBuilder {
     llm: Option<Box<dyn LLM>>,
-    options: Option<ChainCallOptions>,
     top_k: Option<usize>,
     database: Option<SQLDatabase>,
     output_key: Option<String>,
@@ -27,7 +26,6 @@ impl SQLDatabaseChainBuilder {
     pub fn new() -> Self {
         Self {
             llm: None,
-            options: None,
             top_k: None,
             database: None,
             output_key: None,
@@ -47,11 +45,6 @@ impl SQLDatabaseChainBuilder {
 
     pub fn output_parser<P: Into<Box<dyn OutputParser>>>(mut self, output_parser: P) -> Self {
         self.output_parser = Some(output_parser.into());
-        self
-    }
-
-    pub fn options(mut self, options: ChainCallOptions) -> Self {
-        self.options = Some(options);
         self
     }
 
@@ -82,11 +75,10 @@ impl SQLDatabaseChainBuilder {
         )];
 
         let llm_chain = {
-            let mut builder = LLMChainBuilder::new().prompt(prompt).llm(llm);
+            let mut llm = llm.clone_box();
+            llm.add_options(CallOptions::new().with_stop_words(vec![STOP_WORD.to_string()]));
 
-            let mut options = self.options.unwrap_or_default();
-            options = options.with_stop_words(vec![STOP_WORD.to_string()]);
-            builder = builder.options(options);
+            let mut builder = LLMChainBuilder::new().prompt(prompt).llm(llm);
 
             if let Some(output_parser) = self.output_parser {
                 builder = builder.output_parser(output_parser);

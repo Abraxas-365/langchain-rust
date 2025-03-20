@@ -1,6 +1,6 @@
 use langchain_rust::{
     agent::{AgentExecutor, ConversationalAgentBuilder},
-    chain::{options::ChainCallOptions, Chain},
+    chain::Chain,
     llm::openai::{OpenAI, OpenAIModel},
     memory::SimpleMemory,
     schemas::InputVariables,
@@ -15,7 +15,6 @@ async fn main() {
     let command_executor = CommandExecutor::default();
     let agent = ConversationalAgentBuilder::new()
         .tools(map_tools(vec![command_executor.into()]))
-        .options(ChainCallOptions::new().with_max_tokens(1000))
         .build(llm)
         .unwrap();
 

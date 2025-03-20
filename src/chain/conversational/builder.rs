@@ -3,9 +3,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
-    chain::{
-        llm_chain::LLMChainBuilder, options::ChainCallOptions, ChainError, DEFAULT_OUTPUT_KEY,
-    },
+    chain::{llm_chain::LLMChainBuilder, ChainError, DEFAULT_OUTPUT_KEY},
     language_models::llm::LLM,
     memory::SimpleMemory,
     output_parsers::OutputParser,
@@ -17,7 +15,6 @@ use super::{prompt::DEFAULT_TEMPLATE, ConversationalChain, DEFAULT_INPUT_VARIABL
 
 pub struct ConversationalChainBuilder {
     llm: Option<Box<dyn LLM>>,
-    options: Option<ChainCallOptions>,
     memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     output_key: Option<String>,
     output_parser: Option<Box<dyn OutputParser>>,
@@ -29,7 +26,6 @@ impl ConversationalChainBuilder {
     pub fn new() -> Self {
         Self {
             llm: None,
-            options: None,
             memory: None,
             output_key: None,
             output_parser: None,
@@ -40,11 +36,6 @@ impl ConversationalChainBuilder {
 
     pub fn llm<L: Into<Box<dyn LLM>>>(mut self, llm: L) -> Self {
         self.llm = Some(llm.into());
-        self
-    }
-
-    pub fn options(mut self, options: ChainCallOptions) -> Self {
-        self.options = Some(options);
         self
     }
 
@@ -89,10 +80,6 @@ impl ConversationalChainBuilder {
                 .prompt(prompt)
                 .llm(llm)
                 .output_key(self.output_key.unwrap_or_else(|| DEFAULT_OUTPUT_KEY.into()));
-
-            if let Some(options) = self.options {
-                builder = builder.options(options);
-            }
 
             if let Some(output_parser) = self.output_parser {
                 builder = builder.output_parser(output_parser);
