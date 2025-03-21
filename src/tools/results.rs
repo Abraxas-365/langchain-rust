@@ -25,3 +25,12 @@ where
         Ok(())
     }
 }
+
+impl<T> From<Vec<T>> for FormattedVec<T>
+where
+    T: Display,
+{
+    fn from(vec: Vec<T>) -> Self {
+        FormattedVec(vec)
+    }
+}
