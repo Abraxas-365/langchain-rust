@@ -3,18 +3,14 @@ use std::collections::VecDeque;
 use regex::Regex;
 use serde_json::Value;
 
-use crate::{
-    agent::AgentError,
-    schemas::{agent::AgentEvent, AgentAction},
-};
+use crate::schemas::{agent::AgentEvent, AgentAction};
 
-pub fn parse_agent_output(text: &str) -> Result<AgentEvent, AgentError> {
-    let agent_event: AgentEvent = parse_json_markdown(text)
+pub fn parse_agent_output(text: &str) -> AgentEvent {
+    parse_json_markdown(text)
         .or_else(|| parse_partial_json(text, false))
         .and_then(|agent_event| serde_json::from_value(agent_event).ok())
         .or_else(|| parse_with_regex(text))
-        .ok_or(AgentError::InvalidFormatError)?;
-    Ok(agent_event)
+        .unwrap_or_else(|| AgentEvent::Finish(text.into()))
 }
 
 fn fix_text(text: &str) -> String {
@@ -121,7 +117,7 @@ mod tests {
             ```
         "#};
 
-        let parsed_output = parse_agent_output(test_output).unwrap();
+        let parsed_output = parse_agent_output(test_output);
 
         match parsed_output {
             AgentEvent::Action(agent_actions) => {
@@ -141,7 +137,7 @@ mod tests {
             ```
         "#};
 
-        let parsed_output = parse_agent_output(test_final_answer).unwrap();
+        let parsed_output = parse_agent_output(test_final_answer);
 
         match parsed_output {
             AgentEvent::Action(_) => panic!("Expected AgentEvent::Finish, got AgentEvent::Action"),
@@ -185,7 +181,7 @@ mod tests {
 
         let result = parse_agent_output(test_final_answer);
 
-        if let Ok(AgentEvent::Finish(final_answer)) = result {
+        if let AgentEvent::Finish(final_answer) = result {
             println!("{}", final_answer);
         } else {
             panic!("Expected AgentEvent::Finish, got {:?}", result);
@@ -204,7 +200,7 @@ mod tests {
 
         let result = parse_agent_output(test_final_answer);
 
-        if let Ok(AgentEvent::Finish(final_answer)) = result {
+        if let AgentEvent::Finish(final_answer) = result {
             println!("{}", final_answer);
         } else {
             panic!("Expected AgentEvent::Finish, got {:?}", result);
