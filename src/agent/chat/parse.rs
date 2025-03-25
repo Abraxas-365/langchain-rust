@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn test_complicated_output() {
+    fn test_parse_object_answer() {
         let test_final_answer = indoc! {r#"
             ```json
             {
@@ -237,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn test_other_output() {
+    fn test_parse_quotation_in_string() {
         let test_final_answer: &str = indoc! {r#"
             ```json
             {
@@ -256,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn test_more_output() {
+    fn test_parse_trailing_comma() {
         let test_final_answer: &str = indoc! {r#"
             {
                 "final_answer": "Understanding the circadian regulation of sphingosine-1-phosphate (S1P) signaling is crucial for advancing our comprehension of how lipid mediators influence cardiovascular physiology across different times of the day. The research findings suggest that fluctuations in S1P levels, guided by intrinsic circadian rhythms, play a significant role in regulating cardiovascular parameters such as vascular tone and heart rate variability. With the emerging insights into the time-dependent nature of S1P signaling, future studies in cardiovascular physiology can build upon this foundation to investigate how disruptions in these rhythms might contribute to cardiovascular diseases.\n\nThe amalgamation of circadian biology with lipid signalling not only enhances our understanding of the mechanisms underlying cardiovascular homeostasis but also opens new avenues for therapeutic interventions. By elucidating the fundamental principles that govern lipid mediator activity in relation to time, researchers may develop innovative strategies to address cardiovascular health issues that fluctuate with the circadian cycle. This knowledge serves to not only improve our grasp of cardiovascular responses to physiological changes but also enrich the field of chronobiology, which seeks to understand how biological processes are influenced by time. Thus, there lies a tremendous potential for translating these findings into clinical practice, optimising treatment protocols according to the circadian patterns of S1P signaling in individuals, and ultimately fostering advancements in the management of cardiovascular diseases. As research continues, the integration of these insights may significantly contribute to the evolution of both cardiovascular physiology and lipid signalling research, paving the way for comprehensive understanding and novel therapeutic approaches.",
