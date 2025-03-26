@@ -17,7 +17,7 @@ You MUST either use a tool (use one at time) OR give your best final answer not 
     "action_input": object \\ The input to the action, object enclosed in curly braces
 }
 ```
-This Thought/Action/Action Input/Result can repeat N times. 
+This Action/Action Input/Result can repeat N times. 
 
 Once you know the final answer, you must give it using the following format:
 
