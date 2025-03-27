@@ -6,10 +6,14 @@ use indoc::indoc;
 use reqwest::Client;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use url::Url;
 
-use crate::tools::{search::article::Article, FormattedVec, Tool, ToolFunction, ToolWrapper};
+use crate::tools::{
+    search::article::Article,
+    tool_field::{ObjectField, StringField},
+    FormattedVec, Tool, ToolFunction, ToolWrapper,
+};
 
 #[derive(Deserialize, Serialize, new)]
 pub struct DuckDuckGoSearchInput {
@@ -28,7 +32,10 @@ impl DuckDuckGoSearch {
         self
     }
 
-    pub async fn search(&self, query: &str) -> Result<FormattedVec<Article>, Box<dyn Error + Send + Sync>> {
+    pub async fn search(
+        &self,
+        query: &str,
+    ) -> Result<FormattedVec<Article>, Box<dyn Error + Send + Sync>> {
         let mut url = Url::parse(&self.url)?;
 
         let query_params = HashMap::from([("q", query)]);
@@ -76,9 +83,6 @@ impl DuckDuckGoSearch {
     }
 }
 
-const DESCRIPTION: &str = r#"Search the web using Duckduckgo.
-Useful for when you need to answer questions about current events."#;
-
 #[async_trait]
 impl ToolFunction for DuckDuckGoSearch {
     type Input = DuckDuckGoSearchInput;
@@ -89,30 +93,20 @@ impl ToolFunction for DuckDuckGoSearch {
     }
 
     fn description(&self) -> String {
-        format!(
-            "{}\n{}",
-            DESCRIPTION,
-            indoc! {"
-                The input for this tool MUST be in the following format:
-                {{
-                    query (String): The query you want to search for,
-                }}
-            "}
-        )
+        indoc! {"
+        Search the web using Duckduckgo.
+        Useful for when you need to answer questions about current events."}
+        .into()
     }
 
-    fn parameters(&self) -> Value {
-        json!({
-            "description": DESCRIPTION,
-            "type": "string",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query to look up"
-                }
-            },
-            "required": ["query"]
-        })
+    fn parameters(&self) -> ObjectField {
+        ObjectField::new_tool_input(vec![StringField::new(
+            "query",
+            Some("Search query to look up".into()),
+            true,
+            None,
+        )
+        .into()])
     }
 
     async fn parse_input(&self, input: Value) -> Result<Self::Input, Box<dyn Error + Send + Sync>> {

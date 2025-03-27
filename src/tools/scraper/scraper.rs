@@ -4,7 +4,10 @@ use scraper::{ElementRef, Html, Selector};
 use serde_json::Value;
 use std::{error::Error, sync::Arc};
 
-use crate::tools::{Tool, ToolFunction, ToolWrapper};
+use crate::tools::{
+    tool_field::{ObjectField, StringField},
+    Tool, ToolFunction, ToolWrapper,
+};
 
 #[derive(Default)]
 pub struct WebScrapper {}
@@ -18,10 +21,16 @@ impl ToolFunction for WebScrapper {
         String::from("Web Scraper")
     }
     fn description(&self) -> String {
-        String::from(
-            "Web Scraper will scan a url and return the content of the web page.
-		Input should be a working url.",
+        "Scan a url and return the content of the web page.".into()
+    }
+    fn parameters(&self) -> ObjectField {
+        ObjectField::new_tool_input(vec![StringField::new(
+            "input",
+            Some("The URL to scrape, MUST be a working URL".into()),
+            true,
+            None,
         )
+        .into()])
     }
 
     async fn parse_input(&self, input: Value) -> Result<String, Box<dyn Error + Send + Sync>> {

@@ -2,9 +2,12 @@ use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 
-use crate::tools::{Tool, ToolFunction, ToolWrapper};
+use crate::tools::{
+    tool_field::{ArrayField, ObjectField, StringField},
+    Tool, ToolFunction, ToolWrapper,
+};
 
 pub struct CommandExecutor {
     platform: String,
@@ -60,47 +63,42 @@ impl ToolFunction for CommandExecutor {
         )
     }
 
-    fn parameters(&self) -> Value {
-        let prompt = format!(
-            "This tool let you run command on the terminal.
-        The input should be an array with commands for the following platform: {}",
-            self.platform
-        );
-        json!({
-          "description": prompt,
-          "type": "object",
-          "properties": {
-            "commands": {
-              "description": "An array of command objects to be executed",
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "cmd": {
-                    "type": "string",
-                    "description": "The command to execute"
-                  },
-                  "args": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "default": [],
-                    "description": "List of arguments for the command"
-                  }
-                },
-                "required": ["cmd"],
-                "additionalProperties": false,
-                "description": "Object representing a command and its optional arguments"
-              }
-            }
-          },
-          "required": ["commands"],
-          "additionalProperties": false
-        })
+    fn parameters(&self) -> ObjectField {
+        ObjectField::new(
+            "input",
+            None,
+            true,
+            vec![ArrayField::new(
+                "commands",
+                Some("An array of command objects to be executed".into()),
+                true,
+                ObjectField::new(
+                    "items",
+                    Some("Object representing a command and its optional arguments".into()),
+                    true,
+                    vec![
+                        StringField::new("cmd", Some("The command to execute".into()), true, None)
+                            .into(),
+                        ArrayField::new_string_array(
+                            "args",
+                            Some("List of arguments for the command".into()),
+                            false,
+                        )
+                        .into(),
+                    ],
+                    Some(false),
+                )
+                .into(),
+            )
+            .into()],
+            Some(false),
+        )
     }
 
-    async fn parse_input(&self, input: Value) -> Result<Vec<CommandInput>, Box<dyn Error + Send + Sync>> {
+    async fn parse_input(
+        &self,
+        input: Value,
+    ) -> Result<Vec<CommandInput>, Box<dyn Error + Send + Sync>> {
         serde_json::from_value::<CommandsInput>(input.clone())
             .map(|commands| commands.commands)
             .or_else(|_| serde_json::from_value::<Vec<CommandInput>>(input))
@@ -164,5 +162,12 @@ mod test {
         println!("{}", &input.to_string());
         let result = tool.call(Value::String(input.to_string())).await.unwrap();
         println!("Res: {}", result);
+    }
+
+    #[test]
+    fn command_executor_properties_description() {
+        let tool = CommandExecutor::new("linux");
+
+        println!("{}", tool.parameters().properties_description());
     }
 }

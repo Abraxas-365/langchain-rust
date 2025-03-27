@@ -1,4 +1,5 @@
 use crate::schemas::convert::{OpenAIFromLangchain, TryOpenAiFromLangchain};
+use crate::tools::tool_field::ToolField;
 use crate::tools::Tool;
 use async_openai::types::{
     ChatCompletionNamedToolChoice, ChatCompletionTool, ChatCompletionToolArgs,
@@ -57,7 +58,7 @@ impl FunctionDefinition {
         FunctionDefinition {
             name: tool.name().trim().replace(" ", "_"),
             description: tool.description(),
-            parameters: tool.parameters(),
+            parameters: tool.parameters().to_openai_field(),
         }
     }
 }

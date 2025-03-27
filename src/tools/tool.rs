@@ -5,7 +5,10 @@ use std::{error::Error, fmt::Display};
 
 use async_trait::async_trait;
 use derive_new::new;
-use serde_json::{json, Value};
+use indoc::indoc;
+use serde_json::Value;
+
+use crate::tools::tool_field::{ObjectField, StringField};
 
 #[async_trait]
 pub trait Tool: Send + Sync {
@@ -31,17 +34,14 @@ pub trait Tool: Send + Sync {
     ///
     /// If there s no implementation the defaul will be the self.description()
     ///```
-    fn parameters(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "input": {
-                    "type": "string",
-                    "description":self.description()
-                }
-            },
-            "required": ["input"]
-        })
+    fn parameters(&self) -> ObjectField {
+        ObjectField::new_tool_input(vec![StringField::new(
+            "input",
+            Some("The input for the tool".into()),
+            true,
+            None,
+        )
+        .into()])
     }
 
     /// Processes an input string and executes the tool's functionality, returning a `Result`.
@@ -64,17 +64,14 @@ pub trait ToolFunction: Default + Send + Sync + Into<Arc<dyn Tool>> {
 
     fn description(&self) -> String;
 
-    fn parameters(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "input": {
-                    "type": "string",
-                    "description":self.description()
-                }
-            },
-            "required": ["input"]
-        })
+    fn parameters(&self) -> ObjectField {
+        ObjectField::new_tool_input(vec![StringField::new(
+            "input",
+            Some("The input for the tool".into()),
+            true,
+            None,
+        )
+        .into()])
     }
 
     /// Executes the core functionality of the tool.
@@ -109,7 +106,16 @@ where
 
 impl Display for dyn Tool {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "> {}: {}", self.name(), self.description())
+        write!(
+            f,
+            indoc! {"
+            > {}: {}
+            The input for this tool MUST be in the following format:
+            {}"},
+            self.name(),
+            self.description(),
+            self.parameters().properties_description()
+        )
     }
 }
 
@@ -118,7 +124,16 @@ where
     T: ToolFunction,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "> {}: {}", self.name(), self.description())
+        write!(
+            f,
+            indoc! {"
+            > {}: {}
+            The input for this tool MUST be in the following format:
+            {}"},
+            self.name(),
+            self.description(),
+            self.parameters().properties_description()
+        )
     }
 }
 
@@ -135,7 +150,7 @@ where
         self.tool.description()
     }
 
-    fn parameters(&self) -> Value {
+    fn parameters(&self) -> ObjectField {
         self.tool.parameters()
     }
 
