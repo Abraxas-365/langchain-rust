@@ -90,8 +90,7 @@ impl Agent for ConversationalAgent {
         inputs.insert_placeholder_replacement("agent_scratchpad", scratchpad);
         let output = self.chain.call(inputs).await?.generation;
         log::trace!("Agent output: {}", output);
-        let parsed_output = parse_agent_output(&output);
-        Ok(parsed_output)
+        parse_agent_output(&output)
     }
 
     fn get_tool(&self, tool_name: &str) -> Option<Arc<dyn Tool>> {

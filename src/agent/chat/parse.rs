@@ -3,14 +3,20 @@ use std::collections::VecDeque;
 use regex::Regex;
 use serde_json::Value;
 
-use crate::schemas::{agent::AgentEvent, AgentAction};
+use crate::{
+    agent::AgentError,
+    schemas::{agent::AgentEvent, AgentAction},
+};
 
-pub fn parse_agent_output(text: &str) -> AgentEvent {
-    parse_json_markdown(text)
-        .or_else(|| parse_partial_json(text, false))
-        .and_then(|agent_event| serde_json::from_value(agent_event).ok())
-        .or_else(|| parse_with_regex(text))
-        .unwrap_or_else(|| AgentEvent::Finish(text.into()))
+pub fn parse_agent_output(text: &str) -> Result<AgentEvent, AgentError> {
+    let json = parse_json_markdown(text).or_else(|| parse_partial_json(text, false));
+
+    let agent_event = match json {
+        Some(json) => serde_json::from_value(json).ok(),
+        None => Some(parse_with_regex(text).unwrap_or_else(|| AgentEvent::Finish(text.into()))),
+    };
+
+    agent_event.ok_or(AgentError::InvalidFormatError(text.into()))
 }
 
 fn fix_text(text: &str) -> String {
@@ -168,13 +174,13 @@ mod tests {
         let parsed_output = parse_agent_output(test_output);
 
         match parsed_output {
-            AgentEvent::Action(agent_actions) => {
+            Ok(AgentEvent::Action(agent_actions)) => {
                 assert!(agent_actions.len() == 1);
                 let agent_action = &agent_actions[0];
                 assert_eq!(agent_action.action, "generate");
                 assert_eq!(agent_action.action_input, "Hello, world!");
             }
-            AgentEvent::Finish(_) => panic!("Expected AgentEvent::Action, got AgentEvent::Finish"),
+            _ => panic!("Expected AgentEvent::Action, got {:#?}", parsed_output),
         }
 
         let test_final_answer = indoc! {r#"
@@ -188,10 +194,10 @@ mod tests {
         let parsed_output = parse_agent_output(test_final_answer);
 
         match parsed_output {
-            AgentEvent::Action(_) => panic!("Expected AgentEvent::Finish, got AgentEvent::Action"),
-            AgentEvent::Finish(final_answer) => {
+            Ok(AgentEvent::Finish(final_answer)) => {
                 assert_eq!(final_answer, "Goodbye, world!");
             }
+            _ => panic!("Expected AgentEvent::Finish, got {:#?}", parsed_output),
         }
     }
 
@@ -229,10 +235,11 @@ mod tests {
 
         let result = parse_agent_output(test_final_answer);
 
-        if let AgentEvent::Finish(final_answer) = result {
-            println!("{}", final_answer);
-        } else {
-            panic!("Expected AgentEvent::Finish, got {:?}", result);
+        match result {
+            Ok(AgentEvent::Finish(final_answer)) => {
+                println!("{}", final_answer);
+            }
+            _ => panic!("Expected AgentEvent::Finish, got {:#?}", result),
         }
     }
 
@@ -248,10 +255,11 @@ mod tests {
 
         let result = parse_agent_output(test_final_answer);
 
-        if let AgentEvent::Finish(final_answer) = result {
-            println!("{}", final_answer);
-        } else {
-            panic!("Expected AgentEvent::Finish, got {:?}", result);
+        match result {
+            Ok(AgentEvent::Finish(final_answer)) => {
+                println!("{}", final_answer);
+            }
+            _ => panic!("Expected AgentEvent::Finish, got {:#?}", result),
         }
     }
 
@@ -265,10 +273,11 @@ mod tests {
 
         let result = parse_agent_output(test_final_answer);
 
-        if let AgentEvent::Finish(final_answer) = result {
-            println!("{}", final_answer);
-        } else {
-            panic!("Expected AgentEvent::Finish, got {:?}", result);
+        match result {
+            Ok(AgentEvent::Finish(final_answer)) => {
+                println!("{}", final_answer);
+            }
+            _ => panic!("Expected AgentEvent::Finish, got {:#?}", result),
         }
     }
 }
