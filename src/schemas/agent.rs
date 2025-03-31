@@ -40,7 +40,6 @@ impl<'de> Deserialize<'de> for AgentEvent {
                 v => Ok(AgentEvent::Finish(v.to_string())),
             }
         } else {
-            log::error!("Invalid output from LLM:\n{:#?}", value);
             Err(serde::de::Error::custom("Invalid format")) // TODO: provide clearer error message
         }
     }

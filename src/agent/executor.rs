@@ -166,7 +166,7 @@ where
                         let observation = match tool.call(action.action_input.clone()).await {
                             Ok(observation) => observation,
                             Err(e) => {
-                                log::error!(
+                                log::warn!(
                                     "Tool '{}' encountered an error: {}",
                                     &action.action,
                                     e
