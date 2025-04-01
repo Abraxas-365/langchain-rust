@@ -9,10 +9,7 @@ use serde::Serialize;
 
 use crate::{
     language_models::{options::CallOptions, LLMError},
-    schemas::{
-        convert::{LangchainIntoOpenAI, TryLangchainIntoOpenAI},
-        Message,
-    },
+    schemas::Message,
 };
 
 use super::helper::to_openai_messages;
@@ -94,18 +91,15 @@ impl OpenAIRequest {
                 .clone()
                 .map(|fs| {
                     fs.into_iter()
-                        .map(|f| f.try_into_openai())
+                        .map(|f| f.try_into())
                         .collect::<Result<Vec<_>, OpenAIError>>()
                 })
                 .transpose()?,
             tool_choice: call_options
                 .function_call_behavior
                 .clone()
-                .map(|f| f.into_openai()),
-            response_format: call_options
-                .response_format
-                .clone()
-                .map(|r| r.into_openai()),
+                .map(|f| f.into()),
+            response_format: call_options.response_format.clone().map(|r| r.into()),
         })
     }
 }

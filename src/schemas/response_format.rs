@@ -1,5 +1,3 @@
-use crate::schemas::convert::OpenAIFromLangchain;
-
 #[derive(Clone, Debug)]
 pub enum ResponseFormat {
     Text,
@@ -12,9 +10,9 @@ pub enum ResponseFormat {
     },
 }
 
-impl OpenAIFromLangchain<ResponseFormat> for async_openai::types::ResponseFormat {
-    fn from_langchain(langchain: ResponseFormat) -> Self {
-        match langchain {
+impl From<ResponseFormat> for async_openai::types::ResponseFormat {
+    fn from(value: ResponseFormat) -> Self {
+        match value {
             ResponseFormat::Text => async_openai::types::ResponseFormat::Text,
             ResponseFormat::JsonObject => async_openai::types::ResponseFormat::JsonObject,
             ResponseFormat::JsonSchema {

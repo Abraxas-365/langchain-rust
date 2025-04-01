@@ -22,16 +22,15 @@ pub use document::*;
 mod retrievers;
 pub use retrievers::*;
 
-mod tools_openai_like;
-pub use tools_openai_like::*;
+mod function;
+pub use function::*;
 
-pub mod response_format_openai_like;
-pub use response_format_openai_like::*;
+pub mod response_format;
+pub use response_format::*;
 
 pub mod streaming_func;
 pub use streaming_func::*;
 
-pub mod convert;
 mod stream;
 
 pub use stream::*;

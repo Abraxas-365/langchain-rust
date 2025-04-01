@@ -1,4 +1,3 @@
-use crate::schemas::convert::{OpenAIFromLangchain, TryOpenAiFromLangchain};
 use crate::tools::tool_field::ToolField;
 use crate::tools::Tool;
 use async_openai::types::{
@@ -17,9 +16,9 @@ pub enum FunctionCallBehavior {
     Named(String),
 }
 
-impl OpenAIFromLangchain<FunctionCallBehavior> for ChatCompletionToolChoiceOption {
-    fn from_langchain(langchain: FunctionCallBehavior) -> Self {
-        match langchain {
+impl From<FunctionCallBehavior> for ChatCompletionToolChoiceOption {
+    fn from(value: FunctionCallBehavior) -> Self {
+        match value {
             FunctionCallBehavior::Auto => ChatCompletionToolChoiceOption::Auto,
             FunctionCallBehavior::None => ChatCompletionToolChoiceOption::None,
             FunctionCallBehavior::Named(name) => {
@@ -63,13 +62,14 @@ impl FunctionDefinition {
     }
 }
 
-impl TryOpenAiFromLangchain<FunctionDefinition> for ChatCompletionTool {
+impl TryFrom<FunctionDefinition> for ChatCompletionTool {
     type Error = async_openai::error::OpenAIError;
-    fn try_from_langchain(langchain: FunctionDefinition) -> Result<Self, Self::Error> {
+
+    fn try_from(value: FunctionDefinition) -> Result<Self, Self::Error> {
         let tool = FunctionObjectArgs::default()
-            .name(langchain.name)
-            .description(langchain.description)
-            .parameters(langchain.parameters)
+            .name(value.name)
+            .description(value.description)
+            .parameters(value.parameters)
             .build()?;
 
         ChatCompletionToolArgs::default()
