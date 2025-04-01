@@ -1,37 +1,12 @@
 use crate::tools::tool_field::ToolField;
 use crate::tools::Tool;
 use async_openai::types::{
-    ChatCompletionNamedToolChoice, ChatCompletionTool, ChatCompletionToolArgs,
-    ChatCompletionToolChoiceOption, ChatCompletionToolType, FunctionName, FunctionObjectArgs,
+    ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType, FunctionObjectArgs,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::ops::Deref;
 use std::str::FromStr;
-
-#[derive(Clone, Debug)]
-pub enum FunctionCallBehavior {
-    None,
-    Auto,
-    Named(String),
-}
-
-impl From<FunctionCallBehavior> for ChatCompletionToolChoiceOption {
-    fn from(value: FunctionCallBehavior) -> Self {
-        match value {
-            FunctionCallBehavior::Auto => ChatCompletionToolChoiceOption::Auto,
-            FunctionCallBehavior::None => ChatCompletionToolChoiceOption::None,
-            FunctionCallBehavior::Named(name) => {
-                ChatCompletionToolChoiceOption::Named(ChatCompletionNamedToolChoice {
-                    r#type: ChatCompletionToolType::Function,
-                    function: FunctionName {
-                        name: name.to_owned(),
-                    },
-                })
-            }
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct FunctionDefinition {

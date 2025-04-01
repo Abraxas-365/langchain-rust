@@ -1,9 +1,9 @@
-use async_openai::types::ResponseFormat;
+use async_openai::types::{ChatCompletionToolChoiceOption, ResponseFormat};
 use futures::Future;
 use std::{fmt, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
-use crate::schemas::{FunctionCallBehavior, FunctionDefinition, StreamingFunc};
+use crate::schemas::{FunctionDefinition, StreamingFunc};
 
 #[derive(Clone, Default)]
 pub struct StreamOption {
@@ -59,7 +59,7 @@ pub struct CallOptions {
     pub frequency_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
     pub functions: Option<Vec<FunctionDefinition>>,
-    pub function_call_behavior: Option<FunctionCallBehavior>,
+    pub tool_choice: Option<ChatCompletionToolChoiceOption>,
     pub response_format: Option<ResponseFormat>,
     pub stream_option: Option<StreamOption>,
     pub system_is_assistant: bool,
@@ -87,7 +87,7 @@ impl CallOptions {
             frequency_penalty: None,
             presence_penalty: None,
             functions: None,
-            function_call_behavior: None,
+            tool_choice: None,
             response_format: None,
             stream_option: None,
             system_is_assistant: false,
@@ -165,8 +165,8 @@ impl CallOptions {
         self
     }
 
-    pub fn with_function_call_behavior(mut self, behavior: FunctionCallBehavior) -> Self {
-        self.function_call_behavior = Some(behavior);
+    pub fn with_tool_choice(mut self, tool_choice: ChatCompletionToolChoiceOption) -> Self {
+        self.tool_choice = Some(tool_choice);
         self
     }
 
@@ -203,9 +203,9 @@ impl CallOptions {
             .frequency_penalty
             .or(self.frequency_penalty);
         self.presence_penalty = incoming_options.presence_penalty.or(self.presence_penalty);
-        self.function_call_behavior = incoming_options
-            .function_call_behavior
-            .or(self.function_call_behavior.clone());
+        self.tool_choice = incoming_options
+            .tool_choice
+            .or(self.tool_choice.clone());
         self.response_format = incoming_options
             .response_format
             .or(self.response_format.clone());

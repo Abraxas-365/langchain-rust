@@ -95,10 +95,7 @@ impl OpenAIRequest {
                         .collect::<Result<Vec<_>, OpenAIError>>()
                 })
                 .transpose()?,
-            tool_choice: call_options
-                .function_call_behavior
-                .clone()
-                .map(|f| f.into()),
+            tool_choice: call_options.tool_choice.clone(),
             response_format: call_options.response_format.clone().map(|r| r.into()),
         })
     }
