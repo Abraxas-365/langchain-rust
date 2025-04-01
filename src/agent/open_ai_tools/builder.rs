@@ -3,8 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     agent::AgentError,
     chain::LLMChainBuilder,
-    language_models::{llm::LLM, options::CallOptions},
-    schemas::FunctionDefinition,
+    language_models::{llm::LLM, options::CallOptions, LLMError},
     tools::Tool,
 };
 
@@ -39,11 +38,12 @@ impl OpenAiToolAgentBuilder {
         let mut llm = llm;
 
         let prompt = OpenAiToolAgent::create_prompt(&prefix)?;
-        let functions = tools
+        let tools_openai = tools
             .values()
-            .map(FunctionDefinition::from_langchain_tool)
-            .collect::<Vec<FunctionDefinition>>();
-        llm.add_options(CallOptions::new().with_functions(functions));
+            .map(|tool| tool.into_openai_tool())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(LLMError::from)?;
+        llm.add_options(CallOptions::new().with_tools(tools_openai));
         let chain = Box::new(LLMChainBuilder::new().prompt(prompt).llm(llm).build()?);
 
         Ok(OpenAiToolAgent { chain, tools })

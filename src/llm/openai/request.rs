@@ -1,9 +1,6 @@
-use async_openai::{
-    error::OpenAIError,
-    types::{
-        ChatCompletionRequestMessage, ChatCompletionStreamOptions, ChatCompletionTool,
-        ChatCompletionToolChoiceOption, ResponseFormat,
-    },
+use async_openai::types::{
+    ChatCompletionRequestMessage, ChatCompletionStreamOptions, ChatCompletionTool,
+    ChatCompletionToolChoiceOption, ResponseFormat,
 };
 use serde::Serialize;
 
@@ -86,15 +83,7 @@ impl OpenAIRequest {
             repetition_penalty: call_options.repetition_penalty,
             frequency_penalty: call_options.frequency_penalty,
             presence_penalty: call_options.presence_penalty,
-            tools: call_options
-                .functions
-                .clone()
-                .map(|fs| {
-                    fs.into_iter()
-                        .map(|f| f.try_into())
-                        .collect::<Result<Vec<_>, OpenAIError>>()
-                })
-                .transpose()?,
+            tools: call_options.tools.clone(),
             tool_choice: call_options.tool_choice.clone(),
             response_format: call_options.response_format.clone().map(|r| r.into()),
         })

@@ -3,12 +3,16 @@ use std::string::String;
 use std::sync::Arc;
 use std::{error::Error, fmt::Display};
 
+use async_openai::error::OpenAIError;
+use async_openai::types::{ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType, FunctionObjectArgs};
 use async_trait::async_trait;
 use derive_new::new;
 use indoc::indoc;
 use serde_json::Value;
 
 use crate::tools::tool_field::{ObjectField, StringField};
+
+use super::tool_field::ToolField;
 
 #[async_trait]
 pub trait Tool: Send + Sync {
@@ -52,6 +56,19 @@ pub trait Tool: Send + Sync {
 
     fn usage_limit(&self) -> Option<usize> {
         None
+    }
+
+    fn into_openai_tool(&self) -> Result<ChatCompletionTool, OpenAIError> {
+        let tool = FunctionObjectArgs::default()
+            .name(self.name())
+            .description(self.description())
+            .parameters(self.parameters().to_openai_field())
+            .build()?;
+
+        ChatCompletionToolArgs::default()
+            .r#type(ChatCompletionToolType::Function)
+            .function(tool)
+            .build()
     }
 }
 

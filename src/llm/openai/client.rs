@@ -235,10 +235,11 @@ impl<C: Config> OpenAI<C> {}
 #[cfg(test)]
 mod tests {
     use crate::language_models::options::StreamOption;
-    use crate::schemas::{FunctionDefinition, MessageType};
+    use crate::schemas::MessageType;
 
     use super::*;
 
+    use async_openai::types::{ChatCompletionToolArgs, ChatCompletionToolType, FunctionObjectArgs};
     use base64::prelude::*;
     use serde_json::json;
     use std::sync::Arc;
@@ -370,26 +371,32 @@ mod tests {
     #[test]
     #[ignore]
     async fn test_function() {
-        let mut functions = Vec::new();
-        functions.push(FunctionDefinition {
-            name: "cli".to_string(),
-            description: "Use the Ubuntu command line to preform any action you wish.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The raw command you want executed"
-                    }
-                },
-                "required": ["command"]
-            }),
-        });
+        let tools = vec![ChatCompletionToolArgs::default()
+            .r#type(ChatCompletionToolType::Function)
+            .function(
+                FunctionObjectArgs::default()
+                    .name("cli")
+                    .description("Use the Ubuntu command line to preform any action you wish.")
+                    .parameters(json!({
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The raw command you want executed"
+                            }
+                        },
+                        "required": ["command"]
+                    }))
+                    .build()
+                    .expect("Invalid tool"),
+            )
+            .build()
+            .unwrap()];
 
         let llm = OpenAI::default()
             .with_model(OpenAIModel::Gpt35)
             .with_config(OpenAIConfig::new())
-            .with_options(CallOptions::new().with_functions(functions));
+            .with_options(CallOptions::new().with_tools(tools));
         let response = llm
             .invoke("Use the command line to create a new rust project. Execute the first command.")
             .await

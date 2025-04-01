@@ -1,9 +1,9 @@
-use async_openai::types::{ChatCompletionToolChoiceOption, ResponseFormat};
+use async_openai::types::{ChatCompletionTool, ChatCompletionToolChoiceOption, ResponseFormat};
 use futures::Future;
 use std::{fmt, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
-use crate::schemas::{FunctionDefinition, StreamingFunc};
+use crate::schemas::StreamingFunc;
 
 #[derive(Clone, Default)]
 pub struct StreamOption {
@@ -58,7 +58,7 @@ pub struct CallOptions {
     pub repetition_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
-    pub functions: Option<Vec<FunctionDefinition>>,
+    pub tools: Option<Vec<ChatCompletionTool>>,
     pub tool_choice: Option<ChatCompletionToolChoiceOption>,
     pub response_format: Option<ResponseFormat>,
     pub stream_option: Option<StreamOption>,
@@ -86,7 +86,7 @@ impl CallOptions {
             repetition_penalty: None,
             frequency_penalty: None,
             presence_penalty: None,
-            functions: None,
+            tools: None,
             tool_choice: None,
             response_format: None,
             stream_option: None,
@@ -160,8 +160,8 @@ impl CallOptions {
         self
     }
 
-    pub fn with_functions(mut self, functions: Vec<FunctionDefinition>) -> Self {
-        self.functions = Some(functions);
+    pub fn with_tools(mut self, tools: Vec<ChatCompletionTool>) -> Self {
+        self.tools = Some(tools);
         self
     }
 
@@ -203,9 +203,7 @@ impl CallOptions {
             .frequency_penalty
             .or(self.frequency_penalty);
         self.presence_penalty = incoming_options.presence_penalty.or(self.presence_penalty);
-        self.tool_choice = incoming_options
-            .tool_choice
-            .or(self.tool_choice.clone());
+        self.tool_choice = incoming_options.tool_choice.or(self.tool_choice.clone());
         self.response_format = incoming_options
             .response_format
             .or(self.response_format.clone());
@@ -220,11 +218,11 @@ impl CallOptions {
         }
 
         // For `Vec<FunctionDefinition>`, similar logic to `Vec<String>`
-        if let Some(mut incoming_functions) = incoming_options.functions {
-            if let Some(existing_functions) = &mut self.functions {
+        if let Some(mut incoming_functions) = incoming_options.tools {
+            if let Some(existing_functions) = &mut self.tools {
                 existing_functions.append(&mut incoming_functions);
             } else {
-                self.functions = Some(incoming_functions);
+                self.tools = Some(incoming_functions);
             }
         }
 
