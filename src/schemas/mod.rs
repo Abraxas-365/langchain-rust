@@ -22,9 +22,6 @@ pub use document::*;
 mod retrievers;
 pub use retrievers::*;
 
-mod function;
-pub use function::*;
-
 pub mod streaming_func;
 pub use streaming_func::*;
 

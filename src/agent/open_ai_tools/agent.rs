@@ -1,7 +1,9 @@
 use std::sync::Arc;
 use std::{collections::HashMap, error::Error};
 
-use async_openai::types::{ChatCompletionMessageToolCall, ChatCompletionToolType, FunctionCall};
+use async_openai::types::{
+    ChatCompletionMessageToolCall, ChatCompletionToolType, FunctionCall, RunToolCallObject,
+};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -12,7 +14,7 @@ use crate::{
     prompt_template,
     schemas::{
         agent::{AgentAction, AgentEvent},
-        FunctionCallResponse, InputVariables, Message, MessageType,
+        InputVariables, Message, MessageType,
     },
     template::{MessageOrTemplate, MessageTemplate, PromptTemplate},
     tools::Tool,
@@ -75,13 +77,13 @@ impl Agent for OpenAiToolAgent {
         let scratchpad = self.construct_scratchpad(intermediate_steps);
         inputs.insert_placeholder_replacement("agent_scratchpad", scratchpad);
         let output: String = self.chain.call(inputs).await?.generation;
-        match serde_json::from_str::<Vec<FunctionCallResponse>>(&output) {
+        match serde_json::from_str::<Vec<RunToolCallObject>>(&output) {
             Ok(tools) => {
                 let mut actions: Vec<AgentAction> = Vec::new();
                 for tool in tools {
                     actions.push(AgentAction {
                         id: tool.id,
-                        action: tool.function.name.clone(),
+                        action: tool.function.name,
                         action_input: Value::String(tool.function.arguments),
                     });
                 }
