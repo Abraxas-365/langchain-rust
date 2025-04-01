@@ -1,8 +1,9 @@
+use async_openai::types::ResponseFormat;
 use futures::Future;
 use std::{fmt, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
-use crate::schemas::{FunctionCallBehavior, FunctionDefinition, ResponseFormat, StreamingFunc};
+use crate::schemas::{FunctionCallBehavior, FunctionDefinition, StreamingFunc};
 
 #[derive(Clone, Default)]
 pub struct StreamOption {

@@ -25,9 +25,6 @@ pub use retrievers::*;
 mod function;
 pub use function::*;
 
-pub mod response_format;
-pub use response_format::*;
-
 pub mod streaming_func;
 pub use streaming_func::*;
 
