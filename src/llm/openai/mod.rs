@@ -358,10 +358,13 @@ impl<C: Config> OpenAI<C> {
             RequestType::OpenAI(request_builder.build()?)
         };
 
+        log::info!("Langchain Request Generated: {:?}", request);
+
         Ok(request)
     }
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
 enum RequestType {
     Custom(Value),
     OpenAI(CreateChatCompletionRequest)
