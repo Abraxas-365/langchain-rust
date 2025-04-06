@@ -163,7 +163,7 @@ impl CallOptions {
         self
     }
 
-    pub fn with_extr_body(mut self, extra_body: serde_json::Value) -> Self {
+    pub fn with_extra_body(mut self, extra_body: serde_json::Value) -> Self {
         self.extra_body = Some(extra_body);
         self
     }
