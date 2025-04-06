@@ -17,7 +17,7 @@ use async_openai::{
 };
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::schemas::convert::{LangchainIntoOpenAI, TryLangchainIntoOpenAI};
@@ -347,6 +347,7 @@ impl<C: Config> OpenAI<C> {
         
         
         let request = if let Some(extra_body) = &self.options.extra_body {
+            log::debug!("Extra body: {:?}", extra_body);
             let helper = CustomRequestHelper {
                 openai: request_builder.build()?,
                 extra_body: extra_body.clone(),
@@ -358,7 +359,7 @@ impl<C: Config> OpenAI<C> {
             RequestType::OpenAI(request_builder.build()?)
         };
 
-        log::info!("Langchain Request Generated: {:?}", request);
+        log::debug!("Langchain request generated: {:?}", request);
 
         Ok(request)
     }
