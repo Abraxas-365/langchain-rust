@@ -1,6 +1,6 @@
 use async_openai::config::Config;
 use reqwest::header::HeaderMap;
-use secrecy::Secret;
+use secrecy::SecretString;
 use serde::Deserialize;
 
 const OLLAMA_API_BASE: &str = "http://localhost:11434/v1";
@@ -19,7 +19,7 @@ const OLLAMA_API_BASE: &str = "http://localhost:11434/v1";
 #[serde(default)]
 pub struct OllamaConfig {
     api_base: String,
-    api_key: Secret<String>,
+    api_key: SecretString,
 }
 
 impl OllamaConfig {
@@ -28,7 +28,7 @@ impl OllamaConfig {
     }
 
     pub fn with_api_key<S: Into<String>>(mut self, api_key: S) -> Self {
-        self.api_key = Secret::from(api_key.into());
+        self.api_key = SecretString::from(api_key.into());
         self
     }
 
@@ -39,7 +39,7 @@ impl OllamaConfig {
 }
 
 impl Config for OllamaConfig {
-    fn api_key(&self) -> &Secret<String> {
+    fn api_key(&self) -> &SecretString {
         &self.api_key
     }
 
@@ -64,7 +64,7 @@ impl Default for OllamaConfig {
     fn default() -> Self {
         Self {
             api_base: OLLAMA_API_BASE.to_string(),
-            api_key: Secret::new("ollama".to_string()),
+            api_key: SecretString::new(Box::from("ollama")),
         }
     }
 }

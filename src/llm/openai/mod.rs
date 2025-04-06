@@ -2,7 +2,7 @@ use std::pin::Pin;
 
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 
-use async_openai::types::{ChatCompletionToolChoiceOption, ResponseFormat};
+use async_openai::types::{ChatCompletionResponseMessage, ChatCompletionToolChoiceOption, ResponseFormat};
 use async_openai::{
     error::OpenAIError,
     types::{
@@ -17,6 +17,8 @@ use async_openai::{
 };
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
+use serde::{de, Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::schemas::convert::{LangchainIntoOpenAI, TryLangchainIntoOpenAI};
 use crate::{
@@ -98,8 +100,15 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
         let client = Client::with_config(self.config.clone());
         let request = self.generate_request(prompt, self.options.streaming_func.is_some())?;
         match &self.options.streaming_func {
-            Some(func) => {
-                let mut stream = client.chat().create_stream(request).await?;
+            Some(func) => {             
+                let mut stream = match request {
+                    RequestType::OpenAI(request) => {
+                        client.chat().create_stream(request).await?
+                    },
+                    RequestType::Custom(request) => {
+                        client.chat().create_stream_byot(request).await?
+                    }
+                };
                 let mut generate_result = GenerateResult::default();
                 while let Some(result) = stream.next().await {
                     match result {
@@ -133,7 +142,14 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
                 Ok(generate_result)
             }
             None => {
-                let response = client.chat().create(request).await?;
+                let response = match request {
+                    RequestType::OpenAI(request) => {
+                        client.chat().create(request).await?
+                    },
+                    RequestType::Custom(request) => {
+                        client.chat().create_byot(request).await?
+                    }
+                };
                 let mut generate_result = GenerateResult::default();
 
                 if let Some(usage) = response.usage {
@@ -172,7 +188,14 @@ impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
         let client = Client::with_config(self.config.clone());
         let request = self.generate_request(messages, true)?;
 
-        let original_stream = client.chat().create_stream(request).await?;
+        let original_stream = match request {
+            RequestType::OpenAI(request) => {
+                client.chat().create_stream(request).await?
+            },
+            RequestType::Custom(request) => {
+                client.chat().create_stream_byot(request).await?
+            }
+        };
 
         let new_stream = original_stream.map(|result| match result {
             Ok(completion) => {
@@ -282,7 +305,7 @@ impl<C: Config> OpenAI<C> {
         &self,
         messages: &[Message],
         stream: bool,
-    ) -> Result<CreateChatCompletionRequest, LLMError> {
+    ) -> Result<RequestType, LLMError> {
         let messages: Vec<ChatCompletionRequestMessage> = self.to_openai_messages(messages)?;
         let mut request_builder = CreateChatCompletionRequestArgs::default();
         if let Some(temperature) = self.options.temperature {
@@ -321,8 +344,44 @@ impl<C: Config> OpenAI<C> {
         }
 
         request_builder.messages(messages);
-        Ok(request_builder.build()?)
+        
+        
+        let request = if let Some(extra_body) = &self.options.extra_body {
+            log::debug!("Extra body: {:?}", extra_body);
+            let helper = CustomRequestHelper {
+                openai: request_builder.build()?,
+                extra_body: extra_body.clone(),
+            };
+            let value = serde_json::to_value(helper)?;
+
+            RequestType::Custom(value)
+        } else {
+            RequestType::OpenAI(request_builder.build()?)
+        };
+
+        log::debug!("Langchain request generated: {:?}", request);
+
+        Ok(request)
     }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+enum RequestType {
+    Custom(Value),
+    OpenAI(CreateChatCompletionRequest)
+}
+
+#[derive(Clone, Serialize)]
+struct CustomRequestHelper {
+    #[serde(flatten)]
+    openai: CreateChatCompletionRequest,
+    extra_body: Value,
+}
+
+#[derive(Clone, Deserialize)]
+enum ResponsType {
+    Custom(Value),
+    OpenAI(ChatCompletionResponseMessage)
 }
 #[cfg(test)]
 mod tests {
