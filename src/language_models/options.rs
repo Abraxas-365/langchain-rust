@@ -28,6 +28,7 @@ pub struct CallOptions {
     pub function_call_behavior: Option<FunctionCallBehavior>,
     pub response_format: Option<ResponseFormat>,
     pub stream_usage: Option<bool>,
+    pub extra_body: Option<serde_json::Value>
 }
 
 impl Default for CallOptions {
@@ -56,6 +57,7 @@ impl CallOptions {
             function_call_behavior: None,
             response_format: None,
             stream_usage: None,
+            extra_body: None,
         }
     }
 
@@ -161,6 +163,11 @@ impl CallOptions {
         self
     }
 
+    pub fn with_extr_body(mut self, extra_body: serde_json::Value) -> Self {
+        self.extra_body = Some(extra_body);
+        self
+    }
+
     pub fn merge_options(&mut self, incoming_options: CallOptions) {
         // For simple scalar types wrapped in Option, prefer incoming option if it is Some
         self.candidate_count = incoming_options.candidate_count.or(self.candidate_count);
@@ -186,6 +193,7 @@ impl CallOptions {
             .response_format
             .or(self.response_format.clone());
         self.stream_usage = incoming_options.stream_usage.or(self.stream_usage);
+        self.extra_body = incoming_options.extra_body.or(self.extra_body.clone());
 
         // For `Vec<String>`, merge if both are Some; prefer incoming if only incoming is Some
         if let Some(mut new_stop_words) = incoming_options.stop_words {
