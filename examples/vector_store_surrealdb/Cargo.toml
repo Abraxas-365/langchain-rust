@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.81"
+anyhow = "1.0.97"
 langchain-rust = { path = "../..", features = ["surrealdb"] }
-surrealdb = { version = "2.0.2", features = ["kv-mem"] }
-tokio = { version = "1.36.0", features = ["full"] }
+surrealdb = { version = "2.2.1", features = ["kv-mem"] }
+tokio = { version = "1.44.2", features = ["full"] }
