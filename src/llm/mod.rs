@@ -6,3 +6,6 @@ pub use claude::*;
 
 pub mod ollama;
 pub use ollama::*;
+
+pub mod qwen;
+pub use qwen::*;

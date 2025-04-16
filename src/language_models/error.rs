@@ -6,7 +6,7 @@ use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
 use tokio::time::error::Elapsed;
 
-use crate::llm::AnthropicError;
+use crate::llm::{AnthropicError, QwenError};
 
 #[derive(Error, Debug)]
 pub enum LLMError {
@@ -15,6 +15,9 @@ pub enum LLMError {
 
     #[error("Anthropic error: {0}")]
     AnthropicError(#[from] AnthropicError),
+
+    #[error("Qwen error: {0}")]
+    QwenError(#[from] QwenError),
 
     #[cfg(feature = "ollama")]
     #[error("Ollama error: {0}")]
