@@ -1,6 +1,6 @@
 use langchain_rust::{
     chain::{chain_trait::Chain, llm_chain::LLMChainBuilder},
-    language_models::{llm::LLM, options::CallOptions},
+    language_models::{options::CallOptions},
     llm::{Qwen, QwenModel},
     prompt::{PromptTemplate, TemplateFormat},
     prompt_args,

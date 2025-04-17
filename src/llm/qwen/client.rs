@@ -7,9 +7,9 @@ use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use reqwest::Client;
 use serde_json::Value;
-use std::{pin::Pin, str::from_utf8};
+use std::{pin::Pin, str::from_utf8, str};
 
-use super::models::{ApiResponse, ErrorResponse, Payload, QwenMessage, StreamResponse};
+use super::models::{ApiResponse, ErrorResponse, Payload, QwenMessage};
 
 /// Parse error from JSON response and return appropriate QwenError
 fn parse_error_response(code: &str, message: &str) -> LLMError {
@@ -301,6 +301,30 @@ impl Qwen {
 
         payload
     }
+
+    /// Parse Server-Sent Events (SSE) chunks
+    fn parse_sse_chunk(bytes: &[u8]) -> Result<Vec<Value>, LLMError> {
+        let text = str::from_utf8(bytes).map_err(|e| LLMError::OtherError(e.to_string()))?;
+        let mut values = Vec::new();
+
+        for line in text.lines() {
+            if line.starts_with("data: ") {
+                let data = &line[6..];
+                if data == "[DONE]" {
+                    continue;
+                }
+                
+                match serde_json::from_str::<Value>(data) {
+                    Ok(value) => values.push(value),
+                    Err(e) => {
+                        return Err(LLMError::OtherError(format!("Failed to parse SSE data: {}, data: {}", e, data)));
+                    }
+                }
+            }
+        }
+
+        Ok(values)
+    }
 }
 
 #[async_trait]
@@ -349,55 +373,47 @@ impl LLM for Qwen {
             async move {
                 match result {
                     Ok(bytes) => {
-                        // Handle Qwen streaming response
+                        // Parse SSE chunk format
                         let bytes_str = from_utf8(&bytes).map_err(|e| LLMError::OtherError(e.to_string()))?;
+                        let chunks = Self::parse_sse_chunk(&bytes)?;
                         
-                        if bytes_str.trim().starts_with("{") {
-                            let json_value: Value = serde_json::from_str(bytes_str)
-                                .map_err(|e| LLMError::OtherError(format!("Failed to parse stream response: {}", e)))?;
-                            
-                            // Check if this is an error response
-                            if json_value.get("code").is_some() && json_value.get("message").is_some() {
-                                // This looks like an error response
-                                let code = json_value["code"].as_str().unwrap_or("unknown");
-                                let message = json_value["message"].as_str().unwrap_or("Unknown error");
-                                return Err(parse_error_response(code, message));
-                            }
-
-                            // Try to parse as a stream response, but handle missing fields
-                            // This handles both standard and non-standard response formats
-                            let content = if let Some(choices) = json_value.get("choices") {
-                                if let Some(choice) = choices.as_array().and_then(|arr| arr.first()) {
+                        for chunk in chunks {
+                            if let Some(choices) = chunk.get("choices").and_then(|c| c.as_array()) {
+                                if let Some(choice) = choices.first() {
                                     if let Some(delta) = choice.get("delta") {
-                                        delta.get("content").and_then(|c| c.as_str()).unwrap_or("")
-                                    } else {
-                                        // Try to get content directly from choice if delta isn't present
-                                        choice.get("content").and_then(|c| c.as_str()).unwrap_or("")
+                                        // Extract content from delta
+                                        if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
+                                            if !content.is_empty() {
+                                                let usage = if let Some(usage) = chunk.get("usage") {
+                                                    Some(TokenUsage {
+                                                        prompt_tokens: usage.get("prompt_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
+                                                        completion_tokens: usage.get("completion_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
+                                                        total_tokens: usage.get("total_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
+                                                    })
+                                                } else {
+                                                    None
+                                                };
+                                                
+                                                return Ok(StreamData::new(chunk.clone(), usage, content));
+                                            }
+                                        }
                                     }
-                                } else {
-                                    ""
                                 }
-                            } else {
-                                // If no choices field, check for direct content field
-                                json_value.get("content").and_then(|c| c.as_str()).unwrap_or("")
-                            };
-
-                            return Ok(StreamData::new(
-                                json_value.clone(),
-                                None,
-                                content,
-                            ));
+                            }
                         }
                         
-                        // Handle simple text responses or other formats
-                        Ok(StreamData::new(
-                            Value::String(bytes_str.to_string()),
-                            None,
-                            bytes_str.trim(),
-                        ))
+                        // If we didn't return within the loop, return an empty stream data
+                        Ok(StreamData::new(Value::Null, None, ""))
                     }
                     Err(e) => Err(LLMError::RequestError(e)),
                 }
+            }
+        })
+        .filter_map(|result| async move {
+            match result {
+                Ok(data) if !data.content.is_empty() => Some(Ok(data)),
+                Ok(_) => None,
+                Err(e) => Some(Err(e)),
             }
         });
 

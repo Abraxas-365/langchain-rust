@@ -40,6 +40,9 @@ pub enum LLMError {
 
     #[error("Content not found in response: Expected at {0}")]
     ContentNotFound(String),
+    
+    #[error("Parsing error: {0}")]
+    ParsingError(String),
 
     #[error("Error: {0}")]
     OtherError(String),
