@@ -9,3 +9,6 @@ pub use ollama::*;
 
 pub mod qwen;
 pub use qwen::*;
+
+pub mod deepseek;
+pub use deepseek::*;
