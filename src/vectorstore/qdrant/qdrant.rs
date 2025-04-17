@@ -46,10 +46,20 @@ impl VectorStore for Store {
         let ids = docs.iter().map(|_| Uuid::new_v4().to_string());
         let vectors = embedder.embed_documents(&texts).await?.into_iter();
         let payloads = docs.iter().map(|d| {
-            json!({
+            let mut base = json!({
                 &self.content_field: d.page_content,
                 &self.metadata_field: d.metadata,
-            })
+            });
+
+            if let Some(extra_json) = opt.filters.clone() {
+                if let (Value::Object(ref mut base_map), Value::Object(extra_map)) =
+                    (&mut base, extra_json)
+                {
+                    base_map.extend(extra_map);
+                }
+            }
+
+            base
         });
 
         let mut points: Vec<PointStruct> = Vec::with_capacity(docs.len());
