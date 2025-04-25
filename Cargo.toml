@@ -23,7 +23,7 @@ regex = "1.10.4"
 log = "0.4.21"
 html-escape = "0.2.13"
 reqwest-eventsource = "0.6.0"
-async-openai = { git = "https://github.com/Taoidle/async-openai", tag = "v0.28.1" }
+async-openai = "0.28.1"
 mockito = "1.4.0"
 tiktoken-rs = "0.5.8"
 sqlx = { version = "0.8.0", default-features = false, features = [

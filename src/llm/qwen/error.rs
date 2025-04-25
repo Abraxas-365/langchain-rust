@@ -67,4 +67,4 @@ pub enum QwenError {
 
     #[error("Qwen API error: Plugin invocation failed - {0}")]
     InvokePluginFailedError(String),
-} 
+}

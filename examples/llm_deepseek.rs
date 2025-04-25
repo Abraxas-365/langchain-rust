@@ -17,4 +17,4 @@ async fn main() {
         .unwrap();
 
     println!("Response: {}", response.generation);
-} 
+}

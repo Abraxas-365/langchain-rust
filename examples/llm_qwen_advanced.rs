@@ -24,7 +24,9 @@ async fn main() {
     // Create a system and user message
     let messages = vec![
         Message::new_system_message("You are a helpful AI assistant who responds in Chinese."),
-        Message::new_human_message("What are the three most popular programming languages in 2023?"),
+        Message::new_human_message(
+            "What are the three most popular programming languages in 2023?",
+        ),
     ];
 
     let response = qwen.generate(&messages).await.unwrap();
@@ -34,7 +36,7 @@ async fn main() {
 
     // Example 2: Streaming response
     println!("=== Example 2: Streaming Response ===");
-    
+
     // Create a streaming callback function
     let callback = |content: String| {
         print!("{}", content);
@@ -51,11 +53,14 @@ async fn main() {
         .with_model(QwenModel::QwenPlus.to_string())
         .with_options(streaming_options);
 
-    let stream_messages = vec![
-        Message::new_human_message("Write a short poem about artificial intelligence."),
-    ];
+    let stream_messages = vec![Message::new_human_message(
+        "Write a short poem about artificial intelligence.",
+    )];
 
     println!("Streaming response:");
     let streaming_response = streaming_qwen.generate(&stream_messages).await.unwrap();
-    println!("\n\nDone streaming. Total tokens: {:?}", streaming_response.tokens);
-} 
+    println!(
+        "\n\nDone streaming. Total tokens: {:?}",
+        streaming_response.tokens
+    );
+}

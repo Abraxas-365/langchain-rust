@@ -18,7 +18,7 @@ pub enum LLMError {
 
     #[error("Qwen error: {0}")]
     QwenError(#[from] QwenError),
-    
+
     #[error("Deepseek error: {0}")]
     DeepseekError(#[from] DeepseekError),
 
@@ -43,7 +43,7 @@ pub enum LLMError {
 
     #[error("Content not found in response: Expected at {0}")]
     ContentNotFound(String),
-    
+
     #[error("Parsing error: {0}")]
     ParsingError(String),
 

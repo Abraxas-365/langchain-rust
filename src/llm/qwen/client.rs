@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use reqwest::Client;
 use serde_json::Value;
-use std::{pin::Pin, str::from_utf8, str};
+use std::{pin::Pin, str, str::from_utf8};
 
 use super::models::{ApiResponse, ErrorResponse, Payload, QwenMessage};
 
@@ -15,59 +15,78 @@ use super::models::{ApiResponse, ErrorResponse, Payload, QwenMessage};
 fn parse_error_response(code: &str, message: &str) -> LLMError {
     match code {
         // 400 errors
-        "InvalidParameter" | "invalid_parameter_error" => 
-            LLMError::QwenError(QwenError::InvalidParameterError(message.to_string())),
-        "APIConnectionError" => 
-            LLMError::QwenError(QwenError::APIConnectionError(message.to_string())),
-        
+        "InvalidParameter" | "invalid_parameter_error" => {
+            LLMError::QwenError(QwenError::InvalidParameterError(message.to_string()))
+        }
+        "APIConnectionError" => {
+            LLMError::QwenError(QwenError::APIConnectionError(message.to_string()))
+        }
+
         // 401 errors
-        "InvalidApiKey" => 
-            LLMError::QwenError(QwenError::InvalidApiKeyError(message.to_string())),
-        
+        "InvalidApiKey" => LLMError::QwenError(QwenError::InvalidApiKeyError(message.to_string())),
+
         // 429 errors
-        "ModelServingError" => 
-            LLMError::QwenError(QwenError::ModelServingError(message.to_string())),
-        "PrepaidBillOverdue" => 
-            LLMError::QwenError(QwenError::PrepaidBillOverdueError(message.to_string())),
-        "PostpaidBillOverdue" => 
-            LLMError::QwenError(QwenError::PostpaidBillOverdueError(message.to_string())),
-        "CommodityNotPurchased" => 
-            LLMError::QwenError(QwenError::CommodityNotPurchasedError(message.to_string())),
-        
+        "ModelServingError" => {
+            LLMError::QwenError(QwenError::ModelServingError(message.to_string()))
+        }
+        "PrepaidBillOverdue" => {
+            LLMError::QwenError(QwenError::PrepaidBillOverdueError(message.to_string()))
+        }
+        "PostpaidBillOverdue" => {
+            LLMError::QwenError(QwenError::PostpaidBillOverdueError(message.to_string()))
+        }
+        "CommodityNotPurchased" => {
+            LLMError::QwenError(QwenError::CommodityNotPurchasedError(message.to_string()))
+        }
+
         // 500 errors
-        "InternalError" | "internal_error" => 
-            LLMError::QwenError(QwenError::InternalError(message.to_string())),
-        "InternalError.Algo" => 
-            LLMError::QwenError(QwenError::InternalAlgorithmError(message.to_string())),
-        "InternalError.Timeout" => 
-            LLMError::QwenError(QwenError::TimeoutError(message.to_string())),
-        "RewriteFailed" => 
-            LLMError::QwenError(QwenError::RewriteFailedError(message.to_string())),
-        "RetrivalFailed" => 
-            LLMError::QwenError(QwenError::RetrievalFailedError(message.to_string())),
-        "AppProcessFailed" => 
-            LLMError::QwenError(QwenError::AppProcessFailedError(message.to_string())),
-        "ModelServiceFailed" => 
-            LLMError::QwenError(QwenError::ModelServiceFailedError(message.to_string())),
-        "InvokePluginFailed" => 
-            LLMError::QwenError(QwenError::InvokePluginFailedError(message.to_string())),
-        "SystemError" | "system_error" => 
-            LLMError::QwenError(QwenError::SystemError(message.to_string())),
-        
+        "InternalError" | "internal_error" => {
+            LLMError::QwenError(QwenError::InternalError(message.to_string()))
+        }
+        "InternalError.Algo" => {
+            LLMError::QwenError(QwenError::InternalAlgorithmError(message.to_string()))
+        }
+        "InternalError.Timeout" => {
+            LLMError::QwenError(QwenError::TimeoutError(message.to_string()))
+        }
+        "RewriteFailed" => LLMError::QwenError(QwenError::RewriteFailedError(message.to_string())),
+        "RetrivalFailed" => {
+            LLMError::QwenError(QwenError::RetrievalFailedError(message.to_string()))
+        }
+        "AppProcessFailed" => {
+            LLMError::QwenError(QwenError::AppProcessFailedError(message.to_string()))
+        }
+        "ModelServiceFailed" => {
+            LLMError::QwenError(QwenError::ModelServiceFailedError(message.to_string()))
+        }
+        "InvokePluginFailed" => {
+            LLMError::QwenError(QwenError::InvokePluginFailedError(message.to_string()))
+        }
+        "SystemError" | "system_error" => {
+            LLMError::QwenError(QwenError::SystemError(message.to_string()))
+        }
+
         // 503 errors
-        "ModelUnavailable" => 
-            LLMError::QwenError(QwenError::ModelUnavailableError(message.to_string())),
-        
+        "ModelUnavailable" => {
+            LLMError::QwenError(QwenError::ModelUnavailableError(message.to_string()))
+        }
+
         // Other errors
-        "mismatched_model" => 
-            LLMError::QwenError(QwenError::MismatchedModelError(message.to_string())),
-        "duplicate_custom_id" => 
-            LLMError::QwenError(QwenError::DuplicateCustomIdError(message.to_string())),
-        "model_not_found" => 
-            LLMError::QwenError(QwenError::ModelNotFoundError(message.to_string())),
-        
+        "mismatched_model" => {
+            LLMError::QwenError(QwenError::MismatchedModelError(message.to_string()))
+        }
+        "duplicate_custom_id" => {
+            LLMError::QwenError(QwenError::DuplicateCustomIdError(message.to_string()))
+        }
+        "model_not_found" => {
+            LLMError::QwenError(QwenError::ModelNotFoundError(message.to_string()))
+        }
+
         // Default error
-        _ => LLMError::QwenError(QwenError::SystemError(format!("Unknown error code: {}, message: {}", code, message))),
+        _ => LLMError::QwenError(QwenError::SystemError(format!(
+            "Unknown error code: {}, message: {}",
+            code, message
+        ))),
     }
 }
 
@@ -191,7 +210,8 @@ impl Qwen {
             model: QwenModel::QwenTurbo.to_string(), // Default to Turbo model
             options: CallOptions::default(),
             api_key: std::env::var("QWEN_API_KEY").unwrap_or_default(),
-            base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions".to_string(),
+            base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+                .to_string(),
         }
     }
 
@@ -236,11 +256,15 @@ impl Qwen {
         match res.status().as_u16() {
             200 => {
                 let api_response = res.json::<ApiResponse>().await?;
-                
+
                 // Extract the first choice content
                 let generation = match api_response.choices.first() {
                     Some(choice) => choice.message.content.clone(),
-                    None => return Err(LLMError::ContentNotFound("No content returned from API".to_string())),
+                    None => {
+                        return Err(LLMError::ContentNotFound(
+                            "No content returned from API".to_string(),
+                        ))
+                    }
                 };
 
                 let tokens = Some(TokenUsage {
@@ -291,7 +315,7 @@ impl Qwen {
             stop: self.options.stop_words.clone(),
             temperature: self.options.temperature,
             top_p: self.options.top_p,
-            seed: None, // Optional
+            seed: None,          // Optional
             result_format: None, // Optional
         };
 
@@ -304,7 +328,7 @@ impl Qwen {
 
     /// Parse Server-Sent Events (SSE) chunks
     fn parse_sse_chunk(bytes: &[u8]) -> Result<Vec<Value>, LLMError> {
-        let text = str::from_utf8(bytes).map_err(|e| LLMError::OtherError(e.to_string()))?;
+        let text = from_utf8(bytes).map_err(|e| LLMError::OtherError(e.to_string()))?;
         let mut values = Vec::new();
 
         for line in text.lines() {
@@ -313,11 +337,14 @@ impl Qwen {
                 if data == "[DONE]" {
                     continue;
                 }
-                
+
                 match serde_json::from_str::<Value>(data) {
                     Ok(value) => values.push(value),
                     Err(e) => {
-                        return Err(LLMError::OtherError(format!("Failed to parse SSE data: {}, data: {}", e, data)));
+                        return Err(LLMError::OtherError(format!(
+                            "Failed to parse SSE data: {}, data: {}",
+                            e, data
+                        )));
                     }
                 }
             }
@@ -368,54 +395,77 @@ impl LLM for Qwen {
 
         let stream = client.execute(request).await?;
         let stream = stream.bytes_stream();
-        
-        let processed_stream = stream.then(move |result| {
-            async move {
-                match result {
-                    Ok(bytes) => {
-                        // Parse SSE chunk format
-                        let bytes_str = from_utf8(&bytes).map_err(|e| LLMError::OtherError(e.to_string()))?;
-                        let chunks = Self::parse_sse_chunk(&bytes)?;
-                        
-                        for chunk in chunks {
-                            if let Some(choices) = chunk.get("choices").and_then(|c| c.as_array()) {
-                                if let Some(choice) = choices.first() {
-                                    if let Some(delta) = choice.get("delta") {
-                                        // Extract content from delta
-                                        if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
-                                            if !content.is_empty() {
-                                                let usage = if let Some(usage) = chunk.get("usage") {
-                                                    Some(TokenUsage {
-                                                        prompt_tokens: usage.get("prompt_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
-                                                        completion_tokens: usage.get("completion_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
-                                                        total_tokens: usage.get("total_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
-                                                    })
-                                                } else {
-                                                    None
-                                                };
-                                                
-                                                return Ok(StreamData::new(chunk.clone(), usage, content));
+
+        let processed_stream = stream
+            .then(move |result| {
+                async move {
+                    match result {
+                        Ok(bytes) => {
+                            // Parse SSE chunk format
+                            let bytes_str = from_utf8(&bytes)
+                                .map_err(|e| LLMError::OtherError(e.to_string()))?;
+                            let chunks = Self::parse_sse_chunk(&bytes)?;
+
+                            for chunk in chunks {
+                                if let Some(choices) =
+                                    chunk.get("choices").and_then(|c| c.as_array())
+                                {
+                                    if let Some(choice) = choices.first() {
+                                        if let Some(delta) = choice.get("delta") {
+                                            // Extract content from delta
+                                            if let Some(content) =
+                                                delta.get("content").and_then(|c| c.as_str())
+                                            {
+                                                if !content.is_empty() {
+                                                    let usage =
+                                                        if let Some(usage) = chunk.get("usage") {
+                                                            Some(TokenUsage {
+                                                                prompt_tokens: usage
+                                                                    .get("prompt_tokens")
+                                                                    .and_then(|t| t.as_u64())
+                                                                    .unwrap_or(0)
+                                                                    as u32,
+                                                                completion_tokens: usage
+                                                                    .get("completion_tokens")
+                                                                    .and_then(|t| t.as_u64())
+                                                                    .unwrap_or(0)
+                                                                    as u32,
+                                                                total_tokens: usage
+                                                                    .get("total_tokens")
+                                                                    .and_then(|t| t.as_u64())
+                                                                    .unwrap_or(0)
+                                                                    as u32,
+                                                            })
+                                                        } else {
+                                                            None
+                                                        };
+
+                                                    return Ok(StreamData::new(
+                                                        chunk.clone(),
+                                                        usage,
+                                                        content,
+                                                    ));
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
+
+                            // If we didn't return within the loop, return an empty stream data
+                            Ok(StreamData::new(Value::Null, None, ""))
                         }
-                        
-                        // If we didn't return within the loop, return an empty stream data
-                        Ok(StreamData::new(Value::Null, None, ""))
+                        Err(e) => Err(LLMError::RequestError(e)),
                     }
-                    Err(e) => Err(LLMError::RequestError(e)),
                 }
-            }
-        })
-        .filter_map(|result| async move {
-            match result {
-                Ok(data) if !data.content.is_empty() => Some(Ok(data)),
-                Ok(_) => None,
-                Err(e) => Some(Err(e)),
-            }
-        });
+            })
+            .filter_map(|result| async move {
+                match result {
+                    Ok(data) if !data.content.is_empty() => Some(Ok(data)),
+                    Ok(_) => None,
+                    Err(e) => Some(Err(e)),
+                }
+            });
 
         Ok(Box::pin(processed_stream))
     }
@@ -458,4 +508,4 @@ mod tests {
             }
         }
     }
-} 
+}

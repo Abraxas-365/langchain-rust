@@ -22,4 +22,4 @@ pub enum DeepseekError {
 
     #[error("Deepseek API error: Server Overloaded - {0}")]
     ServerOverloadedError(String),
-} 
+}

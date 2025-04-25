@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::schemas::{Message, MessageType};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub(crate) struct DeepseekMessage {
@@ -109,4 +109,4 @@ pub(crate) struct StreamResponse {
     pub choices: Vec<StreamChoice>,
     pub system_fingerprint: String,
     pub usage: Option<Usage>,
-} 
+}

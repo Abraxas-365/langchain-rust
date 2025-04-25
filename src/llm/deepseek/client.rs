@@ -99,24 +99,24 @@ impl Deepseek {
         let status = res.status().as_u16();
 
         let res = match status {
-            400 => Err(LLMError::DeepseekError(
-                DeepseekError::InvalidFormatError("Invalid request format".to_string()),
-            )),
-            401 => Err(LLMError::DeepseekError(
-                DeepseekError::AuthenticationError("Invalid API Key".to_string()),
-            )),
+            400 => Err(LLMError::DeepseekError(DeepseekError::InvalidFormatError(
+                "Invalid request format".to_string(),
+            ))),
+            401 => Err(LLMError::DeepseekError(DeepseekError::AuthenticationError(
+                "Invalid API Key".to_string(),
+            ))),
             402 => Err(LLMError::DeepseekError(
                 DeepseekError::InsufficientBalanceError("Insufficient balance".to_string()),
             )),
             422 => Err(LLMError::DeepseekError(
                 DeepseekError::InvalidParametersError("Invalid parameters".to_string()),
             )),
-            429 => Err(LLMError::DeepseekError(
-                DeepseekError::RateLimitError("Rate limit reached".to_string()),
-            )),
-            500 => Err(LLMError::DeepseekError(
-                DeepseekError::ServerError("Server error".to_string()),
-            )),
+            429 => Err(LLMError::DeepseekError(DeepseekError::RateLimitError(
+                "Rate limit reached".to_string(),
+            ))),
+            500 => Err(LLMError::DeepseekError(DeepseekError::ServerError(
+                "Server error".to_string(),
+            ))),
             503 => Err(LLMError::DeepseekError(
                 DeepseekError::ServerOverloadedError("Server overloaded".to_string()),
             )),
@@ -124,11 +124,11 @@ impl Deepseek {
         }?;
 
         let choice = res.choices.first();
-        
+
         let mut generation = choice
             .map(|c| c.message.content.clone())
             .unwrap_or_default();
-        
+
         // If include_reasoning is enabled and the model is deepseek-reasoner,
         // append the reasoning content to the generation if available
         if self.include_reasoning && self.model == DeepseekModel::DeepseekReasoner.to_string() {
@@ -201,8 +201,9 @@ impl Deepseek {
                 if data == "[DONE]" {
                     continue;
                 }
-                let value: Value = serde_json::from_str(data)
-                    .map_err(|e| LLMError::ParsingError(format!("Failed to parse SSE data: {}", e)))?;
+                let value: Value = serde_json::from_str(data).map_err(|e| {
+                    LLMError::ParsingError(format!("Failed to parse SSE data: {}", e))
+                })?;
                 values.push(value);
             }
         }
@@ -251,74 +252,117 @@ impl LLM for Deepseek {
 
         let stream = client.execute(request).await?;
         let stream = stream.bytes_stream();
-        
+
         let include_reasoning = self.include_reasoning;
         let is_reasoner = self.model == DeepseekModel::DeepseekReasoner.to_string();
 
-        let processed_stream = stream.then(move |result| {
-            async move {
-                match result {
-                    Ok(bytes) => {
-                        let chunks = Self::parse_sse_chunk(&bytes)?;
-                        
-                        for chunk in chunks {
-                            if let Some(choices) = chunk.get("choices").and_then(|c| c.as_array()) {
-                                if let Some(choice) = choices.first() {
-                                    if let Some(delta) = choice.get("delta") {
-                                        // Handle reasoning_content if it exists
-                                        if include_reasoning && is_reasoner {
-                                            if let Some(reasoning) = delta.get("reasoning_content").and_then(|c| c.as_str()) {
-                                                if !reasoning.is_empty() {
-                                                    let usage = if let Some(usage) = chunk.get("usage") {
-                                                        Some(TokenUsage {
-                                                            prompt_tokens: usage.get("prompt_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
-                                                            completion_tokens: usage.get("completion_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
-                                                            total_tokens: usage.get("total_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
-                                                        })
-                                                    } else {
-                                                        None
-                                                    };
-                                                    
-                                                    return Ok(StreamData::new(chunk.clone(), usage, format!("Reasoning: {}", reasoning)));
+        let processed_stream = stream
+            .then(move |result| {
+                async move {
+                    match result {
+                        Ok(bytes) => {
+                            let chunks = Self::parse_sse_chunk(&bytes)?;
+
+                            for chunk in chunks {
+                                if let Some(choices) =
+                                    chunk.get("choices").and_then(|c| c.as_array())
+                                {
+                                    if let Some(choice) = choices.first() {
+                                        if let Some(delta) = choice.get("delta") {
+                                            // Handle reasoning_content if it exists
+                                            if include_reasoning && is_reasoner {
+                                                if let Some(reasoning) = delta
+                                                    .get("reasoning_content")
+                                                    .and_then(|c| c.as_str())
+                                                {
+                                                    if !reasoning.is_empty() {
+                                                        let usage = if let Some(usage) =
+                                                            chunk.get("usage")
+                                                        {
+                                                            Some(TokenUsage {
+                                                                prompt_tokens: usage
+                                                                    .get("prompt_tokens")
+                                                                    .and_then(|t| t.as_u64())
+                                                                    .unwrap_or(0)
+                                                                    as u32,
+                                                                completion_tokens: usage
+                                                                    .get("completion_tokens")
+                                                                    .and_then(|t| t.as_u64())
+                                                                    .unwrap_or(0)
+                                                                    as u32,
+                                                                total_tokens: usage
+                                                                    .get("total_tokens")
+                                                                    .and_then(|t| t.as_u64())
+                                                                    .unwrap_or(0)
+                                                                    as u32,
+                                                            })
+                                                        } else {
+                                                            None
+                                                        };
+
+                                                        return Ok(StreamData::new(
+                                                            chunk.clone(),
+                                                            usage,
+                                                            format!("Reasoning: {}", reasoning),
+                                                        ));
+                                                    }
                                                 }
                                             }
-                                        }
-                                        
-                                        // Handle content as before
-                                        if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
-                                            if !content.is_empty() {
-                                                let usage = if let Some(usage) = chunk.get("usage") {
-                                                    Some(TokenUsage {
-                                                        prompt_tokens: usage.get("prompt_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
-                                                        completion_tokens: usage.get("completion_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
-                                                        total_tokens: usage.get("total_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as u32,
-                                                    })
-                                                } else {
-                                                    None
-                                                };
-                                                
-                                                return Ok(StreamData::new(chunk.clone(), usage, content));
+
+                                            // Handle content as before
+                                            if let Some(content) =
+                                                delta.get("content").and_then(|c| c.as_str())
+                                            {
+                                                if !content.is_empty() {
+                                                    let usage =
+                                                        if let Some(usage) = chunk.get("usage") {
+                                                            Some(TokenUsage {
+                                                                prompt_tokens: usage
+                                                                    .get("prompt_tokens")
+                                                                    .and_then(|t| t.as_u64())
+                                                                    .unwrap_or(0)
+                                                                    as u32,
+                                                                completion_tokens: usage
+                                                                    .get("completion_tokens")
+                                                                    .and_then(|t| t.as_u64())
+                                                                    .unwrap_or(0)
+                                                                    as u32,
+                                                                total_tokens: usage
+                                                                    .get("total_tokens")
+                                                                    .and_then(|t| t.as_u64())
+                                                                    .unwrap_or(0)
+                                                                    as u32,
+                                                            })
+                                                        } else {
+                                                            None
+                                                        };
+
+                                                    return Ok(StreamData::new(
+                                                        chunk.clone(),
+                                                        usage,
+                                                        content,
+                                                    ));
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
+
+                            // If we didn't return within the loop, return an empty stream data
+                            Ok(StreamData::new(Value::Null, None, ""))
                         }
-                        
-                        // If we didn't return within the loop, return an empty stream data
-                        Ok(StreamData::new(Value::Null, None, ""))
+                        Err(e) => Err(LLMError::OtherError(e.to_string())),
                     }
-                    Err(e) => Err(LLMError::OtherError(e.to_string())),
                 }
-            }
-        })
-        .filter_map(|result| async move {
-            match result {
-                Ok(data) if !data.content.is_empty() => Some(Ok(data)),
-                Ok(_) => None,
-                Err(e) => Some(Err(e)),
-            }
-        });
+            })
+            .filter_map(|result| async move {
+                match result {
+                    Ok(data) if !data.content.is_empty() => Some(Ok(data)),
+                    Ok(_) => None,
+                    Err(e) => Some(Err(e)),
+                }
+            });
 
         Ok(Box::pin(processed_stream))
     }
@@ -362,7 +406,7 @@ mod tests {
         let res = client.stream(&messages).await;
         assert!(res.is_ok());
     }
-    
+
     #[tokio::test]
     async fn test_deepseek_reasoner() {
         let messages = vec![Message {
@@ -377,13 +421,13 @@ mod tests {
         let client = Deepseek::new()
             .with_model(DeepseekModel::DeepseekReasoner.to_string())
             .with_include_reasoning(true);
-            
+
         let res = client.generate(&messages).await;
         assert!(res.is_ok());
-        
+
         // The response will contain both the reasoning and answer content
         if let Ok(result) = res {
             println!("Generation result: {}", result.generation);
         }
     }
-} 
+}
