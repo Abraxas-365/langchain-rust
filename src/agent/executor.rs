@@ -97,7 +97,7 @@ where
                     for action in actions {
                         log::debug!("Action: {:?}", action.tool_input);
                         let tool = name_to_tools
-                            .get(&action.tool)
+                            .get(&action.tool.trim().replace(" ", "_"))
                             .ok_or_else(|| {
                                 AgentError::ToolError(format!("Tool {} not found", action.tool))
                             })
