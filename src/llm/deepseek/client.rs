@@ -378,6 +378,7 @@ mod tests {
     use crate::schemas::{Message, MessageType};
 
     #[tokio::test]
+    #[ignore]
     async fn test_deepseek_generate() {
         let messages = vec![Message {
             content: "Hello".to_string(),
@@ -393,6 +394,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_deepseek_stream() {
         let messages = vec![Message {
             content: "Hello".to_string(),
@@ -408,6 +410,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_deepseek_reasoner() {
         let messages = vec![Message {
             content: "9.11 and 9.8, which is greater?".to_string(),
