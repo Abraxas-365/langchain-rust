@@ -23,7 +23,7 @@ regex = "1.10.4"
 log = "0.4.21"
 html-escape = "0.2.13"
 reqwest-eventsource = "0.6.0"
-async-openai = "0.26.0"
+async-openai = "0.28.1"
 mockito = "1.4.0"
 tiktoken-rs = "0.5.8"
 sqlx = { version = "0.8.0", default-features = false, features = [
@@ -48,7 +48,7 @@ thiserror = "2.0.0"
 futures-util = "0.3.30"
 async-stream = "0.3.5"
 tokio-stream = "0.1.15"
-secrecy = "0.8.0"
+secrecy = { version = "0.10.3", features = ["serde"] }
 readability = "0.3.0"
 htmd = { version = "0.1", optional = true }
 url = "2.5.0"

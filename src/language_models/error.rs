@@ -6,7 +6,7 @@ use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
 use tokio::time::error::Elapsed;
 
-use crate::llm::AnthropicError;
+use crate::llm::{AnthropicError, DeepseekError, QwenError};
 
 #[derive(Error, Debug)]
 pub enum LLMError {
@@ -15,6 +15,12 @@ pub enum LLMError {
 
     #[error("Anthropic error: {0}")]
     AnthropicError(#[from] AnthropicError),
+
+    #[error("Qwen error: {0}")]
+    QwenError(#[from] QwenError),
+
+    #[error("Deepseek error: {0}")]
+    DeepseekError(#[from] DeepseekError),
 
     #[cfg(feature = "ollama")]
     #[error("Ollama error: {0}")]
@@ -37,6 +43,9 @@ pub enum LLMError {
 
     #[error("Content not found in response: Expected at {0}")]
     ContentNotFound(String),
+
+    #[error("Parsing error: {0}")]
+    ParsingError(String),
 
     #[error("Error: {0}")]
     OtherError(String),
