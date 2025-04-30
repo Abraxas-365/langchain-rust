@@ -115,7 +115,7 @@ impl LLM for Ollama {
             }
         });
 
-        Ok(GenerateResult { tokens, generation })
+        Ok(GenerateResult { tokens, generation, sources: None })
     }
 
     async fn stream(

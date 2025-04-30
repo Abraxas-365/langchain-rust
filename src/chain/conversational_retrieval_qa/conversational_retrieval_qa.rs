@@ -70,7 +70,12 @@ impl ConversationalRetrieverChain {
 impl Chain for ConversationalRetrieverChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
         let output = self.execute(input_variables).await?;
-        let result: GenerateResult = serde_json::from_value(output[DEFAULT_RESULT_KEY].clone())?;
+        let mut result: GenerateResult = serde_json::from_value(output[DEFAULT_RESULT_KEY].clone())?;
+
+        if let Ok(sources) = serde_json::from_value(output[CONVERSATIONAL_RETRIEVAL_QA_DEFAULT_SOURCE_DOCUMENT_KEY].clone()) {
+            result.sources = Some(sources);
+        }
+
         Ok(result)
     }
 

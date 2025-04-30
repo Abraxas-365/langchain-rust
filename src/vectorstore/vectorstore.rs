@@ -15,7 +15,7 @@ pub trait VectorStore: Send + Sync {
     async fn add_documents(
         &self,
         docs: &[Document],
-        opt: &Self::Options,
+        opt: Option<&Self::Options>,
     ) -> Result<Vec<String>, Box<dyn Error>>;
 
     async fn similarity_search(
