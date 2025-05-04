@@ -9,19 +9,19 @@ pub use ollama_rs::{
     error::OllamaError,
     generation::{
         chat::{request::ChatMessageRequest, ChatMessage, MessageRole},
-        options::GenerationOptions,
     },
     Ollama as OllamaClient,
 };
 use std::pin::Pin;
 use std::sync::Arc;
+use ollama_rs::models::ModelOptions;
 use tokio_stream::StreamExt;
 
 #[derive(Debug, Clone)]
 pub struct Ollama {
     pub(crate) client: Arc<OllamaClient>,
     pub(crate) model: String,
-    pub(crate) options: Option<GenerationOptions>,
+    pub(crate) options: Option<ModelOptions>,
 }
 
 /// [llama3.2](https://ollama.com/library/llama3.2) is a 3B parameters, 2.0GB model.
@@ -31,7 +31,7 @@ impl Ollama {
     pub fn new<S: Into<String>>(
         client: Arc<OllamaClient>,
         model: S,
-        options: Option<GenerationOptions>,
+        options: Option<ModelOptions>,
     ) -> Self {
         Ollama {
             client,
@@ -45,14 +45,18 @@ impl Ollama {
         self
     }
 
-    pub fn with_options(mut self, options: GenerationOptions) -> Self {
+    pub fn with_options(mut self, options: ModelOptions) -> Self {
         self.options = Some(options);
         self
     }
 
     fn generate_request(&self, messages: &[Message]) -> ChatMessageRequest {
         let mapped_messages = messages.iter().map(|message| message.into()).collect();
-        ChatMessageRequest::new(self.model.clone(), mapped_messages)
+        let mut request = ChatMessageRequest::new(self.model.clone(), mapped_messages);
+        if let Some(option) = &self.options {
+           request = request.options(option.clone()) 
+        }
+        request
     }
 }
 
@@ -70,6 +74,7 @@ impl From<&Message> for ChatMessage {
         };
         ChatMessage {
             content: message.content.clone(),
+            tool_calls: vec![],
             images,
             role: message.message_type.clone().into(),
         }
@@ -100,11 +105,7 @@ impl LLM for Ollama {
         let request = self.generate_request(messages);
         let result = self.client.send_chat_messages(request).await?;
 
-        let generation = match result.message {
-            Some(message) => message.content,
-            None => return Err(OllamaError::from("No message in response".to_string()).into()),
-        };
-
+        let generation = result.message.content;
         let tokens = result.final_data.map(|final_data| {
             let prompt_tokens = final_data.prompt_eval_count as u32;
             let completion_tokens = final_data.eval_count as u32;
@@ -126,18 +127,12 @@ impl LLM for Ollama {
         let result = self.client.send_chat_messages_stream(request).await?;
 
         let stream = result.map(|data| match data {
-            Ok(data) => match data.message.clone() {
-                Some(message) => Ok(StreamData::new(
-                    serde_json::to_value(data).unwrap_or_default(),
-                    None,
-                    message.content,
-                )),
-                // TODO: no need to return error, see https://github.com/Abraxas-365/langchain-rust/issues/140
-                None => Err(LLMError::ContentNotFound(
-                    "No message in response".to_string(),
-                )),
-            },
-            Err(_) => Err(OllamaError::from("Stream error".to_string()).into()),
+            Ok(data) => Ok(StreamData::new(
+                serde_json::to_value(&data).unwrap_or_default(),
+                None,
+                data.message.content,
+            )),
+            Err(_) => Err(OllamaError::Other("Stream error".to_string()).into()),
         });
 
         Ok(Box::pin(stream))
