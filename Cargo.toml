@@ -12,7 +12,7 @@ documentation = "https://langchain-rust.sellie.tech/get-started/quickstart"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-scraper = "0.21"
+scraper = "0.23"
 serde = { version = "1.0", features = ["derive"] }
 async-trait = "0.1.80"
 tokio = { version = "1", features = ["full"] }
