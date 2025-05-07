@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::sync::Mutex;
 
 use crate::schemas::{memory::BaseMemory, messages::Message};
@@ -36,17 +37,20 @@ impl Into<Arc<Mutex<dyn BaseMemory>>> for WindowBufferMemory {
     }
 }
 
+#[async_trait]
 impl BaseMemory for WindowBufferMemory {
-    fn messages(&self) -> Vec<Message> {
+    async fn messages(&self) -> Vec<Message> {
         self.messages.clone()
     }
-    fn add_message(&mut self, message: Message) {
+    
+    async fn add_message(&mut self, message: Message) {
         if self.messages.len() >= self.window_size {
             self.messages.remove(0);
         }
         self.messages.push(message);
     }
-    fn clear(&mut self) {
+    
+    async fn clear(&mut self) {
         self.messages.clear();
     }
 }

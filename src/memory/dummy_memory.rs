@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::sync::Mutex;
 
 use crate::schemas::{memory::BaseMemory, messages::Message};
@@ -24,10 +25,11 @@ impl Into<Arc<Mutex<dyn BaseMemory>>> for DummyMemory {
     }
 }
 
+#[async_trait]
 impl BaseMemory for DummyMemory {
-    fn messages(&self) -> Vec<Message> {
+    async fn messages(&self) -> Vec<Message> {
         vec![]
     }
-    fn add_message(&mut self, _message: Message) {}
-    fn clear(&mut self) {}
+    async fn add_message(&mut self, _message: Message) {}
+    async fn clear(&mut self) {}
 }
