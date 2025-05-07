@@ -78,11 +78,14 @@ where
         log::debug!("steps: {:?}", steps);
         if let Some(memory) = &self.memory {
             let memory = memory.lock().await;
-            input_variables.insert("chat_history".to_string(), json!(memory.messages()));
+            let messages = memory.messages().await;
+            input_variables.insert("chat_history".to_string(), json!(messages));
         } else {
+            let memory = SimpleMemory::new();
+            let messages = memory.messages().await;
             input_variables.insert(
                 "chat_history".to_string(),
-                json!(SimpleMemory::new().messages()),
+                json!(messages),
             );
         }
 
@@ -131,9 +134,9 @@ where
 
                         memory.add_user_message(match &input_variables["input"] {
                             // This avoids adding extra quotes to the user input in the history.
-                            serde_json::Value::String(s) => s,
-                            x => x, // this the json encoded value.
-                        });
+                            serde_json::Value::String(s) => s.clone(),
+                            x => x.to_string(), // this the json encoded value.
+                        }).await;
 
                         let mut tools_ai_message_seen: HashMap<String, ()> = HashMap::default();
                         for (action, observation) in steps {
@@ -142,12 +145,12 @@ where
                             if tools_ai_message_seen.insert(tools, ()).is_none() {
                                 memory.add_message(
                                     Message::new_ai_message("").with_tool_calls(tools_value),
-                                );
+                                ).await;
                             }
-                            memory.add_message(Message::new_tool_message(observation, tool_id));
+                            memory.add_message(Message::new_tool_message(observation, tool_id)).await;
                         }
 
-                        memory.add_ai_message(&finish.output);
+                        memory.add_ai_message(finish.output.clone()).await;
                     }
                     return Ok(GenerateResult {
                         generation: finish.output,

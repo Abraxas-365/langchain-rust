@@ -67,15 +67,15 @@ impl Chain for ConversationalChain {
 
         let history = {
             let memory = self.memory.lock().await;
-            memory.to_string()
+            memory.to_string().await
         };
         let mut input_variables = input_variables;
         input_variables.insert("history".to_string(), history.into());
         let result = self.llm.call(input_variables.clone()).await?;
 
         let mut memory = self.memory.lock().await;
-        memory.add_message(human_message);
-        memory.add_message(Message::new_ai_message(&result.generation));
+        memory.add_message(human_message).await;
+        memory.add_message(Message::new_ai_message(&result.generation)).await;
         Ok(result)
     }
 
@@ -91,7 +91,7 @@ impl Chain for ConversationalChain {
 
         let history = {
             let memory = self.memory.lock().await;
-            memory.to_string()
+            memory.to_string().await
         };
 
         let mut input_variables = input_variables;
@@ -121,8 +121,8 @@ impl Chain for ConversationalChain {
             }
 
             let mut memory = memory.lock().await;
-            memory.add_message(human_message);
-            memory.add_message(Message::new_ai_message(&complete_ai_message.lock().await));
+            memory.add_message(human_message).await;
+            memory.add_message(Message::new_ai_message(&complete_ai_message.lock().await)).await;
         };
 
         Ok(Box::pin(output_stream))
