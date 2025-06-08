@@ -6,7 +6,7 @@ use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
 use tokio::time::error::Elapsed;
 
-use crate::llm::{AnthropicError, DeepseekError, QwenError};
+use crate::llm::{AnthropicError, DeepseekError, NebiusError, QwenError};
 
 #[derive(Error, Debug)]
 pub enum LLMError {
@@ -21,6 +21,9 @@ pub enum LLMError {
 
     #[error("Deepseek error: {0}")]
     DeepseekError(#[from] DeepseekError),
+
+    #[error("Nebius error: {0}")]
+    NebiusError(#[from] NebiusError),
 
     #[cfg(feature = "ollama")]
     #[error("Ollama error: {0}")]
