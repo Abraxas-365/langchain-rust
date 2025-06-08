@@ -12,3 +12,6 @@ pub use qwen::*;
 
 pub mod deepseek;
 pub use deepseek::*;
+
+pub mod nebius;
+pub use nebius::*;
