@@ -35,7 +35,7 @@ async fn main() {
     let tool_calc = Date {};
     let command_executor = CommandExecutor::default();
     let agent = OpenAiToolAgentBuilder::new()
-        .tools(&[
+        .tools(&vec![
             Arc::new(serpapi_tool),
             Arc::new(tool_calc),
             Arc::new(command_executor),

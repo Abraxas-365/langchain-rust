@@ -30,7 +30,7 @@ impl ConversationalAgentBuilder {
         }
     }
 
-    pub fn tools(mut self, tools: &[Arc<dyn Tool>]) -> Self {
+    pub fn tools(mut self, tools: &Vec[Arc<dyn Tool>]) -> Self {
         self.tools = Some(tools.to_vec());
         self
     }
