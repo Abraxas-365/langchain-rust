@@ -142,7 +142,7 @@ mod tests {
         let memory = SimpleMemory::new();
         let tool_calc = Calc {};
         let agent = ConversationalAgentBuilder::new()
-            .tools(&[Arc::new(tool_calc)])
+            .tools(&vec![Arc::new(tool_calc)])
             .build(llm)
             .unwrap();
         let input_variables = prompt_args! {
