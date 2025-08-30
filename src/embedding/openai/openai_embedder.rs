@@ -14,7 +14,7 @@ pub struct OpenAiEmbedder<C: Config> {
     model: String,
 }
 
-impl<C: Config + Send + Sync + 'static> Into<Box<dyn Embedder>> for OpenAiEmbedder<C> {
+impl<C: Config + Send + Sync + 'static + Clone> Into<Box<dyn Embedder>> for OpenAiEmbedder<C> {
     fn into(self) -> Box<dyn Embedder> {
         Box::new(self)
     }
@@ -46,7 +46,7 @@ impl Default for OpenAiEmbedder<OpenAIConfig> {
 }
 
 #[async_trait]
-impl<C: Config + Send + Sync> Embedder for OpenAiEmbedder<C> {
+impl<C: Config + Send + Sync + Clone> Embedder for OpenAiEmbedder<C> {
     async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, EmbedderError> {
         let client = Client::with_config(self.config.clone());
 

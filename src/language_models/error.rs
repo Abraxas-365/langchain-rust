@@ -6,7 +6,7 @@ use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
 use tokio::time::error::Elapsed;
 
-use crate::llm::{AnthropicError, DeepseekError, QwenError};
+use crate::llm::{nanogpt::NanoGPTResponse, AnthropicError, DeepseekError, QwenError};
 
 #[derive(Error, Debug)]
 pub enum LLMError {
@@ -49,4 +49,7 @@ pub enum LLMError {
 
     #[error("Error: {0}")]
     OtherError(String),
+
+    #[error("NanoGPT error")]
+    NanoGPTError(NanoGPTResponse),
 }

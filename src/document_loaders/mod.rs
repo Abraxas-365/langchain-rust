@@ -38,3 +38,5 @@ pub use dir_loader::*;
 mod source_code_loader;
 #[cfg(feature = "tree-sitter")]
 pub use source_code_loader::*;
+
+pub use dotenvy;
