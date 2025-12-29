@@ -292,6 +292,7 @@ impl<C: Config> OpenAI<C> {
             request_builder.max_tokens(max_tokens);
         }
         if stream {
+            request_builder.stream(true);
             if let Some(include_usage) = self.options.stream_usage {
                 request_builder.stream_options(ChatCompletionStreamOptions { include_usage });
             }
