@@ -3,7 +3,7 @@
 //! Run with: cargo test --test wikipedia_integration -- --ignored
 //! (tests are ignored by default as they require network access)
 
-use langchain_rust::tools::{Tool, WikipediaQuery, WikipediaQueryOptions};
+use langchain_rust::tools::{Tool, WikipediaQuery};
 use serde_json::json;
 
 #[tokio::test]
@@ -220,9 +220,8 @@ async fn test_case_insensitive() {
 
 #[tokio::test]
 #[ignore]
+#[allow(dead_code)]
 async fn test_concurrent_queries() {
-    let wiki = WikipediaQuery::default();
-    
     let queries = vec![
         "Rust programming",
         "Python programming",
@@ -233,9 +232,9 @@ async fn test_concurrent_queries() {
     let mut handles = vec![];
     
     for query in queries {
-        let wiki_clone = WikipediaQuery::default();
         let handle = tokio::spawn(async move {
-            wiki_clone.run(json!(query)).await
+            let wiki_clone = WikipediaQuery::default();
+            wiki_clone.run(json!(query)).await.map_err(|e| e.to_string())
         });
         handles.push(handle);
     }

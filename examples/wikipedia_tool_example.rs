@@ -104,11 +104,13 @@ async fn agent_integration() -> Result<(), Box<dyn Error>> {
     let llm = OpenAI::default().with_model(OpenAIModel::Gpt4oMini.to_string());
     
     // Create Wikipedia tool
-    let wiki_tool = Arc::new(WikipediaQuery::default());
+    let wiki_tool = WikipediaQuery::default();
     
     // Create agent with Wikipedia tool
     let agent = OpenAiToolAgentBuilder::new()
-        .tools(vec![wiki_tool])
+        .tools(&[
+            Arc::new(wiki_tool),
+        ])
         .build(llm)?;
     
     // Create executor

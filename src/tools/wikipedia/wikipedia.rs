@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::error::Error;
 
-use super::Tool;
+use crate::tools::Tool;
 
 const WIKIPEDIA_API_URL: &str = "https://en.wikipedia.org/w/api.php";
 
@@ -112,7 +112,7 @@ struct PageContent {
 /// }
 /// ```
 pub struct WikipediaQuery {
-    options: WikipediaQueryOptions,
+    pub options: WikipediaQueryOptions,
     client: reqwest::Client,
 }
 
@@ -123,9 +123,20 @@ impl WikipediaQuery {
     ///
     /// * `options` - Configuration options for Wikipedia queries
     pub fn new(options: WikipediaQueryOptions) -> Self {
+        let APP_USER_AGENT: &str = concat!(
+            env!("CARGO_PKG_NAME"),
+            "/",
+            env!("CARGO_PKG_VERSION"),
+            " https://github.com/Abraxas-365/langchain-rust"
+        );
+        let client = reqwest::Client::builder()
+            .user_agent(APP_USER_AGENT)
+            .build()
+            .unwrap();
+
         Self {
             options,
-            client: reqwest::Client::new(),
+            client: client,
         }
     }
 
@@ -152,13 +163,14 @@ impl WikipediaQuery {
         self
     }
 
+
     /// Builds the Wikipedia API URL for the configured language
     fn get_api_url(&self) -> String {
         format!("https://{}.wikipedia.org/w/api.php", self.options.lang)
     }
 
     /// Searches Wikipedia for articles matching the query
-    async fn search(&self, query: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    async fn search(&self, query: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
         let api_url = self.get_api_url();
         let params = [
             ("action", "query"),
@@ -168,12 +180,15 @@ impl WikipediaQuery {
             ("srlimit", &self.options.top_k_results.to_string()),
         ];
 
-        let response = self
+        let res = self
             .client
             .get(&api_url)
             .query(&params)
             .send()
-            .await?
+            .await?;
+
+        let response = 
+            res
             .json::<WikipediaSearchResponse>()
             .await?;
 
@@ -186,7 +201,7 @@ impl WikipediaQuery {
     }
 
     /// Fetches the content of a specific Wikipedia page
-    async fn fetch_page(&self, title: &str) -> Result<String, Box<dyn Error>> {
+    async fn fetch_page(&self, title: &str) -> Result<String, Box<dyn Error  + Send + Sync>> {
         let api_url = self.get_api_url();
         let params = [
             ("action", "query"),
@@ -207,9 +222,10 @@ impl WikipediaQuery {
             .await?;
 
         if let Some(page) = response.query.pages.values().next() {
-            let extract = page.extract.as_ref().unwrap_or(&String::new());
+            let owned_string = String::new();
+            let extract = page.extract.as_ref().unwrap_or(&owned_string);
             let truncated = if extract.len() > self.options.max_doc_content_length {
-                &extract[..self.options.max_doc_content_length]
+                &extract[..self.options.max_doc_content_length - 1]
             } else {
                 extract
             };
@@ -256,20 +272,22 @@ impl Tool for WikipediaQuery {
         }
 
         // Search for relevant pages
-        let titles = self.search(&query).await?;
+        let titles = self.search(&query).await;
 
-        if titles.is_empty() {
+        if titles.as_ref().unwrap().is_empty() {
             return Ok(format!("No results found for query: {}", query));
         }
 
         // Fetch content for all found pages
         let mut results = Vec::new();
-        for title in titles {
-            match self.fetch_page(&title).await {
-                Ok(content) => results.push(content),
-                Err(e) => {
-                    eprintln!("Error fetching page '{}': {}", title, e);
-                    continue;
+        if let Ok(title) = titles {
+            for individual_title in title.iter() {
+                match self.fetch_page(&individual_title).await {
+                    Ok(content) => results.push(content),
+                    Err(e) => {
+                        eprintln!("Error fetching page '{:#?}': {:#?}", title, e);
+                        continue;
+                    }
                 }
             }
         }
