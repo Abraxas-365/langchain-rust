@@ -6,7 +6,7 @@
 //!
 //! ## Supported Models
 //!
-//! - Anthropic Claude (claude-v2, claude-instant-v1, claude-3-*)
+//! - Anthropic Claude (claude-v2, claude-instant-v1, claude-3-*, claude-4-*)
 //! - AI21 Labs Jurassic
 //! - Amazon Titan
 //! - Cohere Command
@@ -33,15 +33,16 @@
 use async_trait::async_trait;
 use aws_config::meta::region::RegionProviderChain;
 use aws_config::BehaviorVersion;
-use aws_sdk_bedrockruntime::types::Blob;
+use aws_sdk_bedrockruntime::primitives::Blob;
 use aws_sdk_bedrockruntime::Client as BedrockClient;
-use serde::{Deserialize, Serialize};
+use aws_sdk_bedrockruntime::types::{ContentBlock, ConversationRole, Message as BedrockMessage};
 use serde_json::json;
 use std::error::Error as StdError;
 use std::fmt;
 
 use crate::language_models::llm::LLM;
-use crate::schemas::generation::LLMResult;
+use crate::language_models::{GenerateResult, LLMError};
+use crate::schemas::{Message, StreamData};
 
 /// Errors that can occur when using the Bedrock LLM
 #[derive(Debug)]
@@ -91,6 +92,18 @@ pub enum BedrockModel {
     AnthropicClaude3Haiku,
     /// Anthropic Claude 3 Opus
     AnthropicClaude3Opus,
+    /// Anthropic Claude 3.5 Haiku
+    AnthropicClaude35Haiku,
+    /// Anthropic Claude 4 Sonnet
+    AnthropicClaude4Sonnet,
+    /// Anthropic Claude 4.5 Haiku
+    AnthropicClaude45Haiku,
+    /// Anthropic Claude 4.1 Opus
+    AnthropicClaude41Opus,
+    /// Anthropic Claude 4.5 Opus
+    AnthropicClaude45Opus,
+    /// Anthropic Claude 4.5 Sonnet
+    AnthropicClaude45Sonnet,
     /// AI21 Jurassic-2 Mid
     AI21Jurassic2Mid,
     /// AI21 Jurassic-2 Ultra
@@ -126,6 +139,25 @@ impl BedrockModel {
             BedrockModel::AnthropicClaude3Opus => {
                 "anthropic.claude-3-opus-20240229-v1:0".to_string()
             }
+            BedrockModel::AnthropicClaude35Haiku => {
+                "anthropic.claude-3-5-haiku-20241022-v1:0".to_string()
+            }
+            BedrockModel::AnthropicClaude4Sonnet => {
+                "anthropic.claude-sonnet-4-20250514-v1:0".to_string()
+            }
+            BedrockModel::AnthropicClaude45Haiku => {
+                "anthropic.claude-haiku-4-5-20251001-v1:0".to_string()
+            }
+            BedrockModel::AnthropicClaude41Opus => {
+                "anthropic.claude-opus-4-1-20250805-v1:0".to_string()
+            }
+            BedrockModel::AnthropicClaude45Opus => {
+                "anthropic.claude-opus-4-5-20251101-v1:0".to_string()
+            }
+            BedrockModel::AnthropicClaude45Sonnet => {
+                "anthropic.claude-sonnet-4-5-20250929-v1:0".to_string()
+            }
+            
             BedrockModel::AI21Jurassic2Mid => "ai21.j2-mid-v1".to_string(),
             BedrockModel::AI21Jurassic2Ultra => "ai21.j2-ultra-v1".to_string(),
             BedrockModel::AmazonTitanTextExpress => "amazon.titan-text-express-v1".to_string(),
@@ -145,19 +177,41 @@ impl BedrockModel {
             | BedrockModel::AnthropicClaudeInstantV1
             | BedrockModel::AnthropicClaude3Sonnet
             | BedrockModel::AnthropicClaude3Haiku
-            | BedrockModel::AnthropicClaude3Opus => "anthropic",
+            | BedrockModel::AnthropicClaude3Opus
+            | BedrockModel::AnthropicClaude35Haiku
+            | BedrockModel::AnthropicClaude4Sonnet
+            | BedrockModel::AnthropicClaude45Haiku
+            | BedrockModel::AnthropicClaude41Opus
+            | BedrockModel::AnthropicClaude45Opus
+            | BedrockModel::AnthropicClaude45Sonnet => "anthropic",
             BedrockModel::AI21Jurassic2Mid | BedrockModel::AI21Jurassic2Ultra => "ai21",
             BedrockModel::AmazonTitanTextExpress | BedrockModel::AmazonTitanTextLite => "amazon",
             BedrockModel::CohereCommand | BedrockModel::CohereCommandLight => "cohere",
             BedrockModel::MetaLlama2Chat13B | BedrockModel::MetaLlama2Chat70B => "meta",
-            BedrockModel::Custom(_) => "custom",
+            BedrockModel::Custom(model_id) => {
+                // Infer provider from model ID
+                if model_id.starts_with("anthropic.") {
+                    "anthropic"
+                } else if model_id.starts_with("ai21.") {
+                    "ai21"
+                } else if model_id.starts_with("amazon.") {
+                    "amazon"
+                } else if model_id.starts_with("cohere.") {
+                    "cohere"
+                } else if model_id.starts_with("meta.") {
+                    "meta"
+                } else {
+                    // Default to anthropic for unknown custom models
+                    "anthropic"
+                }
+            }
         }
     }
 }
 
 impl Default for BedrockModel {
     fn default() -> Self {
-        BedrockModel::AnthropicClaudeV2
+        BedrockModel::AnthropicClaude3Sonnet
     }
 }
 
@@ -185,7 +239,7 @@ pub struct BedrockConfig {
 impl Default for BedrockConfig {
     fn default() -> Self {
         Self {
-            region: Some("us-east-1".to_string()),
+            region: Some("us-west-2".to_string()),
             model: BedrockModel::default(),
             temperature: Some(0.7),
             max_tokens: Some(512),
@@ -262,7 +316,7 @@ impl Bedrock {
     }
 
     /// Initialize the AWS Bedrock client
-    async fn get_client(&mut self) -> Result<&BedrockClient, BedrockError> {
+    async fn get_client(&mut self) -> Result<BedrockClient, BedrockError> {
         if self.client.is_none() {
             let region = self
                 .config
@@ -270,7 +324,9 @@ impl Bedrock {
                 .clone()
                 .unwrap_or_else(|| "us-east-1".to_string());
 
-            let region_provider = RegionProviderChain::first_try(region.as_str());
+            // Use Box::leak to convert String to &'static str for region provider
+            let region_ref: &'static str = Box::leak(region.into_boxed_str());
+            let region_provider = RegionProviderChain::first_try(region_ref);
 
             let config = aws_config::defaults(BehaviorVersion::latest())
                 .region(region_provider)
@@ -280,7 +336,7 @@ impl Bedrock {
             self.client = Some(BedrockClient::new(&config));
         }
 
-        Ok(self.client.as_ref().unwrap())
+        Ok(self.client.as_ref().unwrap().clone())
     }
 
     /// Format the prompt according to the model's requirements
@@ -407,6 +463,75 @@ impl Bedrock {
 
         Ok(text)
     }
+
+    /// Check if the model requires the Converse API (Claude 3+, Claude 4+)
+    fn requires_converse_api(&self) -> bool {
+        match &self.config.model {
+            BedrockModel::AnthropicClaude3Sonnet
+            | BedrockModel::AnthropicClaude3Haiku
+            | BedrockModel::AnthropicClaude3Opus
+            | BedrockModel::AnthropicClaude35Haiku
+            | BedrockModel::AnthropicClaude4Sonnet
+            | BedrockModel::AnthropicClaude45Haiku
+            | BedrockModel::AnthropicClaude41Opus
+            | BedrockModel::AnthropicClaude45Opus
+            | BedrockModel::AnthropicClaude45Sonnet => true,
+            BedrockModel::Custom(model_id) => {
+                // Check if custom model ID is Claude 3+ or Claude 4+
+                model_id.contains("claude-3-")
+                    || model_id.contains("claude-3-5-")
+                    || model_id.contains("claude-4-")
+            }
+            _ => false,
+        }
+    }
+
+    /// Convert langchain messages to Bedrock Converse API format
+    fn messages_to_converse_format(&self, messages: &[Message]) -> (Option<String>, Vec<BedrockMessage>) {
+        use crate::schemas::messages::MessageType;
+
+        let mut system_prompt: Option<String> = None;
+        let mut converse_messages: Vec<BedrockMessage> = Vec::new();
+
+        for msg in messages {
+            match &msg.message_type {
+                MessageType::SystemMessage => {
+                    // Bedrock Converse API takes system as a separate parameter
+                    system_prompt = Some(msg.content.clone());
+                }
+                MessageType::HumanMessage => {
+                    let content_block = ContentBlock::Text(msg.content.clone());
+                    let bedrock_msg = BedrockMessage::builder()
+                        .role(ConversationRole::User)
+                        .content(content_block)
+                        .build()
+                        .unwrap();
+                    converse_messages.push(bedrock_msg);
+                }
+                MessageType::AIMessage => {
+                    let content_block = ContentBlock::Text(msg.content.clone());
+                    let bedrock_msg = BedrockMessage::builder()
+                        .role(ConversationRole::Assistant)
+                        .content(content_block)
+                        .build()
+                        .unwrap();
+                    converse_messages.push(bedrock_msg);
+                }
+                MessageType::ToolMessage => {
+                    // Default to user message for tool messages
+                    let content_block = ContentBlock::Text(msg.content.clone());
+                    let bedrock_msg = BedrockMessage::builder()
+                        .role(ConversationRole::User)
+                        .content(content_block)
+                        .build()
+                        .unwrap();
+                    converse_messages.push(bedrock_msg);
+                }
+            }
+        }
+
+        (system_prompt, converse_messages)
+    }
 }
 
 impl Default for Bedrock {
@@ -417,39 +542,105 @@ impl Default for Bedrock {
 
 #[async_trait]
 impl LLM for Bedrock {
-    async fn generate(&self, prompts: &[String]) -> Result<LLMResult, Box<dyn StdError>> {
+    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         let mut bedrock = self.clone();
-        let client = bedrock.get_client().await?;
+        let client = bedrock.get_client().await.map_err(|e| LLMError::OtherError(e.to_string()))?;
 
-        let mut generations = Vec::new();
+        // Use Converse API for Claude 3+ models
+        if bedrock.requires_converse_api() {
+            let (system_prompt, converse_messages) = bedrock.messages_to_converse_format(messages);
 
-        for prompt in prompts {
-            let request_body = bedrock.build_request_body(prompt)?;
-            let body_bytes = serde_json::to_vec(&request_body)?;
+            let mut converse_request = client
+                .converse()
+                .model_id(bedrock.config.model.model_id());
 
-            let response = client
+            // Add system prompt if present
+            if let Some(system) = system_prompt {
+                use aws_sdk_bedrockruntime::types::SystemContentBlock;
+                let system_block = SystemContentBlock::Text(system);
+                converse_request = converse_request.system(system_block);
+            }
+
+            // Add messages
+            for msg in converse_messages {
+                converse_request = converse_request.messages(msg);
+            }
+
+            // Add inference configuration
+            let mut inference_config = aws_sdk_bedrockruntime::types::InferenceConfiguration::builder();
+
+            if let Some(max_tokens) = bedrock.config.max_tokens {
+                inference_config = inference_config.max_tokens(max_tokens);
+            }
+            if let Some(temperature) = bedrock.config.temperature {
+                inference_config = inference_config.temperature(temperature);
+            }
+            if let Some(top_p) = bedrock.config.top_p {
+                inference_config = inference_config.top_p(top_p);
+            }
+
+            converse_request = converse_request.inference_config(inference_config.build());
+
+            // Note: Bedrock Converse API handles stop sequences differently
+            // They are model-specific and may not be supported via the top-level API
+
+            let response = match converse_request.send().await {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Bedrock SDK error (debug): {:?}", e);
+                    return Err(LLMError::OtherError(format!("Bedrock invocation error: {}", e)));
+                }
+            };
+
+            // Extract text from response
+            let text = response
+                .output()
+                .and_then(|output| output.as_message().ok())
+                .and_then(|msg| msg.content().first())
+                .and_then(|content| content.as_text().ok())
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+
+            Ok(GenerateResult {
+                generation: text,
+                tokens: None,
+            })
+        } else {
+            // Use legacy invoke_model for older models (Claude 2, Titan, etc.)
+            let prompt = bedrock.messages_to_string(messages);
+            let request_body = bedrock.build_request_body(&prompt).map_err(|e| LLMError::OtherError(e.to_string()))?;
+            let body_bytes = serde_json::to_vec(&request_body).map_err(|e| LLMError::SerdeError(e))?;
+
+            let send_result = client
                 .invoke_model()
                 .model_id(bedrock.config.model.model_id())
                 .body(Blob::new(body_bytes))
                 .send()
-                .await
-                .map_err(|e| BedrockError::InvocationError(e.to_string()))?;
+                .await;
+
+            let response = match send_result {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Bedrock SDK error (debug): {:?}", e);
+                    return Err(LLMError::OtherError(format!("Bedrock invocation error: {}", e)));
+                }
+            };
 
             let response_body = response.body().as_ref();
-            let text = bedrock.parse_response(response_body)?;
+            let text = bedrock.parse_response(response_body).map_err(|e| LLMError::OtherError(e.to_string()))?;
 
-            generations.push(vec![text]);
+            Ok(GenerateResult {
+                generation: text,
+                tokens: None,
+            })
         }
-
-        Ok(LLMResult {
-            generations,
-            llm_output: None,
-        })
     }
 
-    async fn invoke(&self, prompt: &str) -> Result<String, Box<dyn StdError>> {
-        let result = self.generate(&[prompt.to_string()]).await?;
-        Ok(result.generations[0][0].clone())
+    async fn stream(
+        &self,
+        _messages: &[Message],
+    ) -> Result<std::pin::Pin<Box<dyn futures::Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
+        Err(LLMError::OtherError("Streaming is not yet implemented for Bedrock".to_string()))
     }
 }
 
@@ -500,7 +691,7 @@ mod tests {
     fn test_custom_model() {
         let custom = BedrockModel::Custom("my-custom-model".to_string());
         assert_eq!(custom.model_id(), "my-custom-model");
-        assert_eq!(custom.provider(), "custom");
+        assert_eq!(custom.provider(), "anthropic"); // Default provider for unknown custom models
     }
 
     #[test]
@@ -557,7 +748,9 @@ mod tests {
 
         assert!(body["prompt"].as_str().unwrap().contains("Test prompt"));
         assert_eq!(body["max_tokens_to_sample"].as_i64().unwrap(), 256);
-        assert_eq!(body["temperature"].as_f64().unwrap(), 0.8);
+        // Use approximate comparison for floating point
+        let temp = body["temperature"].as_f64().unwrap();
+        assert!((temp - 0.8).abs() < 0.01, "Temperature should be approximately 0.8, got {}", temp);
         assert_eq!(body["stop_sequences"].as_array().unwrap().len(), 1);
     }
 
@@ -577,12 +770,11 @@ mod tests {
                 .unwrap(),
             512
         );
-        assert_eq!(
-            body["textGenerationConfig"]["temperature"]
-                .as_f64()
-                .unwrap(),
-            0.5
-        );
+        // Use approximate comparison for floating point
+        let temp = body["textGenerationConfig"]["temperature"]
+            .as_f64()
+            .unwrap();
+        assert!((temp - 0.5).abs() < 0.01, "Temperature should be approximately 0.5, got {}", temp);
     }
 
     #[test]
@@ -619,10 +811,10 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = BedrockConfig::default();
-        assert_eq!(config.region, Some("us-east-1".to_string()));
+        assert_eq!(config.region, Some("us-west-2".to_string()));
         assert_eq!(config.temperature, Some(0.7));
         assert_eq!(config.max_tokens, Some(512));
-        assert_eq!(config.model, BedrockModel::AnthropicClaudeV2);
+        assert_eq!(config.model, BedrockModel::AnthropicClaude3Sonnet);
     }
 
     #[test]

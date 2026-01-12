@@ -78,6 +78,7 @@ opensearch = { version = "2.3", optional = true, features = ["aws-auth"] }
 aws-config = { version = "1.8", optional = true, features = [
     "behavior-version-latest",
 ] }
+aws-sdk-bedrockruntime = { version = "1.120", optional = true }
 glob = "0.3.3"
 strum_macros = "0.28"
 async-recursion = "1.1.1"
@@ -128,6 +129,7 @@ tree-sitter = [
     "dep:tree-sitter-scala",
     "dep:tree-sitter-typescript",
 ]
+bedrock = ["dep:aws-sdk-bedrockruntime", "dep:aws-config"]
 
 [dev-dependencies]
 base64 = "0.23"

@@ -1,350 +1,149 @@
-//! Basic usage example for AWS Bedrock LLM
+//! Example usage of AWS Bedrock LLM integration
+//!
+//! This example demonstrates how to use the Bedrock LLM with the langchain-rust library.
+//!
+//! To run this example, you need:
+//! 1. AWS credentials configured (via environment variables or ~/.aws/credentials)
+//! 2. Access to AWS Bedrock in your region
+//! 3. To run: cargo run --features aws-sdk-bedrockruntime --example llm_bedrock
 
 use langchain_rust::llm::bedrock::{Bedrock, BedrockModel};
 use langchain_rust::language_models::llm::LLM;
+use langchain_rust::schemas::Message;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Basic Bedrock Usage Example ===\n");
+    println!("=== AWS Bedrock LLM Example ===\n");
 
-    // Create a Bedrock instance with default settings (Claude v2, us-east-1)
-    let bedrock = Bedrock::default();
-
-    println!("Asking: What is the capital of France?");
-    let response = bedrock.invoke("What is the capital of France?").await?;
-    println!("Response: {}\n", response);
-
-    // Use a different model
-    let bedrock_sonnet = Bedrock::default()
-        .with_model(BedrockModel::AnthropicClaude3Sonnet);
-
-    println!("Asking: Explain quantum computing in simple terms");
-    let response = bedrock_sonnet
-        .invoke("Explain quantum computing in simple terms")
-        .await?;
-    println!("Response: {}\n", response);
-
-    Ok(())
-}
-
-// examples/bedrock_advanced_config.rs
-
-//! Advanced configuration example for AWS Bedrock LLM
-
-use langchain_rust::llm::bedrock::{Bedrock, BedrockModel};
-use langchain_rust::language_models::llm::LLM;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Advanced Configuration Example ===\n");
-
-    // Configure all parameters
-    let bedrock = Bedrock::default()
-        .with_model(BedrockModel::AnthropicClaudeV2)
-        .with_region("us-west-2")
-        .with_temperature(0.3) // Lower temperature for more focused responses
-        .with_max_tokens(500)
-        .with_top_p(0.9)
-        .with_stop_sequence("\n\n");
-
-    let prompt = "Write a haiku about programming";
-    println!("Prompt: {}", prompt);
-
-    let response = bedrock.invoke(prompt).await?;
-    println!("Response:\n{}\n", response);
-
-    // Example with multiple stop sequences
-    let bedrock_with_stops = Bedrock::default()
-        .with_model(BedrockModel::AnthropicClaudeV2)
-        .with_stop_sequence("END")
-        .with_stop_sequence("DONE")
-        .with_stop_sequence("FINISHED");
-
-    let prompt = "List three programming languages:\n1.";
-    println!("Prompt: {}", prompt);
-
-    let response = bedrock_with_stops.invoke(prompt).await?;
-    println!("Response:\n{}\n", response);
-
-    Ok(())
-}
-
-// examples/bedrock_batch_processing.rs
-
-//! Batch processing example for AWS Bedrock LLM
-
-use langchain_rust::llm::bedrock::{Bedrock, BedrockModel};
-use langchain_rust::language_models::llm::LLM;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Batch Processing Example ===\n");
+    // Example 1: Basic usage with Claude 3 Sonnet (known to work with on-demand)
+    println!("Example 1: Basic Bedrock Query");
+    println!("{}", "-".repeat(50));
 
     let bedrock = Bedrock::default()
         .with_model(BedrockModel::AnthropicClaude3Sonnet)
-        .with_temperature(0.5);
+        .with_max_tokens(100);
 
-    // Process multiple prompts in one call
-    let prompts = vec![
-        "What is machine learning?".to_string(),
-        "What is deep learning?".to_string(),
-        "What is a neural network?".to_string(),
-        "What is reinforcement learning?".to_string(),
+    let messages = vec![Message::new_human_message(
+        "What is the capital of France?",
+    )];
+
+    match bedrock.generate(&messages).await {
+        Ok(result) => {
+            println!("Question: What is the capital of France?");
+            println!("Response: {}\n", result.generation);
+        }
+        Err(e) => {
+            eprintln!("Error: {}. Make sure you have AWS credentials configured.", e);
+        }
+    }
+
+    // Example 2: With custom configuration
+    println!("Example 2: Custom Configuration");
+    println!("{}", "-".repeat(50));
+
+    let bedrock_custom = Bedrock::default()
+        .with_model(BedrockModel::AnthropicClaude3Sonnet)
+        .with_region("us-west-2")
+        .with_temperature(0.3) // Lower temperature for more deterministic results
+        .with_max_tokens(150);
+
+    let messages = vec![Message::new_human_message(
+        "Explain quantum computing in one sentence.",
+    )];
+
+    match bedrock_custom.generate(&messages).await {
+        Ok(result) => {
+            println!("Question: Explain quantum computing in one sentence.");
+            println!("Response: {}\n", result.generation);
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+        }
+    }
+
+    // Example 3: Using different models
+    println!("Example 3: Different Models");
+    println!("{}", "-".repeat(50));
+
+    let models = vec![
+        ("Claude 3 Sonnet", BedrockModel::AnthropicClaude3Sonnet),
+        ("Claude 3 Haiku", BedrockModel::AnthropicClaude3Haiku),
+        ("Claude 3 Opus", BedrockModel::AnthropicClaude3Opus),
+        ("Titan Text Express", BedrockModel::AmazonTitanTextExpress),
     ];
 
-    println!("Processing {} prompts...\n", prompts.len());
+    let test_message = "What is machine learning?";
+    let messages = vec![Message::new_human_message(test_message)];
 
-    let result = bedrock.generate(&prompts).await?;
+    for (model_name, model) in models {
+        let bedrock = Bedrock::default()
+            .with_model(model)
+            .with_max_tokens(80);
 
-    for (i, generation) in result.generations.iter().enumerate() {
-        println!("--- Prompt {}: {} ---", i + 1, prompts[i]);
-        println!("Response: {}\n", generation[0]);
-    }
-
-    Ok(())
-}
-
-// examples/bedrock_different_models.rs
-
-//! Example showing different Bedrock models
-
-use langchain_rust::llm::bedrock::{Bedrock, BedrockModel};
-use langchain_rust::language_models::llm::LLM;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Different Models Example ===\n");
-
-    let prompt = "What is artificial intelligence?";
-
-    // Anthropic Claude V2
-    println!("--- Using Anthropic Claude V2 ---");
-    let claude_v2 = Bedrock::default()
-        .with_model(BedrockModel::AnthropicClaudeV2);
-    let response = claude_v2.invoke(prompt).await?;
-    println!("Response: {}\n", response);
-
-    // Anthropic Claude 3 Haiku (faster, cheaper)
-    println!("--- Using Anthropic Claude 3 Haiku ---");
-    let claude_haiku = Bedrock::default()
-        .with_model(BedrockModel::AnthropicClaude3Haiku);
-    let response = claude_haiku.invoke(prompt).await?;
-    println!("Response: {}\n", response);
-
-    // Amazon Titan Text Express
-    println!("--- Using Amazon Titan Text Express ---");
-    let titan = Bedrock::default()
-        .with_model(BedrockModel::AmazonTitanTextExpress);
-    let response = titan.invoke(prompt).await?;
-    println!("Response: {}\n", response);
-
-    // Custom model ID
-    println!("--- Using Custom Model ID ---");
-    let custom = Bedrock::default()
-        .with_model(BedrockModel::Custom("anthropic.claude-v2:1".to_string()));
-    let response = custom.invoke(prompt).await?;
-    println!("Response: {}\n", response);
-
-    Ok(())
-}
-
-// examples/bedrock_error_handling.rs
-
-//! Error handling example for AWS Bedrock LLM
-
-use langchain_rust::llm::bedrock::{Bedrock, BedrockError, BedrockModel};
-use langchain_rust::language_models::llm::LLM;
-
-#[tokio::main]
-async fn main() {
-    println!("=== Error Handling Example ===\n");
-
-    // Example 1: Handle successful invocation
-    let bedrock = Bedrock::default();
-    match bedrock.invoke("What is Rust?").await {
-        Ok(response) => println!("Success: {}\n", response),
-        Err(e) => eprintln!("Error: {}\n", e),
-    }
-
-    // Example 2: Handle invalid region
-    println!("--- Testing with potentially invalid configuration ---");
-    let bedrock_invalid = Bedrock::default()
-        .with_model(BedrockModel::Custom("invalid-model-id".to_string()))
-        .with_region("invalid-region");
-
-    match bedrock_invalid.invoke("Test").await {
-        Ok(response) => println!("Response: {}", response),
-        Err(e) => {
-            // Downcast to BedrockError for specific handling
-            if let Some(bedrock_err) = e.downcast_ref::<BedrockError>() {
-                match bedrock_err {
-                    BedrockError::AwsError(msg) => {
-                        eprintln!("AWS Service Error: {}", msg);
-                    }
-                    BedrockError::InvalidModel(msg) => {
-                        eprintln!("Invalid Model Configuration: {}", msg);
-                    }
-                    BedrockError::InvocationError(msg) => {
-                        eprintln!("Model Invocation Failed: {}", msg);
-                    }
-                    BedrockError::InvalidRegion(msg) => {
-                        eprintln!("Invalid AWS Region: {}", msg);
-                    }
-                    BedrockError::SerdeError(e) => {
-                        eprintln!("JSON Serialization Error: {}", e);
-                    }
-                }
-            } else {
-                eprintln!("Unknown error type: {}", e);
-            }
-        }
-    }
-
-    // Example 3: Retry logic
-    println!("\n--- Testing with retry logic ---");
-    let max_retries = 3;
-    let bedrock = Bedrock::default();
-
-    for attempt in 1..=max_retries {
-        println!("Attempt {}/{}", attempt, max_retries);
-
-        match bedrock.invoke("What is the meaning of life?").await {
-            Ok(response) => {
-                println!("Success on attempt {}: {}\n", attempt, response);
-                break;
+        match bedrock.generate(&messages).await {
+            Ok(result) => {
+                println!("Model: {}", model_name);
+                println!("Response: {}\n", result.generation);
             }
             Err(e) => {
-                eprintln!("Attempt {} failed: {}", attempt, e);
-                if attempt == max_retries {
-                    eprintln!("All retries exhausted");
-                } else {
-                    println!("Retrying...\n");
-                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                }
+                println!(
+                    "Model: {} - Skipped ({})\n",
+                    model_name, e
+                );
             }
         }
     }
-}
 
-// examples/bedrock_streaming.rs
+    // Example 4: System and user messages
+    println!("Example 4: System + User Messages");
+    println!("{}", "-".repeat(50));
 
-//! Streaming example (conceptual - streaming support would need to be added)
-
-use langchain_rust::llm::bedrock::{Bedrock, BedrockModel};
-use langchain_rust::language_models::llm::LLM;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Streaming Example (Future Enhancement) ===\n");
-
-    // Note: This example shows the desired API for streaming
-    // Actual streaming implementation would require additional methods
     let bedrock = Bedrock::default()
-        .with_model(BedrockModel::AnthropicClaudeV2);
+        .with_model(BedrockModel::AnthropicClaude3Sonnet)
+        .with_max_tokens(100);
 
-    println!("For streaming support, you would typically:");
-    println!("1. Use invoke_with_response_stream endpoint");
-    println!("2. Process chunks as they arrive");
-    println!("3. Handle partial responses");
+    let messages = vec![
+        Message::new_system_message(
+            "You are a helpful assistant that explains concepts simply.",
+        ),
+        Message::new_human_message("What is photosynthesis?"),
+    ];
 
-    // For now, use regular invocation
-    let response = bedrock
-        .invoke("Write a short story about a robot learning to paint")
-        .await?;
-
-    println!("\nComplete Response:\n{}", response);
-
-    Ok(())
-}
-
-// examples/bedrock_chain_integration.rs
-
-//! Example showing integration with LangChain chains
-
-use langchain_rust::{
-    chain::{Chain, LLMChainBuilder},
-    fmt_message, fmt_placeholder, fmt_template,
-    llm::bedrock::{Bedrock, BedrockModel},
-    message_formatter,
-    prompt::HumanMessagePromptTemplate,
-    prompt_args,
-    template_fstring,
-};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Chain Integration Example ===\n");
-
-    // Create Bedrock LLM
-    let bedrock = Bedrock::default()
-        .with_model(BedrockModel::AnthropicClaudeV2)
-        .with_temperature(0.5);
-
-    // Create a simple prompt template
-    let prompt = HumanMessagePromptTemplate::new(template_fstring!(
-        "What is the capital of {country}?",
-        "country"
-    ));
-
-    // Build the chain
-    let chain = LLMChainBuilder::new()
-        .prompt(prompt)
-        .llm(bedrock)
-        .build()?;
-
-    // Use the chain with different countries
-    let countries = vec!["France", "Japan", "Brazil", "Egypt"];
-
-    for country in countries {
-        let input = prompt_args! {
-            "country" => country,
-        };
-
-        println!("Country: {}", country);
-        match chain.invoke(input).await {
-            Ok(result) => println!("Capital: {:?}\n", result),
-            Err(e) => eprintln!("Error: {}\n", e),
+    match bedrock.generate(&messages).await {
+        Ok(result) => {
+            println!("Question: What is photosynthesis?");
+            println!("Response: {}\n", result.generation);
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
         }
     }
 
-    Ok(())
-}
-
-// examples/bedrock_conversational.rs
-
-//! Example showing conversational usage pattern
-
-use langchain_rust::llm::bedrock::{Bedrock, BedrockModel};
-use langchain_rust::language_models::llm::LLM;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Conversational Example ===\n");
+    // Example 5: Custom model ID
+    println!("Example 5: Custom Model ID");
+    println!("{}", "-".repeat(50));
 
     let bedrock = Bedrock::default()
-        .with_model(BedrockModel::AnthropicClaudeV2)
-        .with_temperature(0.7);
+        .with_model(BedrockModel::Custom(
+            "anthropic.claude-3-sonnet-20240229-v1:0".to_string(),
+        ))
+        .with_max_tokens(80);
 
-    // Simulate a conversation by building context
-    let mut conversation_history = String::new();
+    let messages = vec![Message::new_human_message("Say hello!")];
 
-    // First message
-    let user_msg_1 = "Hello! My name is Alice and I love programming.";
-    conversation_history.push_str(&format!("\n\nHuman: {}\n\nAssistant:", user_msg_1));
+    match bedrock.generate(&messages).await {
+        Ok(result) => {
+            println!("Using custom model: anthropic.claude-3-sonnet-20240229-v1:0");
+            println!("Response: {}\n", result.generation);
+        }
+        Err(e) => {
+            println!(
+                "Custom model error (this is expected for demonstration): {}\n",
+                e
+            );
+        }
+    }
 
-    let response_1 = bedrock.invoke(&conversation_history).await?;
-    println!("User: {}", user_msg_1);
-    println!("Assistant: {}\n", response_1);
-
-    conversation_history.push_str(&response_1);
-
-    // Second message
-    let user_msg_2 = "What's my name and what do I love?";
-    conversation_history.push_str(&format!("\n\nHuman: {}\n\nAssistant:", user_msg_2));
-
-    let response_2 = bedrock.invoke(&conversation_history).await?;
-    println!("User: {}", user_msg_2);
-    println!("Assistant: {}\n", response_2);
-
+    println!("=== Examples Complete ===");
     Ok(())
 }
