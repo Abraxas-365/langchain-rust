@@ -12,3 +12,9 @@ pub use qwen::*;
 
 pub mod deepseek;
 pub use deepseek::*;
+
+#[cfg(feature = "aws-sdk-bedrockruntime")]
+pub mod bedrock;
+
+#[cfg(feature = "aws-sdk-bedrockruntime")]
+pub use bedrock::*;
