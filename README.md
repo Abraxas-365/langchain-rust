@@ -22,6 +22,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Azure OpenAi](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_azure_open_ai.rs)
   - [x] [Ollama](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_ollama.rs)
   - [x] [Anthropic Claude](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_anthropic_claude.rs)
+  - [x] [MiniMax](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_minimax.rs)
 
 - Embeddings
 
