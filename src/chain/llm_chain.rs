@@ -21,6 +21,12 @@ pub struct LLMChainBuilder {
     output_parser: Option<Box<dyn OutputParser>>,
 }
 
+impl Default for LLMChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LLMChainBuilder {
     pub fn new() -> Self {
         Self {

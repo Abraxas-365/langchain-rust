@@ -188,6 +188,12 @@ pub struct MessageFormatterStruct {
     items: Vec<MessageOrTemplate>,
 }
 
+impl Default for MessageFormatterStruct {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MessageFormatterStruct {
     pub fn new() -> Self {
         Self { items: Vec::new() }
@@ -296,7 +302,6 @@ macro_rules! message_formatter {
 #[cfg(test)]
 mod tests {
     use crate::{
-        message_formatter,
         prompt::{chat::AIMessagePromptTemplate, FormatPrompter},
         prompt_args,
         schemas::messages::Message,

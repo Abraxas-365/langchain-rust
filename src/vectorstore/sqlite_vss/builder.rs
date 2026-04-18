@@ -16,6 +16,12 @@ pub struct StoreBuilder {
     embedder: Option<Arc<dyn Embedder>>,
 }
 
+impl Default for StoreBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StoreBuilder {
     pub fn new() -> Self {
         StoreBuilder {

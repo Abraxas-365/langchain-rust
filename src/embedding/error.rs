@@ -37,4 +37,7 @@ pub enum EmbedderError {
     #[cfg(feature = "mistralai")]
     #[error("MistralAI API error: {0}")]
     MistralAIApiError(#[from] ApiError),
+
+    #[error("Gemini error: {0}")]
+    GeminiError(String),
 }

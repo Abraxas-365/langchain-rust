@@ -1,3 +1,4 @@
+#![allow(non_camel_case_types)]
 use crate::{
     language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
     llm::QwenError,
@@ -332,8 +333,7 @@ impl Qwen {
         let mut values = Vec::new();
 
         for line in text.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
+            if let Some(data) = line.strip_prefix("data: ") {
                 if data == "[DONE]" {
                     continue;
                 }
@@ -402,8 +402,8 @@ impl LLM for Qwen {
                     match result {
                         Ok(bytes) => {
                             // Parse SSE chunk format
-                            let bytes_str = from_utf8(&bytes)
-                                .map_err(|e| LLMError::OtherError(e.to_string()))?;
+                            let _bytes_str = from_utf8(&bytes)
+                                .unwrap_or_else(|e| panic!("Failed to convert to string: {}", e));
                             let chunks = Self::parse_sse_chunk(&bytes)?;
 
                             for chunk in chunks {
@@ -417,28 +417,25 @@ impl LLM for Qwen {
                                                 delta.get("content").and_then(|c| c.as_str())
                                             {
                                                 if !content.is_empty() {
-                                                    let usage =
-                                                        if let Some(usage) = chunk.get("usage") {
-                                                            Some(TokenUsage {
-                                                                prompt_tokens: usage
-                                                                    .get("prompt_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                completion_tokens: usage
-                                                                    .get("completion_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                total_tokens: usage
-                                                                    .get("total_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                            })
-                                                        } else {
-                                                            None
-                                                        };
+                                                    let usage = chunk.get("usage").map(|usage| {
+                                                        TokenUsage {
+                                                            prompt_tokens: usage
+                                                                .get("prompt_tokens")
+                                                                .and_then(|t| t.as_u64())
+                                                                .unwrap_or(0)
+                                                                as u32,
+                                                            completion_tokens: usage
+                                                                .get("completion_tokens")
+                                                                .and_then(|t| t.as_u64())
+                                                                .unwrap_or(0)
+                                                                as u32,
+                                                            total_tokens: usage
+                                                                .get("total_tokens")
+                                                                .and_then(|t| t.as_u64())
+                                                                .unwrap_or(0)
+                                                                as u32,
+                                                        }
+                                                    });
 
                                                     return Ok(StreamData::new(
                                                         chunk.clone(),

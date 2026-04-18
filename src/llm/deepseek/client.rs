@@ -89,7 +89,7 @@ impl Deepseek {
 
         let payload = self.build_payload(messages, is_stream);
         let res = client
-            .post(&format!("{}/v1/chat/completions", self.base_url))
+            .post(format!("{}/v1/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&payload)
@@ -176,14 +176,14 @@ impl Deepseek {
 
         // Apply frequency_penalty if it's in the options range
         if let Some(fp) = self.options.frequency_penalty {
-            if fp >= -2.0 && fp <= 2.0 {
+            if (-2.0..=2.0).contains(&fp) {
                 payload.frequency_penalty = Some(fp);
             }
         }
 
         // Apply presence_penalty if it's in the options range
         if let Some(pp) = self.options.presence_penalty {
-            if pp >= -2.0 && pp <= 2.0 {
+            if (-2.0..=2.0).contains(&pp) {
                 payload.presence_penalty = Some(pp);
             }
         }
@@ -196,8 +196,7 @@ impl Deepseek {
         let mut values = Vec::new();
 
         for line in text.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
+            if let Some(data) = line.strip_prefix("data: ") {
                 if data == "[DONE]" {
                     continue;
                 }
@@ -244,7 +243,7 @@ impl LLM for Deepseek {
         let client = Client::new();
         let payload = self.build_payload(messages, true);
         let request = client
-            .post(&format!("{}/v1/chat/completions", self.base_url))
+            .post(format!("{}/v1/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&payload)
@@ -276,29 +275,26 @@ impl LLM for Deepseek {
                                                     .and_then(|c| c.as_str())
                                                 {
                                                     if !reasoning.is_empty() {
-                                                        let usage = if let Some(usage) =
-                                                            chunk.get("usage")
-                                                        {
-                                                            Some(TokenUsage {
-                                                                prompt_tokens: usage
-                                                                    .get("prompt_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                completion_tokens: usage
-                                                                    .get("completion_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                total_tokens: usage
-                                                                    .get("total_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                            })
-                                                        } else {
-                                                            None
-                                                        };
+                                                        let usage =
+                                                            chunk.get("usage").map(|usage| {
+                                                                TokenUsage {
+                                                                    prompt_tokens: usage
+                                                                        .get("prompt_tokens")
+                                                                        .and_then(|t| t.as_u64())
+                                                                        .unwrap_or(0)
+                                                                        as u32,
+                                                                    completion_tokens: usage
+                                                                        .get("completion_tokens")
+                                                                        .and_then(|t| t.as_u64())
+                                                                        .unwrap_or(0)
+                                                                        as u32,
+                                                                    total_tokens: usage
+                                                                        .get("total_tokens")
+                                                                        .and_then(|t| t.as_u64())
+                                                                        .unwrap_or(0)
+                                                                        as u32,
+                                                                }
+                                                            });
 
                                                         return Ok(StreamData::new(
                                                             chunk.clone(),
@@ -314,28 +310,25 @@ impl LLM for Deepseek {
                                                 delta.get("content").and_then(|c| c.as_str())
                                             {
                                                 if !content.is_empty() {
-                                                    let usage =
-                                                        if let Some(usage) = chunk.get("usage") {
-                                                            Some(TokenUsage {
-                                                                prompt_tokens: usage
-                                                                    .get("prompt_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                completion_tokens: usage
-                                                                    .get("completion_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                total_tokens: usage
-                                                                    .get("total_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                            })
-                                                        } else {
-                                                            None
-                                                        };
+                                                    let usage = chunk.get("usage").map(|usage| {
+                                                        TokenUsage {
+                                                            prompt_tokens: usage
+                                                                .get("prompt_tokens")
+                                                                .and_then(|t| t.as_u64())
+                                                                .unwrap_or(0)
+                                                                as u32,
+                                                            completion_tokens: usage
+                                                                .get("completion_tokens")
+                                                                .and_then(|t| t.as_u64())
+                                                                .unwrap_or(0)
+                                                                as u32,
+                                                            total_tokens: usage
+                                                                .get("total_tokens")
+                                                                .and_then(|t| t.as_u64())
+                                                                .unwrap_or(0)
+                                                                as u32,
+                                                        }
+                                                    });
 
                                                     return Ok(StreamData::new(
                                                         chunk.clone(),

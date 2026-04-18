@@ -8,6 +8,12 @@ use crate::tools::Tool;
 
 pub struct WebScrapper {}
 
+impl Default for WebScrapper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WebScrapper {
     pub fn new() -> Self {
         Self {}
@@ -34,9 +40,9 @@ impl Tool for WebScrapper {
     }
 }
 
-impl Into<Arc<dyn Tool>> for WebScrapper {
-    fn into(self) -> Arc<dyn Tool> {
-        Arc::new(self)
+impl From<WebScrapper> for Arc<dyn Tool> {
+    fn from(val: WebScrapper) -> Self {
+        Arc::new(val)
     }
 }
 

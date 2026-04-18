@@ -13,6 +13,12 @@ pub struct StoreBuilder {
     content_field: String,
 }
 
+impl Default for StoreBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StoreBuilder {
     // Returns a new StoreBuilder instance with default values for each option
     pub fn new() -> Self {

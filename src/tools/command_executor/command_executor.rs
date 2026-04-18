@@ -144,13 +144,10 @@ impl Tool for CommandExecutor {
             ));
 
             if !output.status.success() {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Command {} failed with status: {}",
-                        command.cmd, output.status
-                    ),
-                )));
+                return Err(Box::new(std::io::Error::other(format!(
+                    "Command {} failed with status: {}",
+                    command.cmd, output.status
+                ))));
             }
         }
 

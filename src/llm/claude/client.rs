@@ -122,11 +122,11 @@ impl Claude {
 
     fn build_payload(&self, messages: &[Message], stream: bool) -> Payload {
         let (system_message, other_messages): (Vec<_>, Vec<_>) = messages
-            .into_iter()
+            .iter()
             .partition(|m| m.message_type == MessageType::SystemMessage);
         let mut payload = Payload {
             model: self.model.clone(),
-            system: system_message.get(0).map(|m| m.content.clone()),
+            system: system_message.first().map(|m| m.content.clone()),
             messages: other_messages
                 .into_iter()
                 .map(ClaudeMessage::from_message)

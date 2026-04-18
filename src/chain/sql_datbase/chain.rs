@@ -21,6 +21,12 @@ use super::{
 pub struct SqlChainPromptBuilder {
     query: String,
 }
+impl Default for SqlChainPromptBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SqlChainPromptBuilder {
     pub fn new() -> Self {
         Self {

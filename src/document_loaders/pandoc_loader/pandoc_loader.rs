@@ -117,7 +117,7 @@ impl<R: AsyncRead + Send + Sync + Unpin + 'static> Loader for PandocLoader<R> {
             match tokio::io::copy(&mut self.input, &mut stdin).await {
                 Ok(_) => {}
                 Err(e) => {
-                    log::error!("pandoc stdin error: {}", e.to_string());
+                    log::error!("pandoc stdin error: {}", e);
                 }
             }
             stdin.flush().await.unwrap();
@@ -164,6 +164,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_pandoc_loader() {
+        if std::process::Command::new("pandoc")
+            .arg("-v")
+            .status()
+            .is_err()
+        {
+            println!("pandoc is not installed. Skipping test.");
+            return;
+        }
+
         let path = "./src/document_loaders/test_data/sample.docx";
 
         let loader = PandocLoader::from_path(InputFormat::Docx.to_string(), path)

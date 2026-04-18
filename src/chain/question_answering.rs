@@ -26,6 +26,12 @@ pub struct CondenseQuestionPromptBuilder {
     chat_history: String,
     question: String,
 }
+impl Default for CondenseQuestionPromptBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CondenseQuestionPromptBuilder {
     pub fn new() -> Self {
         Self {
@@ -101,6 +107,12 @@ Helpful Answer:
 pub struct StuffQAPromptBuilder<'a> {
     input_documents: Vec<&'a Document>,
     question: String,
+}
+
+impl<'a> Default for StuffQAPromptBuilder<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<'a> StuffQAPromptBuilder<'a> {

@@ -38,7 +38,7 @@ git diff --cached --name-only --diff-filter=ACM | while read -r file; do echo "\
         .stdout(Stdio::piped())
         .spawn()?
         .stdout
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Could not capture stdout."))?;
+        .ok_or_else(|| io::Error::other("Could not capture stdout."))?;
 
     let reader = io::BufReader::new(output);
 

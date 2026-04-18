@@ -123,7 +123,7 @@ async fn add_documents_to_index(store: &Store) -> Result<Vec<String>, Box<dyn Er
     };
 
     let result = store
-        .add_documents(&vec![doc1, doc2, doc3, doc4], &opts)
+        .add_documents(&[doc1, doc2, doc3, doc4], &opts)
         .await?;
 
     Ok(result)

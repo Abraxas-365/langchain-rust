@@ -15,6 +15,12 @@ pub struct StuffDocumentBuilder {
     output_parser: Option<Box<dyn OutputParser>>,
     prompt: Option<Box<dyn FormatPrompter>>,
 }
+impl Default for StuffDocumentBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StuffDocumentBuilder {
     pub fn new() -> Self {
         Self {

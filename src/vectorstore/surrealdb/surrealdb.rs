@@ -104,8 +104,7 @@ impl<C: Connection> VectorStore for Store<C> {
 
         let vectors = embedder.embed_documents(&texts).await?;
         if vectors.len() != docs.len() {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(Box::new(std::io::Error::other(
                 "Number of vectors and documents do not match",
             )));
         }

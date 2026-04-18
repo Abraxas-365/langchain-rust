@@ -108,10 +108,7 @@ where
                         let observation = match observation_result {
                             Ok(result) => result,
                             Err(err) => {
-                                log::info!(
-                                    "The tool return the following error: {}",
-                                    err.to_string()
-                                );
+                                log::info!("The tool return the following error: {}", err);
                                 if self.break_if_error {
                                     return Err(ChainError::AgentError(
                                         AgentError::ToolError(err.to_string()).to_string(),

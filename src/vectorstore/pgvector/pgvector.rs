@@ -1,3 +1,4 @@
+#![allow(clippy::to_string_trait_impl)]
 use std::{collections::HashMap, error::Error, sync::Arc};
 
 use async_trait::async_trait;
@@ -186,8 +187,7 @@ impl VectorStore for Store {
         opt: &PgOptions,
     ) -> Result<Vec<String>, Box<dyn Error>> {
         if opt.score_threshold.is_some() || opt.filters.is_some() || opt.name_space.is_some() {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(Box::new(std::io::Error::other(
                 "score_threshold, filters, and name_space are not supported in pgvector",
             )));
         }
@@ -198,8 +198,7 @@ impl VectorStore for Store {
         let vectors = embedder.embed_documents(&texts).await?;
 
         if vectors.len() != docs.len() {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(Box::new(std::io::Error::other(
                 "Number of vectors and documents do not match",
             )));
         }
@@ -212,8 +211,7 @@ impl VectorStore for Store {
             let id = Uuid::new_v4().to_string();
             ids.push(id.clone());
 
-            let vector_value =
-                Vector::from(vector.into_iter().map(|x| *x as f32).collect::<Vec<f32>>());
+            let vector_value = Vector::from(vector.iter().map(|x| *x as f32).collect::<Vec<f32>>());
 
             sqlx::query(&format!(
                 r#"INSERT INTO {} 
@@ -283,7 +281,7 @@ impl VectorStore for Store {
 
         let rows = sqlx::query(&sql)
             .bind(vector_dims as i64)
-            .bind(&Vector::from(
+            .bind(Vector::from(
                 query_vector
                     .into_iter()
                     .map(|x| x as f32)
