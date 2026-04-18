@@ -88,6 +88,7 @@ mistralai-client = { version = "0.14.0", optional = true }
 
 [features]
 default = []
+gemini = []
 fastembed = ["dep:fastembed"]
 git = ["gix", "flume"]
 html-to-markdown = ["dep:htmd"]

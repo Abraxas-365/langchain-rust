@@ -1,3 +1,4 @@
+#![allow(clippy::new_without_default)]
 use std::{error::Error, sync::Arc};
 
 use surrealdb::{Connection, Surreal};

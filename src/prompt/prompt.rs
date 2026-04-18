@@ -155,7 +155,6 @@ macro_rules! template_jinja2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prompt_args;
 
     #[test]
     fn should_format_jinja2_template() {

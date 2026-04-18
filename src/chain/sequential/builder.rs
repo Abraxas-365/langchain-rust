@@ -8,6 +8,12 @@ pub struct SequentialChainBuilder {
     chains: Vec<Box<dyn Chain>>,
 }
 
+impl Default for SequentialChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SequentialChainBuilder {
     pub fn new() -> Self {
         Self { chains: Vec::new() }

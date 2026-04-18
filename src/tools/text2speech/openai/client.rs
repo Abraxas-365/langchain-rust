@@ -98,8 +98,7 @@ impl<C: Config + Send + Sync> Tool for Text2SpeechOpenAI<C> {
 
         let response = client.audio().speech(request).await?;
 
-        if self.storage.is_some() {
-            let storage = self.storage.as_ref().unwrap(); //safe to unwrap
+        if let Some(ref storage) = self.storage {
             let data = response.bytes;
             return storage.save(&self.path, &data).await;
         } else {

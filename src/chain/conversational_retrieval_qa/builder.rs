@@ -56,6 +56,12 @@ pub struct ConversationalRetrieverChainBuilder {
     input_key: String,
     output_key: String,
 }
+impl Default for ConversationalRetrieverChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConversationalRetrieverChainBuilder {
     pub fn new() -> Self {
         ConversationalRetrieverChainBuilder {

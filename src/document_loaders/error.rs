@@ -21,7 +21,7 @@ pub enum LoaderError {
     #[error(transparent)]
     CSVError(#[from] csv::Error),
 
-    #[cfg(any(feature = "lopdf"))]
+    #[cfg(feature = "lopdf")]
     #[cfg(not(feature = "pdf-extract"))]
     #[error(transparent)]
     LoPdfError(#[from] lopdf::Error),

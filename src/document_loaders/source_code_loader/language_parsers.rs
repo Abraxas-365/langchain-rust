@@ -74,7 +74,7 @@ impl Clone for LanguageParser {
 }
 
 pub fn get_language_by_filename(name: &String) -> Language {
-    let extension = name.split('.').last().unwrap();
+    let extension = name.split('.').next_back().unwrap();
     match extension.to_lowercase().as_str() {
         "c" => Language::C,
         "cs" => Language::CSharp,

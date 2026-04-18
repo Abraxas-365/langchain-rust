@@ -11,9 +11,10 @@ use serde_json::Value;
 /// let ai_message_type = MessageType::AIMessage;
 /// let human_message_type = MessageType::HumanMessage;
 /// ```
-#[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone, Default)]
 pub enum MessageType {
     #[serde(rename = "system")]
+    #[default]
     SystemMessage,
     #[serde(rename = "ai")]
     AIMessage,
@@ -21,12 +22,6 @@ pub enum MessageType {
     HumanMessage,
     #[serde(rename = "tool")]
     ToolMessage,
-}
-
-impl Default for MessageType {
-    fn default() -> Self {
-        Self::SystemMessage
-    }
 }
 
 impl MessageType {

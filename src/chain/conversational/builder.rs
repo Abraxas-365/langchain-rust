@@ -26,6 +26,12 @@ pub struct ConversationalChainBuilder {
     prompt: Option<Box<dyn FormatPrompter>>,
 }
 
+impl Default for ConversationalChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConversationalChainBuilder {
     pub fn new() -> Self {
         Self {

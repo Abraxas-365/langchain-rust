@@ -20,6 +20,12 @@ pub struct ConversationalAgentBuilder {
     options: Option<ChainCallOptions>,
 }
 
+impl Default for ConversationalAgentBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConversationalAgentBuilder {
     pub fn new() -> Self {
         Self {

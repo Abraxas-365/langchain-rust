@@ -9,6 +9,12 @@ use super::Index;
 pub struct MemoryIndex {
     routers: HashMap<String, Router>,
 }
+impl Default for MemoryIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryIndex {
     pub fn new() -> Self {
         Self {

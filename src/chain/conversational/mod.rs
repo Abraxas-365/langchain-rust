@@ -25,6 +25,12 @@ pub struct ConversationalChainPromptBuilder {
     input: String,
 }
 
+impl Default for ConversationalChainPromptBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConversationalChainPromptBuilder {
     pub fn new() -> Self {
         Self {

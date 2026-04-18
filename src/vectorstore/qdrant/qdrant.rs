@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use qdrant_client::client::Payload;
 use qdrant_client::qdrant::{Filter, PointStruct, SearchPointsBuilder, UpsertPointsBuilder};
+use qdrant_client::Payload;
 use serde_json::{json, Value};
 use std::error::Error;
 use std::sync::Arc;

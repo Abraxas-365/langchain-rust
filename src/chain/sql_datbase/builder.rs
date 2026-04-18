@@ -24,6 +24,12 @@ pub struct SQLDatabaseChainBuilder {
     output_parser: Option<Box<dyn OutputParser>>,
 }
 
+impl Default for SQLDatabaseChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SQLDatabaseChainBuilder {
     pub fn new() -> Self {
         Self {

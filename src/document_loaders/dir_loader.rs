@@ -61,7 +61,7 @@ pub async fn list_files_in_path(
             if opts
                 .path_filter
                 .as_ref()
-                .map_or(false, |f| f.0(path.as_path()))
+                .is_some_and(|f| f.0(path.as_path()))
             {
                 continue;
             }
@@ -102,7 +102,7 @@ pub async fn find_files_with_extension(folder_path: &str, opts: &DirLoaderOption
         if opts
             .path_filter
             .as_ref()
-            .map_or(false, |f| f.0(&Path::new(&file_name)))
+            .is_some_and(|f| f.0(Path::new(&file_name)))
         {
             continue; // Skip this path if the filter returns true
         }

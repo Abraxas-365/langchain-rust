@@ -16,6 +16,12 @@ pub struct OpenAiToolAgentBuilder {
     options: Option<ChainCallOptions>,
 }
 
+impl Default for OpenAiToolAgentBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OpenAiToolAgentBuilder {
     pub fn new() -> Self {
         Self {

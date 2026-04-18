@@ -142,13 +142,12 @@ impl Tool for Wolfram {
         let response: WolframResponse = self.client.get(&url).send().await?.json().await?;
 
         if let WolframErrorStatus::Error(error) = response.queryresult.error {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Wolfram Error {}: {}", error.code, error.msg),
-            )));
+            return Err(Box::new(std::io::Error::other(format!(
+                "Wolfram Error {}: {}",
+                error.code, error.msg
+            ))));
         } else if !response.queryresult.success {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(Box::new(std::io::Error::other(
                 "Wolfram Error invalid query input: The query requested can not be processed by Wolfram".to_string(),
             )));
         }
