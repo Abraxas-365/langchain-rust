@@ -7,6 +7,9 @@ pub use claude::*;
 pub mod ollama;
 pub use ollama::*;
 
+pub mod llmman;
+pub use llmman::*;
+
 pub mod qwen;
 pub use qwen::*;
 
