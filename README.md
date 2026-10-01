@@ -58,6 +58,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
   - [x] Serpapi/Google
   - [x] DuckDuckGo Search
+  - [x] You.com Search
   - [x] [Wolfram/Math](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/wolfram_tool.rs)
   - [x] Command line
   - [x] [Text2Speech](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/speech2text_openai.rs)
