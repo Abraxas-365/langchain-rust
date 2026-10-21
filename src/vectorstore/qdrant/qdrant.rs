@@ -29,6 +29,10 @@ pub struct Store {
 
 type QdrantOptions = VecStoreOptions<Value>;
 
+fn ids_for_upsert(ids: &[String]) -> impl Iterator<Item = String> + '_ {
+    ids.iter().cloned()
+}
+
 #[async_trait]
 impl VectorStore for Store {
     type Options = QdrantOptions;
@@ -43,8 +47,9 @@ impl VectorStore for Store {
         let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
 
-        let ids = docs.iter().map(|_| Uuid::new_v4().to_string());
         let vectors = embedder.embed_documents(&texts).await?.into_iter();
+        // Materialize once so upsert and the returned IDs use the same generated values.
+        let ids: Vec<String> = docs.iter().map(|_| Uuid::new_v4().to_string()).collect();
         let payloads = docs.iter().map(|d| {
             let mut base = json!({
                 &self.content_field: d.page_content,
@@ -64,7 +69,7 @@ impl VectorStore for Store {
 
         let mut points: Vec<PointStruct> = Vec::with_capacity(docs.len());
 
-        for (id, (vector, payload)) in ids.clone().zip(vectors.zip(payloads)) {
+        for (id, (vector, payload)) in ids_for_upsert(&ids).zip(vectors.zip(payloads)) {
             let vector: Vec<f32> = vector.into_iter().map(|f| f as f32).collect();
             let point = PointStruct::new(id, vector, Payload::try_from(payload).unwrap());
             points.push(point);
@@ -74,7 +79,7 @@ impl VectorStore for Store {
             .upsert_points(UpsertPointsBuilder::new(&self.collection_name, points).wait(true))
             .await?;
 
-        Ok(ids.collect())
+        Ok(ids)
     }
 
     /// Perform a similarity search on the store.
@@ -136,5 +141,30 @@ impl VectorStore for Store {
             .collect();
 
         Ok(documents)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ids_for_upsert;
+
+    #[derive(Default)]
+    struct MockQdrant {
+        point_ids: Vec<String>,
+    }
+
+    impl MockQdrant {
+        fn upsert(&mut self, ids: impl IntoIterator<Item = String>) {
+            self.point_ids.extend(ids);
+        }
+    }
+
+    #[test]
+    fn returned_ids_match_ids_submitted_to_qdrant() {
+        let returned_ids = vec!["synthetic-1".to_owned(), "synthetic-2".to_owned()];
+        let mut qdrant = MockQdrant::default();
+        qdrant.upsert(ids_for_upsert(&returned_ids));
+
+        assert_eq!(qdrant.point_ids, returned_ids);
     }
 }
