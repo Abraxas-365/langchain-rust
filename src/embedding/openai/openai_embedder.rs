@@ -3,7 +3,7 @@
 use crate::embedding::{embedder_trait::Embedder, EmbedderError};
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
-    types::{CreateEmbeddingRequestArgs, EmbeddingInput},
+    types::embeddings::{CreateEmbeddingRequestArgs, EmbeddingInput},
     Client,
 };
 use async_trait::async_trait;
@@ -14,7 +14,7 @@ pub struct OpenAiEmbedder<C: Config> {
     model: String,
 }
 
-impl<C: Config + Send + Sync + 'static> Into<Box<dyn Embedder>> for OpenAiEmbedder<C> {
+impl<C: Config + Clone + Send + Sync + 'static> Into<Box<dyn Embedder>> for OpenAiEmbedder<C> {
     fn into(self) -> Box<dyn Embedder> {
         Box::new(self)
     }
@@ -46,7 +46,7 @@ impl Default for OpenAiEmbedder<OpenAIConfig> {
 }
 
 #[async_trait]
-impl<C: Config + Send + Sync> Embedder for OpenAiEmbedder<C> {
+impl<C: Config + Clone + Send + Sync> Embedder for OpenAiEmbedder<C> {
     async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, EmbedderError> {
         let client = Client::with_config(self.config.clone());
 
@@ -80,14 +80,104 @@ impl<C: Config + Send + Sync> Embedder for OpenAiEmbedder<C> {
             .input(text)
             .build()?;
 
-        let mut response = client.embeddings().create(request).await?;
+        let response = client.embeddings().create(request).await?;
 
-        let item = response.data.swap_remove(0);
+        let item = response.data.into_iter().next().ok_or_else(|| {
+            async_openai::error::OpenAIError::InvalidArgument(
+                "OpenAI returned no embeddings".into(),
+            )
+        })?;
 
         Ok(item
             .embedding
             .into_iter()
             .map(|x| x as f64)
             .collect::<Vec<f64>>())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn embedder_for(server: &mockito::ServerGuard) -> OpenAiEmbedder<OpenAIConfig> {
+        OpenAiEmbedder::new(
+            OpenAIConfig::new()
+                .with_api_base(server.url())
+                .with_api_key("test-key"),
+        )
+        .with_model("emb-model")
+    }
+
+    fn body(vectors: &[Vec<f32>]) -> String {
+        let data: Vec<_> = vectors
+            .iter()
+            .enumerate()
+            .map(|(i, v)| json!({"index": i, "object": "embedding", "embedding": v}))
+            .collect();
+        json!({
+            "object": "list",
+            "model": "emb-model",
+            "data": data,
+            "usage": {"prompt_tokens": 1, "total_tokens": 1}
+        })
+        .to_string()
+    }
+
+    #[tokio::test]
+    async fn embed_documents_sends_batch_and_converts_vectors() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/embeddings")
+            .match_header("authorization", "Bearer test-key")
+            .match_body(mockito::Matcher::PartialJson(json!({
+                "model": "emb-model",
+                "input": ["a", "b"]
+            })))
+            .with_header("content-type", "application/json")
+            .with_body(body(&[vec![0.5, 1.0], vec![0.25, 0.0]]))
+            .create_async()
+            .await;
+
+        let out = embedder_for(&server)
+            .embed_documents(&["a".to_string(), "b".to_string()])
+            .await
+            .unwrap();
+        mock.assert_async().await;
+        assert_eq!(out, vec![vec![0.5, 1.0], vec![0.25, 0.0]]);
+    }
+
+    #[tokio::test]
+    async fn embed_query_sends_single_string() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/embeddings")
+            .match_body(mockito::Matcher::PartialJson(json!({"input": "hello"})))
+            .with_header("content-type", "application/json")
+            .with_body(body(&[vec![0.5]]))
+            .create_async()
+            .await;
+
+        let out = embedder_for(&server).embed_query("hello").await.unwrap();
+        mock.assert_async().await;
+        assert_eq!(out, vec![0.5]);
+    }
+
+    #[tokio::test]
+    async fn embed_query_with_empty_response_is_an_error() {
+        let mut server = mockito::Server::new_async().await;
+        server
+            .mock("POST", "/embeddings")
+            .with_header("content-type", "application/json")
+            .with_body(body(&[]))
+            .create_async()
+            .await;
+
+        let err = embedder_for(&server)
+            .embed_query("hello")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, EmbedderError::OpenAIError(_)), "{err:?}");
     }
 }

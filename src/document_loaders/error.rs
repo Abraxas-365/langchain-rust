@@ -21,8 +21,7 @@ pub enum LoaderError {
     #[error(transparent)]
     CSVError(#[from] csv::Error),
 
-    #[cfg(any(feature = "lopdf"))]
-    #[cfg(not(feature = "pdf-extract"))]
+    #[cfg(feature = "lopdf")]
     #[error(transparent)]
     LoPdfError(#[from] lopdf::Error),
 
@@ -42,7 +41,7 @@ pub enum LoaderError {
 
     #[cfg(feature = "git")]
     #[error(transparent)]
-    DiscoveryError(#[from] gix::discover::Error),
+    DiscoveryError(#[from] gix::Error),
 
     #[error("Error: {0}")]
     OtherError(String),

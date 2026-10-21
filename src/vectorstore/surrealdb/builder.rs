@@ -54,7 +54,6 @@ impl<C: Connection> StoreBuilder<C> {
     /// #[tokio::main]
     /// async fn main() {
     ///     let surrealdb_config = surrealdb::opt::Config::new()
-    ///         .set_strict(true)
     ///         .capabilities(surrealdb::opt::capabilities::Capabilities::all())
     ///         .user(surrealdb::opt::auth::Root {
     ///             username: "username".into(),

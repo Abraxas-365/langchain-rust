@@ -12,3 +12,8 @@ pub use qwen::*;
 
 pub mod deepseek;
 pub use deepseek::*;
+
+mod sse;
+
+#[cfg(test)]
+mod http_mock_tests;

@@ -216,8 +216,10 @@ impl MessageFormatterStruct {
                     result.extend(tmpl.format_messages(input_variables.clone())?)
                 }
                 MessageOrTemplate::MessagesPlaceholder(placeholder) => {
-                    let messages = input_variables[placeholder].clone();
-                    result.extend(Message::messages_from_value(&messages)?);
+                    let messages = input_variables
+                        .get(placeholder)
+                        .ok_or_else(|| PromptError::MissingVariable(placeholder.clone()))?;
+                    result.extend(Message::messages_from_value(messages)?);
                 }
             }
         }
@@ -351,5 +353,58 @@ mod tests {
         );
         assert_eq!(formatted_messages[2].content, "Placeholder message 1");
         assert_eq!(formatted_messages[3].content, "Placeholder message 2");
+    }
+
+    #[test]
+    fn message_templates_roles_and_variables() {
+        use crate::{
+            prompt::{
+                HumanMessagePromptTemplate, MessageFormatter, PromptError,
+                SystemMessagePromptTemplate,
+            },
+            schemas::MessageType,
+        };
+        let formatter = message_formatter![
+            fmt_template!(SystemMessagePromptTemplate::new(template_fstring!(
+                "You are {role}",
+                "role"
+            ))),
+            fmt_placeholder!("history"),
+            fmt_template!(HumanMessagePromptTemplate::new(template_fstring!(
+                "{q}", "q"
+            ))),
+        ];
+        assert_eq!(
+            formatter.input_variables(),
+            vec!["role".to_string(), "history".into(), "q".into()]
+        );
+
+        let messages = formatter
+            .format_messages(prompt_args! {
+                "role" => "a bot", "q" => "hi", "history" => Vec::<Message>::new()
+            })
+            .unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].message_type, MessageType::SystemMessage);
+        assert_eq!(messages[0].content, "You are a bot");
+        assert_eq!(messages[1].message_type, MessageType::HumanMessage);
+
+        // missing placeholder is an error, not a panic
+        let err = formatter
+            .format_messages(prompt_args! {"role" => "x", "q" => "y"})
+            .unwrap_err();
+        assert!(matches!(err, PromptError::MissingVariable(v) if v == "history"));
+
+        // missing template variable
+        let err = formatter
+            .format_messages(prompt_args! {"history" => Vec::<Message>::new(), "q" => "y"})
+            .unwrap_err();
+        assert!(matches!(err, PromptError::MissingVariable(v) if v == "role"));
+
+        // placeholder with wrong type
+        let err = formatter
+            .format_messages(prompt_args! {"role" => "x", "q" => "y", "history" => "nope"})
+            .unwrap_err();
+        assert!(matches!(err, PromptError::SerializationError(_)));
     }
 }

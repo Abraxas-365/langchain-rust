@@ -4,13 +4,11 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::Stream;
-use ollama_rs::generation::images::Image;
+use ollama_rs::generation::{chat::ChatMessageFinalResponseData, images::Image};
 pub use ollama_rs::{
     error::OllamaError,
-    generation::{
-        chat::{request::ChatMessageRequest, ChatMessage, MessageRole},
-        options::GenerationOptions,
-    },
+    generation::chat::{request::ChatMessageRequest, ChatMessage, MessageRole},
+    models::ModelOptions as GenerationOptions,
     Ollama as OllamaClient,
 };
 use std::pin::Pin;
@@ -52,7 +50,11 @@ impl Ollama {
 
     fn generate_request(&self, messages: &[Message]) -> ChatMessageRequest {
         let mapped_messages = messages.iter().map(|message| message.into()).collect();
-        ChatMessageRequest::new(self.model.clone(), mapped_messages)
+        let request = ChatMessageRequest::new(self.model.clone(), mapped_messages);
+        match &self.options {
+            Some(options) => request.options(options.clone()),
+            None => request,
+        }
     }
 }
 
@@ -68,11 +70,10 @@ impl From<&Message> for ChatMessage {
             }
             None => None,
         };
-        ChatMessage {
-            content: message.content.clone(),
-            images,
-            role: message.message_type.clone().into(),
-        }
+        let mut chat_message =
+            ChatMessage::new(message.message_type.clone().into(), message.content.clone());
+        chat_message.images = images;
+        chat_message
     }
 }
 
@@ -94,26 +95,21 @@ impl Default for Ollama {
     }
 }
 
+fn token_usage(final_data: &ChatMessageFinalResponseData) -> TokenUsage {
+    let prompt_tokens = final_data.prompt_eval_count as u32;
+    let completion_tokens = final_data.eval_count as u32;
+    TokenUsage::new(prompt_tokens, completion_tokens)
+}
+
 #[async_trait]
 impl LLM for Ollama {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         let request = self.generate_request(messages);
         let result = self.client.send_chat_messages(request).await?;
 
-        let generation = match result.message {
-            Some(message) => message.content,
-            None => return Err(OllamaError::from("No message in response".to_string()).into()),
-        };
+        let generation = result.message.content;
 
-        let tokens = result.final_data.map(|final_data| {
-            let prompt_tokens = final_data.prompt_eval_count as u32;
-            let completion_tokens = final_data.eval_count as u32;
-            TokenUsage {
-                prompt_tokens,
-                completion_tokens,
-                total_tokens: prompt_tokens + completion_tokens,
-            }
-        });
+        let tokens = result.final_data.as_ref().map(token_usage);
 
         Ok(GenerateResult { tokens, generation })
     }
@@ -126,18 +122,16 @@ impl LLM for Ollama {
         let result = self.client.send_chat_messages_stream(request).await?;
 
         let stream = result.map(|data| match data {
-            Ok(data) => match data.message.clone() {
-                Some(message) => Ok(StreamData::new(
+            Ok(data) => {
+                let content = data.message.content.clone();
+                let tokens = data.final_data.as_ref().map(token_usage);
+                Ok(StreamData::new(
                     serde_json::to_value(data).unwrap_or_default(),
-                    None,
-                    message.content,
-                )),
-                // TODO: no need to return error, see https://github.com/Abraxas-365/langchain-rust/issues/140
-                None => Err(LLMError::ContentNotFound(
-                    "No message in response".to_string(),
-                )),
-            },
-            Err(_) => Err(OllamaError::from("Stream error".to_string()).into()),
+                    tokens,
+                    content,
+                ))
+            }
+            Err(_) => Err(OllamaError::Other("Stream error".to_string()).into()),
         });
 
         Ok(Box::pin(stream))
@@ -168,9 +162,117 @@ mod tests {
         let mut stdout = tokio::io::stdout();
         while let Some(res) = stream.next().await {
             let data = res.unwrap();
-            stdout.write(data.content.as_bytes()).await.unwrap();
+            stdout.write_all(data.content.as_bytes()).await.unwrap();
         }
-        stdout.write(b"\n").await.unwrap();
+        stdout.write_all(b"\n").await.unwrap();
         stdout.flush().await.unwrap();
+    }
+
+    fn ollama_for(server: &mockito::ServerGuard) -> Ollama {
+        let client = Arc::new(OllamaClient::try_new(server.url()).unwrap());
+        Ollama::new(client, "m", None)
+    }
+
+    #[tokio::test]
+    async fn generate_against_mock_server() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/chat")
+            .match_body(mockito::Matcher::PartialJson(serde_json::json!({
+                "model": "m",
+                "stream": false,
+                "options": {"temperature": 0.5},
+                "messages": [
+                    {"role": "system", "content": "sys"},
+                    {"role": "user", "content": "hi"}
+                ]
+            })))
+            .with_header("content-type", "application/json")
+            .with_body(
+                serde_json::json!({
+                    "model": "m",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "message": {"role": "assistant", "content": "hello"},
+                    "done": true,
+                    "total_duration": 1,
+                    "load_duration": 1,
+                    "prompt_eval_count": 3,
+                    "prompt_eval_duration": 1,
+                    "eval_count": 2,
+                    "eval_duration": 1
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let result = ollama_for(&server)
+            .with_options(GenerationOptions::default().temperature(0.5))
+            .generate(&[
+                Message::new_system_message("sys"),
+                Message::new_human_message("hi"),
+            ])
+            .await
+            .unwrap();
+        mock.assert_async().await;
+        assert_eq!(result.generation, "hello");
+        let tokens = result.tokens.unwrap();
+        assert_eq!(
+            (
+                tokens.prompt_tokens,
+                tokens.completion_tokens,
+                tokens.total_tokens
+            ),
+            (3, 2, 5)
+        );
+    }
+
+    #[tokio::test]
+    async fn stream_against_mock_server() {
+        let mut server = mockito::Server::new_async().await;
+        let line = |content: &str, done: bool| {
+            let mut v = serde_json::json!({
+                "model": "m",
+                "created_at": "2024-01-01T00:00:00Z",
+                "message": {"role": "assistant", "content": content},
+                "done": done
+            });
+            if done {
+                for (k, n) in [
+                    ("total_duration", 1),
+                    ("load_duration", 1),
+                    ("prompt_eval_count", 3),
+                    ("prompt_eval_duration", 1),
+                    ("eval_count", 2),
+                    ("eval_duration", 1),
+                ] {
+                    v[k] = n.into();
+                }
+            }
+            v.to_string()
+        };
+        server
+            .mock("POST", "/api/chat")
+            .match_body(mockito::Matcher::PartialJson(
+                serde_json::json!({"stream": true}),
+            ))
+            .with_header("content-type", "application/x-ndjson")
+            .with_body(format!("{}\n{}\n", line("Hel", false), line("lo", true)))
+            .create_async()
+            .await;
+
+        let mut stream = ollama_for(&server)
+            .stream(&[Message::new_human_message("hi")])
+            .await
+            .unwrap();
+        let mut text = String::new();
+        let mut usage = None;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.unwrap();
+            text.push_str(&chunk.content);
+            usage = chunk.tokens.or(usage);
+        }
+        assert_eq!(text, "Hello");
+        assert_eq!(usage.unwrap().total_tokens, 5);
     }
 }

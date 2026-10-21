@@ -212,3 +212,86 @@ impl CallOptions {
             .or_else(|| self.streaming_func.clone());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn merge_prefers_incoming_scalars_and_keeps_existing() {
+        let mut base = CallOptions::new()
+            .with_max_tokens(100)
+            .with_temperature(0.1)
+            .with_seed(7);
+        base.merge_options(CallOptions::new().with_temperature(0.9).with_top_p(0.5));
+
+        assert_eq!(base.max_tokens, Some(100), "kept when incoming is None");
+        assert_eq!(base.temperature, Some(0.9), "incoming wins");
+        assert_eq!(base.top_p, Some(0.5), "new field set");
+        assert_eq!(base.seed, Some(7));
+    }
+
+    #[test]
+    fn merge_appends_stop_words_and_functions() {
+        let f = |n: &str| FunctionDefinition::new(n, "d", json!({}));
+        let mut base = CallOptions::new()
+            .with_stop_words(vec!["a".into()])
+            .with_functions(vec![f("one")]);
+        base.merge_options(
+            CallOptions::new()
+                .with_stop_words(vec!["b".into()])
+                .with_functions(vec![f("two")]),
+        );
+        assert_eq!(base.stop_words, Some(vec!["a".into(), "b".into()]));
+        let names: Vec<_> = base
+            .functions
+            .unwrap()
+            .into_iter()
+            .map(|f| f.name)
+            .collect();
+        assert_eq!(names, vec!["one", "two"]);
+
+        let mut empty = CallOptions::new();
+        empty.merge_options(CallOptions::new().with_stop_words(vec!["x".into()]));
+        assert_eq!(empty.stop_words, Some(vec!["x".into()]));
+    }
+
+    #[test]
+    fn merge_streaming_func_and_behaviors() {
+        let mut base = CallOptions::new().with_streaming_func(|_s| async { Ok(()) });
+        base.merge_options(
+            CallOptions::new()
+                .with_function_call_behavior(FunctionCallBehavior::Auto)
+                .with_response_format(ResponseFormat::JsonObject)
+                .with_stream_usage(true),
+        );
+        assert!(base.streaming_func.is_some(), "existing func kept");
+        assert!(matches!(
+            base.function_call_behavior,
+            Some(FunctionCallBehavior::Auto)
+        ));
+        assert!(matches!(
+            base.response_format,
+            Some(ResponseFormat::JsonObject)
+        ));
+        assert_eq!(base.stream_usage, Some(true));
+    }
+
+    #[tokio::test]
+    async fn streaming_func_is_invoked() {
+        let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+        let seen_clone = seen.clone();
+        let opts = CallOptions::new().with_streaming_func(move |s| {
+            let seen = seen_clone.clone();
+            async move {
+                seen.lock().await.push(s);
+                Ok(())
+            }
+        });
+        let func = opts.streaming_func.unwrap();
+        let mut f = func.lock().await;
+        f("chunk".to_string()).await.unwrap();
+        assert_eq!(*seen.lock().await, vec!["chunk".to_string()]);
+    }
+}
