@@ -17,7 +17,6 @@ async fn main() -> Result<(), Error> {
     let database_url = std::env::var("DATABASE_URL").unwrap_or("memory".to_string());
 
     let surrealdb_config = surrealdb::opt::Config::new()
-        .set_strict(true)
         .capabilities(surrealdb::opt::capabilities::Capabilities::all());
     //  Uncomment the following lines to authenticate if necessary
     //  .user(surrealdb::opt::auth::Root {

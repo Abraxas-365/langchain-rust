@@ -1,7 +1,7 @@
 use std::{collections::HashMap, env, error::Error, sync::Arc};
 
 use serde_json::{json, Value};
-use sqlx::{postgres::PgPoolOptions, Pool, Postgres, Row, Transaction};
+use sqlx::{postgres::PgPoolOptions, AssertSqlSafe, Pool, Postgres, Row, Transaction};
 
 use crate::{embedding::embedder_trait::Embedder, vectorstore::VecStoreOptions};
 
@@ -175,7 +175,7 @@ impl StoreBuilder<PgFilter> {
         UPDATE SET cmetadata = $3"#,
             self.collection_table_name
         );
-        sqlx::query(&sql)
+        sqlx::query(AssertSqlSafe(sql))
             .bind(uuid::Uuid::new_v4().to_string())
             .bind(&self.collection_name)
             .bind(json!(&self.collection_metadata))
@@ -186,7 +186,7 @@ impl StoreBuilder<PgFilter> {
             r#"SELECT uuid FROM {} WHERE name = $1 ORDER BY name limit 1"#,
             self.collection_table_name
         );
-        let row = sqlx::query(&sql)
+        let row = sqlx::query(AssertSqlSafe(sql))
             .bind(&self.collection_name)
             .fetch_one(&mut **tx)
             .await?;
@@ -198,10 +198,10 @@ impl StoreBuilder<PgFilter> {
         &self,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<(), Box<dyn Error>> {
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             "DELETE FROM {} WHERE name = $1",
             self.collection_table_name
-        ))
+        )))
         .bind(&self.collection_name)
         .execute(&mut **tx)
         .await?;
@@ -239,7 +239,7 @@ impl StoreBuilder<PgFilter> {
         // For more information see:
         // https://www.postgresql.org/docs/16/explicit-locking.html#ADVISORY-LOCKS
         let create_extension_sql = format!("CREATE EXTENSION IF NOT EXISTS vector");
-        sqlx::query(&create_extension_sql)
+        sqlx::query(AssertSqlSafe(create_extension_sql))
             .execute(&mut **tx)
             .await?;
 
@@ -260,7 +260,9 @@ impl StoreBuilder<PgFilter> {
     )"#,
             self.collection_table_name
         );
-        sqlx::query(&create_table_sql).execute(&mut **tx).await?;
+        sqlx::query(AssertSqlSafe(create_table_sql))
+            .execute(&mut **tx)
+            .await?;
 
         Ok(())
     }
@@ -292,13 +294,13 @@ impl StoreBuilder<PgFilter> {
             self.embedder_table_name, vector_dimensions, self.collection_table_name
         );
 
-        sqlx::query(&sql).execute(&mut **tx).await?;
+        sqlx::query(AssertSqlSafe(sql)).execute(&mut **tx).await?;
 
         let sql = format!(
             r#"CREATE INDEX IF NOT EXISTS {}_collection_id ON {} (collection_id)"#,
             self.embedder_table_name, self.embedder_table_name
         );
-        sqlx::query(&sql).execute(&mut **tx).await?;
+        sqlx::query(AssertSqlSafe(sql)).execute(&mut **tx).await?;
 
         // See this for more details on HNWS indexes: https://github.com/pgvector/pgvector#hnsw
         match &self.hns_index {
@@ -313,7 +315,7 @@ impl StoreBuilder<PgFilter> {
                         sql, hns_index.m, hns_index.ef_construction
                     );
                 }
-                sqlx::query(&sql).execute(&mut **tx).await?;
+                sqlx::query(AssertSqlSafe(sql)).execute(&mut **tx).await?;
             }
             None => {}
         }

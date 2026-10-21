@@ -6,10 +6,10 @@ use crate::{
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use reqwest::Client;
-use serde_json::Value;
-use std::{pin::Pin, str, str::from_utf8};
+use std::pin::Pin;
 
 use super::models::{ApiResponse, ErrorResponse, Payload, QwenMessage};
+use crate::llm::sse::{sse_json_events, usage_from_chunk};
 
 /// Parse error from JSON response and return appropriate QwenError
 fn parse_error_response(code: &str, message: &str) -> LLMError {
@@ -325,33 +325,6 @@ impl Qwen {
 
         payload
     }
-
-    /// Parse Server-Sent Events (SSE) chunks
-    fn parse_sse_chunk(bytes: &[u8]) -> Result<Vec<Value>, LLMError> {
-        let text = from_utf8(bytes).map_err(|e| LLMError::OtherError(e.to_string()))?;
-        let mut values = Vec::new();
-
-        for line in text.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
-                if data == "[DONE]" {
-                    continue;
-                }
-
-                match serde_json::from_str::<Value>(data) {
-                    Ok(value) => values.push(value),
-                    Err(e) => {
-                        return Err(LLMError::OtherError(format!(
-                            "Failed to parse SSE data: {}, data: {}",
-                            e, data
-                        )));
-                    }
-                }
-            }
-        }
-
-        Ok(values)
-    }
 }
 
 #[async_trait]
@@ -396,76 +369,23 @@ impl LLM for Qwen {
         let stream = client.execute(request).await?;
         let stream = stream.bytes_stream();
 
-        let processed_stream = stream
-            .then(move |result| {
-                async move {
-                    match result {
-                        Ok(bytes) => {
-                            // Parse SSE chunk format
-                            let bytes_str = from_utf8(&bytes)
-                                .map_err(|e| LLMError::OtherError(e.to_string()))?;
-                            let chunks = Self::parse_sse_chunk(&bytes)?;
-
-                            for chunk in chunks {
-                                if let Some(choices) =
-                                    chunk.get("choices").and_then(|c| c.as_array())
-                                {
-                                    if let Some(choice) = choices.first() {
-                                        if let Some(delta) = choice.get("delta") {
-                                            // Extract content from delta
-                                            if let Some(content) =
-                                                delta.get("content").and_then(|c| c.as_str())
-                                            {
-                                                if !content.is_empty() {
-                                                    let usage =
-                                                        if let Some(usage) = chunk.get("usage") {
-                                                            Some(TokenUsage {
-                                                                prompt_tokens: usage
-                                                                    .get("prompt_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                completion_tokens: usage
-                                                                    .get("completion_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                total_tokens: usage
-                                                                    .get("total_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                            })
-                                                        } else {
-                                                            None
-                                                        };
-
-                                                    return Ok(StreamData::new(
-                                                        chunk.clone(),
-                                                        usage,
-                                                        content,
-                                                    ));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // If we didn't return within the loop, return an empty stream data
-                            Ok(StreamData::new(Value::Null, None, ""))
-                        }
-                        Err(e) => Err(LLMError::RequestError(e)),
-                    }
-                }
-            })
-            .filter_map(|result| async move {
-                match result {
-                    Ok(data) if !data.content.is_empty() => Some(Ok(data)),
-                    Ok(_) => None,
-                    Err(e) => Some(Err(e)),
-                }
-            });
+        let processed_stream = sse_json_events(stream).filter_map(|event| async move {
+            let chunk = match event {
+                Ok(chunk) => chunk,
+                Err(e) => return Some(Err(e)),
+            };
+            let content = chunk
+                .get("choices")?
+                .as_array()?
+                .first()?
+                .get("delta")?
+                .get("content")
+                .and_then(|c| c.as_str())
+                .filter(|c| !c.is_empty())?
+                .to_string();
+            let usage = usage_from_chunk(&chunk);
+            Some(Ok(StreamData::new(chunk, usage, content)))
+        });
 
         Ok(Box::pin(processed_stream))
     }

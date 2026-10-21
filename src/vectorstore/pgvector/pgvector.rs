@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error, sync::Arc};
 use async_trait::async_trait;
 use pgvector::Vector;
 use serde_json::{json, Value};
-use sqlx::{Pool, Postgres, Row};
+use sqlx::{AssertSqlSafe, Pool, Postgres, Row};
 use uuid::Uuid;
 
 use crate::{
@@ -137,17 +137,17 @@ impl Store {
     }
 
     async fn drop_tables(&self) -> Result<(), Box<dyn Error>> {
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             r#"DROP TABLE IF EXISTS {}"#,
             self.embedder_table_name
-        ))
+        )))
         .execute(&self.pool)
         .await?;
 
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             r#"DROP TABLE IF EXISTS {}"#,
             self.collection_table_name
-        ))
+        )))
         .execute(&self.pool)
         .await?;
 
@@ -215,11 +215,11 @@ impl VectorStore for Store {
             let vector_value =
                 Vector::from(vector.into_iter().map(|x| *x as f32).collect::<Vec<f32>>());
 
-            sqlx::query(&format!(
+            sqlx::query(AssertSqlSafe(format!(
                 r#"INSERT INTO {} 
 (uuid, document, embedding, cmetadata, collection_id) VALUES ($1, $2, $3, $4, $5)"#,
                 self.embedder_table_name
-            ))
+            )))
             .bind(&id)
             .bind(&doc.page_content)
             .bind(&vector_value)
@@ -281,7 +281,7 @@ impl VectorStore for Store {
 
         let vector_dims = query_vector.len();
 
-        let rows = sqlx::query(&sql)
+        let rows = sqlx::query(AssertSqlSafe(sql))
             .bind(vector_dims as i64)
             .bind(&Vector::from(
                 query_vector

@@ -34,7 +34,7 @@ impl Default for MarkdownParser {
 #[async_trait]
 impl OutputParser for MarkdownParser {
     async fn parse(&self, output: &str) -> Result<String, OutputParserError> {
-        let re = Regex::new(r"```(?:\w+)?\s*([\s\S]+?)\s*```")?;
+        let re = Regex::new(&self.expresion)?;
         if let Some(cap) = re.captures(output) {
             let find = cap[1].to_string();
             if self.trim {
@@ -72,5 +72,45 @@ fn main() {
 }"#;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), correct);
+    }
+
+    #[tokio::test]
+    async fn markdown_parser_errors_and_custom_expression() {
+        let err = MarkdownParser::new()
+            .parse("no code here")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, OutputParserError::ParsingError(_)));
+
+        let parser = MarkdownParser::new().with_custom_expresion(r"<json>([\s\S]+?)</json>");
+        assert_eq!(
+            parser.parse("x <json>{\"a\":1}</json> y").await.unwrap(),
+            "{\"a\":1}"
+        );
+
+        let parser = MarkdownParser::new().with_custom_expresion("(");
+        assert!(matches!(
+            parser.parse("x").await.unwrap_err(),
+            OutputParserError::RegexError(_)
+        ));
+
+        let parser = MarkdownParser::new()
+            .with_custom_expresion(r"<a>([\s\S]+?)</a>")
+            .with_trim(true);
+        assert_eq!(parser.parse("<a>  v \n</a>").await.unwrap(), "v");
+    }
+
+    #[tokio::test]
+    async fn simple_parser_trim() {
+        use crate::output_parsers::SimpleParser;
+        assert_eq!(SimpleParser::new().parse(" a ").await.unwrap(), " a ");
+        assert_eq!(
+            SimpleParser::default()
+                .with_trim(true)
+                .parse(" a \n")
+                .await
+                .unwrap(),
+            "a"
+        );
     }
 }

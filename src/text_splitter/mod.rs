@@ -5,6 +5,9 @@ mod plain_text_splitter;
 mod text_splitter;
 mod token_splitter;
 
+#[cfg(test)]
+mod tests;
+
 pub use error::*;
 pub use markdown_splitter::*;
 pub use options::*;

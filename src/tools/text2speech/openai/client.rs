@@ -1,10 +1,10 @@
 use std::{error::Error, sync::Arc};
 
-use async_openai::types::CreateSpeechRequestArgs;
+use async_openai::types::audio::CreateSpeechRequestArgs;
 use async_openai::Client;
 pub use async_openai::{
     config::{Config, OpenAIConfig},
-    types::{SpeechModel, SpeechResponseFormat, Voice},
+    types::audio::{SpeechModel, SpeechResponseFormat, Voice},
 };
 use async_trait::async_trait;
 use serde_json::Value;
@@ -71,7 +71,7 @@ impl Default for Text2SpeechOpenAI<OpenAIConfig> {
 }
 
 #[async_trait]
-impl<C: Config + Send + Sync> Tool for Text2SpeechOpenAI<C> {
+impl<C: Config + Clone + Send + Sync> Tool for Text2SpeechOpenAI<C> {
     fn name(&self) -> String {
         "Text2SpeechOpenAI".to_string()
     }
@@ -86,7 +86,7 @@ impl<C: Config + Send + Sync> Tool for Text2SpeechOpenAI<C> {
 
     async fn run(&self, input: Value) -> Result<String, Box<dyn Error>> {
         let input = input.as_str().ok_or("Invalid input")?;
-        let client = Client::new();
+        let client = Client::with_config(self.config.clone());
         let response_format: SpeechResponseFormat = self.response_format;
 
         let request = CreateSpeechRequestArgs::default()
@@ -96,7 +96,7 @@ impl<C: Config + Send + Sync> Tool for Text2SpeechOpenAI<C> {
             .model(self.model.clone())
             .build()?;
 
-        let response = client.audio().speech(request).await?;
+        let response = client.audio().speech().create(request).await?;
 
         if self.storage.is_some() {
             let storage = self.storage.as_ref().unwrap(); //safe to unwrap
@@ -120,5 +120,47 @@ mod tests {
         let openai = Text2SpeechOpenAI::default();
         let s = openai.call("Hola como estas").await.unwrap();
         println!("{}", s);
+    }
+
+    #[tokio::test]
+    async fn speech_uses_configured_client_and_writes_file() {
+        use super::*;
+        use serde_json::json;
+
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/audio/speech")
+            .match_header("authorization", "Bearer test-key")
+            .match_body(mockito::Matcher::PartialJson(json!({
+                "input": "hola",
+                "model": "tts-1-hd",
+                "voice": "nova",
+                "response_format": "wav"
+            })))
+            .with_body([1u8, 2, 3])
+            .create_async()
+            .await;
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("lcr-tts-{}-{nanos}", std::process::id()));
+        let path = dir.join("out.wav");
+        let tool = Text2SpeechOpenAI::new(
+            OpenAIConfig::new()
+                .with_api_base(server.url())
+                .with_api_key("test-key"),
+        )
+        .with_model(SpeechModel::Tts1Hd)
+        .with_voice(Voice::Nova)
+        .with_response_format(SpeechResponseFormat::Wav)
+        .with_path(path.to_string_lossy());
+
+        let out = tool.run(json!("hola")).await.unwrap();
+        mock.assert_async().await;
+        assert_eq!(out, path.to_string_lossy());
+        assert_eq!(std::fs::read(&path).unwrap(), vec![1, 2, 3]);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

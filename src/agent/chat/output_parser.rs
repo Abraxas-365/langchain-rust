@@ -109,3 +109,80 @@ fn parse_json_markdown(json_markdown: &str) -> Option<Value> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parses_tool_action() {
+        let text = "Thought\n```json\n{\"action\": \"Calculator\", \"action_input\": \"2+2\"}\n```";
+        match ChatOutputParser::new().parse(text).unwrap() {
+            AgentEvent::Action(actions) => {
+                assert_eq!(actions.len(), 1);
+                assert_eq!(actions[0].tool, "Calculator");
+                assert_eq!(actions[0].tool_input, "2+2");
+                assert_eq!(actions[0].log, text);
+            }
+            other => panic!("expected action, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_final_answer_without_json_tag() {
+        let text = "```\n{\"action\": \"Final Answer\", \"action_input\": \"4\"}\n```";
+        match ChatOutputParser::new().parse(text).unwrap() {
+            AgentEvent::Finish(f) => assert_eq!(f.output, "4"),
+            other => panic!("expected finish, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn plain_text_is_final_answer() {
+        match ChatOutputParser::new().parse("just text").unwrap() {
+            AgentEvent::Finish(f) => assert_eq!(f.output, "just text"),
+            other => panic!("expected finish, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn json_with_wrong_shape_is_an_error() {
+        let text = "```json\n{\"foo\": 1}\n```";
+        assert!(matches!(
+            ChatOutputParser::new().parse(text),
+            Err(AgentError::SerdeJsonError(_))
+        ));
+    }
+
+    #[test]
+    fn partial_json_is_completed() {
+        assert_eq!(
+            parse_partial_json(r#"{"a": [1, 2"#, false),
+            Some(json!({"a": [1, 2]}))
+        );
+        assert_eq!(
+            parse_partial_json(r#"{"a": "}{"}"#, false),
+            Some(json!({"a": "}{"}))
+        );
+        assert_eq!(parse_partial_json(r#"{"a": 1]"#, false), None);
+        assert_eq!(parse_partial_json(r#"{"a": 1"#, true), None);
+        assert_eq!(parse_partial_json(r#"[1]"#, true), Some(json!([1])));
+    }
+
+    #[test]
+    fn markdown_with_truncated_json_is_repaired() {
+        let text = "```json\n{\"action\": \"Final Answer\", \"action_input\": \"ok\"\n```";
+        match ChatOutputParser::new().parse(text).unwrap() {
+            AgentEvent::Finish(f) => assert_eq!(f.output, "ok"),
+            other => panic!("expected finish, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn format_instructions_mention_final_answer() {
+        assert!(ChatOutputParser::new()
+            .get_format_instructions()
+            .contains("Final Answer"));
+    }
+}
