@@ -81,7 +81,7 @@ pub(crate) struct ApiResponse {
     pub model: String,
     pub choices: Vec<Choice>,
     pub usage: Usage,
-    pub system_fingerprint: String,
+    pub system_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -107,6 +107,6 @@ pub(crate) struct StreamResponse {
     pub created: u64,
     pub model: String,
     pub choices: Vec<StreamChoice>,
-    pub system_fingerprint: String,
+    pub system_fingerprint: Option<String>,
     pub usage: Option<Usage>,
 }
