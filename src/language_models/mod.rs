@@ -8,12 +8,15 @@ pub mod options;
 mod error;
 pub use error::*;
 
+use crate::schemas::Document;
+
 //TODO: check if its this should have a data:serde::Value to save all other things, like OpenAI
 //function responses
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct GenerateResult {
     pub tokens: Option<TokenUsage>,
     pub generation: String,
+    pub sources: Option<Vec<Document>>,
 }
 
 impl GenerateResult {

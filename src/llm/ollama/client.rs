@@ -111,7 +111,7 @@ impl LLM for Ollama {
 
         let tokens = result.final_data.as_ref().map(token_usage);
 
-        Ok(GenerateResult { tokens, generation })
+        Ok(GenerateResult { tokens, generation, sources: None })
     }
 
     async fn stream(

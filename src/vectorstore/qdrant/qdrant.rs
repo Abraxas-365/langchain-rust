@@ -42,9 +42,14 @@ impl VectorStore for Store {
     async fn add_documents(
         &self,
         docs: &[Document],
-        opt: &QdrantOptions,
+        opt: Option<&QdrantOptions>,
     ) -> Result<Vec<String>, Box<dyn Error>> {
-        let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
+        let embedder = if let Some(options) = opt {
+            options.embedder.as_ref().unwrap_or(&self.embedder)
+        } else {
+            &self.embedder
+        };
+
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
 
         let vectors = embedder.embed_documents(&texts).await?.into_iter();

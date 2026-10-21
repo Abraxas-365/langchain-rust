@@ -104,10 +104,15 @@ impl VectorStore for Store {
     async fn add_documents(
         &self,
         docs: &[Document],
-        opt: &Self::Options,
+        opt: Option<&Self::Options>,
     ) -> Result<Vec<String>, Box<dyn Error>> {
+        let embedder = if let Some(options) = opt {
+            options.embedder.as_ref().unwrap_or(&self.embedder)
+        } else {
+            &self.embedder
+        };
+
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
-        let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
         let vectors = embedder.embed_documents(&texts).await?;
 
         if vectors.len() != docs.len() {

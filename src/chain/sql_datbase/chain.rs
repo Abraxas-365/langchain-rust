@@ -180,6 +180,7 @@ impl Chain for SQLDatabaseChain {
         Ok(GenerateResult {
             generation: output.to_string(),
             tokens: token_usage,
+            sources: None,
         })
     }
 

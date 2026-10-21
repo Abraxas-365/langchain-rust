@@ -117,7 +117,7 @@ impl Claude {
             total_tokens: res.usage.input_tokens + res.usage.output_tokens,
         });
 
-        Ok(GenerateResult { tokens, generation })
+        Ok(GenerateResult { tokens, generation, sources: None })
     }
 
     fn build_payload(&self, messages: &[Message], stream: bool) -> Payload {
