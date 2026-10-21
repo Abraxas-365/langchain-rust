@@ -2,19 +2,16 @@ use std::pin::Pin;
 
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 
-use async_openai::types::{ChatCompletionToolChoiceOption, ResponseFormat};
-use async_openai::{
-    error::OpenAIError,
-    types::{
-        ChatChoiceStream, ChatCompletionMessageToolCall, ChatCompletionRequestAssistantMessageArgs,
-        ChatCompletionRequestMessage, ChatCompletionRequestMessageContentPartImageArgs,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
-        ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
-        ChatCompletionRequestUserMessageContentPart, ChatCompletionStreamOptions,
-        CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
-    },
-    Client,
+use async_openai::types::chat::{
+    ChatChoiceStream, ChatCompletionMessageToolCalls, ChatCompletionRequestAssistantMessageArgs,
+    ChatCompletionRequestMessage, ChatCompletionRequestMessageContentPartImageArgs,
+    ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
+    ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
+    ChatCompletionRequestUserMessageContentPart, ChatCompletionStreamOptions,
+    ChatCompletionToolChoiceOption, ChatCompletionTools, CreateChatCompletionRequest,
+    CreateChatCompletionRequestArgs, ResponseFormat, StopConfiguration,
 };
+use async_openai::{error::OpenAIError, Client};
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 
@@ -93,7 +90,7 @@ impl Default for OpenAI<OpenAIConfig> {
 }
 
 #[async_trait]
-impl<C: Config + Send + Sync + 'static> LLM for OpenAI<C> {
+impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
     async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, LLMError> {
         let client = Client::with_config(self.config.clone());
         let request = self.generate_request(prompt, self.options.streaming_func.is_some())?;
@@ -217,7 +214,7 @@ impl<C: Config> OpenAI<C> {
             match m.message_type {
                 MessageType::AIMessage => openai_messages.push(match &m.tool_calls {
                     Some(value) => {
-                        let function: Vec<ChatCompletionMessageToolCall> =
+                        let function: Vec<ChatCompletionMessageToolCalls> =
                             serde_json::from_value(value.clone())?;
                         ChatCompletionRequestAssistantMessageArgs::default()
                             .tool_calls(function)
@@ -292,17 +289,21 @@ impl<C: Config> OpenAI<C> {
             request_builder.max_tokens(max_tokens);
         }
         if stream {
+            request_builder.stream(true);
             if let Some(include_usage) = self.options.stream_usage {
-                request_builder.stream_options(ChatCompletionStreamOptions { include_usage });
+                request_builder.stream_options(ChatCompletionStreamOptions {
+                    include_usage: Some(include_usage),
+                    include_obfuscation: None,
+                });
             }
         }
         request_builder.model(self.model.to_string());
         if let Some(stop_words) = &self.options.stop_words {
-            request_builder.stop(stop_words);
+            request_builder.stop(StopConfiguration::StringArray(stop_words.clone()));
         }
 
         if let Some(functions) = &self.options.functions {
-            let functions: Result<Vec<_>, OpenAIError> = functions
+            let functions: Result<Vec<ChatCompletionTools>, OpenAIError> = functions
                 .clone()
                 .into_iter()
                 .map(|f| f.try_into_openai())
@@ -324,6 +325,10 @@ impl<C: Config> OpenAI<C> {
         Ok(request_builder.build()?)
     }
 }
+
+#[cfg(test)]
+mod mock_tests;
+
 #[cfg(test)]
 mod tests {
     use crate::schemas::FunctionDefinition;

@@ -288,3 +288,67 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod offline_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn claude_payload_splits_system_message() {
+        let claude = Claude::new()
+            .with_model("claude-x")
+            .with_options(CallOptions::new().with_stop_words(vec!["END".into()]));
+        let payload = claude.build_payload(
+            &[
+                Message::new_system_message("sys"),
+                Message::new_human_message("hi"),
+                Message::new_ai_message("hello"),
+            ],
+            true,
+        );
+        let v = serde_json::to_value(&payload).unwrap();
+        assert_eq!(v["model"], "claude-x");
+        assert_eq!(v["system"], "sys");
+        assert_eq!(v["max_tokens"], 1024);
+        assert_eq!(v["stream"], true);
+        assert_eq!(v["stop_sequences"], json!(["END"]));
+        assert_eq!(
+            v["messages"],
+            json!([{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}])
+        );
+    }
+
+    #[test]
+    fn claude_sse_parsing() {
+        let v = parse_sse_to_json(
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"Hi\"}}\n",
+        )
+        .unwrap();
+        assert_eq!(v["delta"]["text"], "Hi");
+
+        let err = parse_sse_to_json(
+            "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"busy\"}}",
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            LLMError::AnthropicError(AnthropicError::OverloadedError(m)) if m == "busy"
+        ));
+
+        // A bare JSON error body (non-SSE) is mapped too
+        let err = parse_sse_to_json(
+            r#"{"type":"error","error":{"type":"authentication_error","message":"k"}}"#,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            LLMError::AnthropicError(AnthropicError::AuthenticationError(_))
+        ));
+
+        assert!(matches!(
+            parse_sse_to_json("event: ping\n").unwrap_err(),
+            LLMError::ContentNotFound(_)
+        ));
+    }
+}

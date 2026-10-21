@@ -1,4 +1,7 @@
 use crate::schemas::convert::OpenAIFromLangchain;
+use async_openai::types::chat::{
+    ResponseFormat as OpenAIResponseFormat, ResponseFormatJsonSchema as OpenAIJsonSchema,
+};
 
 #[derive(Clone, Debug)]
 pub enum ResponseFormat {
@@ -12,21 +15,22 @@ pub enum ResponseFormat {
     },
 }
 
-impl OpenAIFromLangchain<ResponseFormat> for async_openai::types::ResponseFormat {
+impl OpenAIFromLangchain<ResponseFormat> for OpenAIResponseFormat {
     fn from_langchain(langchain: ResponseFormat) -> Self {
         match langchain {
-            ResponseFormat::Text => async_openai::types::ResponseFormat::Text,
-            ResponseFormat::JsonObject => async_openai::types::ResponseFormat::JsonObject,
+            ResponseFormat::Text => OpenAIResponseFormat::Text,
+            ResponseFormat::JsonObject => OpenAIResponseFormat::JsonObject,
             ResponseFormat::JsonSchema {
                 name,
                 description,
                 schema,
                 strict,
-            } => async_openai::types::ResponseFormat::JsonSchema {
-                json_schema: async_openai::types::ResponseFormatJsonSchema {
+            } => OpenAIResponseFormat::JsonSchema {
+                json_schema: OpenAIJsonSchema {
                     name,
                     description,
-                    schema,
+                    // The OpenAI API requires a schema; an empty object accepts any JSON.
+                    schema: schema.unwrap_or_else(|| serde_json::json!({})),
                     strict,
                 },
             },

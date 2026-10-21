@@ -31,3 +31,17 @@ impl BaseMemory for DummyMemory {
     fn add_message(&mut self, _message: Message) {}
     fn clear(&mut self) {}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn never_stores_messages() {
+        let mut memory = DummyMemory::new();
+        memory.add_user_message(&"ignored");
+        memory.add_ai_message(&"ignored");
+        assert!(memory.messages().is_empty());
+        assert_eq!(memory.to_string(), "");
+    }
+}

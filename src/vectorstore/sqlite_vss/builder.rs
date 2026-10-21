@@ -77,14 +77,13 @@ impl StoreBuilder {
                     .as_ref()
                     .ok_or("Connection URL or DB is required")?;
 
-                let pool: Pool<Sqlite> = SqlitePoolOptions::new()
-                    .connect_with(
-                        SqliteConnectOptions::from_str(connection_url)?
-                            .create_if_missing(true)
-                            .extension("vector0")
-                            .extension("vss0"),
-                    )
-                    .await?;
+                let options =
+                    SqliteConnectOptions::from_str(connection_url)?.create_if_missing(true);
+                // SAFETY: loads the fixed, well-known sqlite-vss extensions by name (as before
+                // sqlx 0.9 made extension loading `unsafe`); the user is responsible for having
+                // trusted copies of `vector0`/`vss0` on the library search path.
+                let options = unsafe { options.extension("vector0").extension("vss0") };
+                let pool: Pool<Sqlite> = SqlitePoolOptions::new().connect_with(options).await?;
 
                 Ok(pool)
             }

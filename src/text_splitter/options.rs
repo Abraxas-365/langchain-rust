@@ -1,5 +1,5 @@
 use text_splitter::ChunkConfig;
-use tiktoken_rs::{get_bpe_from_model, get_bpe_from_tokenizer, tokenizer::Tokenizer, CoreBPE};
+use tiktoken_rs::{bpe_for_model, bpe_for_tokenizer, tokenizer::Tokenizer, CoreBPE};
 
 use super::TextSplitterError;
 
@@ -70,7 +70,7 @@ impl SplitterOptions {
     }
 }
 
-impl TryFrom<&SplitterOptions> for ChunkConfig<CoreBPE> {
+impl TryFrom<&SplitterOptions> for ChunkConfig<&'static CoreBPE> {
     type Error = TextSplitterError;
 
     fn try_from(options: &SplitterOptions) -> Result<Self, Self::Error> {
@@ -78,9 +78,9 @@ impl TryFrom<&SplitterOptions> for ChunkConfig<CoreBPE> {
             let tokenizer = SplitterOptions::get_tokenizer_from_str(&options.encoding_name)
                 .ok_or(TextSplitterError::TokenizerNotFound)?;
 
-            get_bpe_from_tokenizer(tokenizer).map_err(|_| TextSplitterError::InvalidTokenizer)?
+            bpe_for_tokenizer(tokenizer).map_err(|_| TextSplitterError::InvalidTokenizer)?
         } else {
-            get_bpe_from_model(&options.model_name).map_err(|_| TextSplitterError::InvalidModel)?
+            bpe_for_model(&options.model_name).map_err(|_| TextSplitterError::InvalidModel)?
         };
 
         Ok(ChunkConfig::new(options.chunk_size)

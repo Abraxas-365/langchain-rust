@@ -2,4 +2,6 @@ mod fastembed;
 pub use fastembed::*;
 
 extern crate fastembed as ext_fastembed;
-pub use ext_fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+#[allow(deprecated)]
+pub use ext_fastembed::InitOptions;
+pub use ext_fastembed::{EmbeddingModel, TextEmbedding, TextInitOptions};

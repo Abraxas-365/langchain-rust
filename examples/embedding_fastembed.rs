@@ -1,5 +1,7 @@
 #[cfg(feature = "fastembed")]
-use langchain_rust::embedding::{Embedder, EmbeddingModel, FastEmbed, InitOptions, TextEmbedding};
+use langchain_rust::embedding::{
+    onnx_environment, Embedder, EmbeddingModel, FastEmbed, TextEmbedding, TextInitOptions,
+};
 
 #[cfg(feature = "fastembed")]
 #[tokio::main]
@@ -16,7 +18,10 @@ async fn main() {
 
     // With custom model
     let model = TextEmbedding::try_new(
-        InitOptions::new(EmbeddingModel::AllMiniLML6V2).with_show_download_progress(true),
+        TextInitOptions::new(EmbeddingModel::AllMiniLML6V2)
+            .with_show_download_progress(true)
+            // Only one ONNX environment may exist per process; reuse the shared one.
+            .with_environment(onnx_environment().unwrap()),
     )
     .unwrap();
 

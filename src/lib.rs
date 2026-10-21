@@ -14,4 +14,7 @@ pub mod text_splitter;
 pub mod tools;
 pub mod vectorstore;
 
+#[cfg(test)]
+pub(crate) mod test_utils;
+
 pub use url;

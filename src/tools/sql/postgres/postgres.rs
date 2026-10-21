@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sqlx::{postgres::PgPoolOptions, Column, Pool, Postgres, Row, TypeInfo};
+use sqlx::{postgres::PgPoolOptions, AssertSqlSafe, Column, Pool, Postgres, Row, TypeInfo};
 use std::error::Error;
 
 use crate::tools::{Dialect, Engine};
@@ -29,7 +29,9 @@ impl Engine for PostgreSQLEngine {
     }
 
     async fn query(&self, query: &str) -> Result<(Vec<String>, Vec<Vec<String>>), Box<dyn Error>> {
-        let rows = sqlx::query(query).fetch_all(&self.pool).await?;
+        let rows = sqlx::query(AssertSqlSafe(query.to_owned()))
+            .fetch_all(&self.pool)
+            .await?;
 
         let mut cols = vec![];
         let mut results = vec![];
@@ -76,9 +78,11 @@ impl Engine for PostgreSQLEngine {
     }
 
     async fn table_names(&self) -> Result<Vec<String>, Box<dyn Error>> {
-        let query =
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'";
-        let rows = sqlx::query(query).fetch_all(&self.pool).await?;
+        let rows = sqlx::query(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         let table_names = rows
             .into_iter()
@@ -89,13 +93,12 @@ impl Engine for PostgreSQLEngine {
     }
 
     async fn table_info(&self, table: &str) -> Result<String, Box<dyn Error>> {
-        let query = format!(
-            "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1"
-        );
-        let rows = sqlx::query(&query)
-            .bind(table)
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = sqlx::query(
+            "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1",
+        )
+        .bind(table)
+        .fetch_all(&self.pool)
+        .await?;
 
         // Simplified representation of table info, similar to a CREATE TABLE statement
         let info = rows

@@ -137,7 +137,13 @@ where
 
                         let mut tools_ai_message_seen: HashMap<String, ()> = HashMap::default();
                         for (action, observation) in steps {
-                            let LogTools { tool_id, tools } = serde_json::from_str(&action.log)?;
+                            // Only OpenAI-tools style agents encode `LogTools` in the log;
+                            // other agents (e.g. ConversationalAgent) store raw LLM text.
+                            let Ok(LogTools { tool_id, tools }) =
+                                serde_json::from_str::<LogTools>(&action.log)
+                            else {
+                                continue;
+                            };
                             let tools_value: serde_json::Value = serde_json::from_str(&tools)?;
                             if tools_ai_message_seen.insert(tools, ()).is_none() {
                                 memory.add_message(

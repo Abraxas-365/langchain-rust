@@ -63,14 +63,13 @@ impl<C: Connection> Store<C> {
                             DEFINE FIELD IF NOT EXISTS text                      ON {collection_table_name} TYPE string;
                             DEFINE FIELD IF NOT EXISTS embedding                 ON {collection_table_name} TYPE array ASSERT (array::len($value) = {vector_dimensions}) || (array::len($value) = 0);
                             DEFINE FIELD IF NOT EXISTS embedding.*               ON {collection_table_name} TYPE float;
-                            DEFINE FIELD IF NOT EXISTS metadata                  ON {collection_table_name} FLEXIBLE TYPE option<object>;"#
+                            DEFINE FIELD IF NOT EXISTS metadata                  ON {collection_table_name} TYPE option<object> FLEXIBLE;"#
                     ))
                     .await?
                     .check()?;
             }
             None => {
                 let collection_table_name = &self.collection_name;
-                dbg!(&collection_table_name);
                 self.db
                     .query(format!(
                         r#"
@@ -78,7 +77,7 @@ impl<C: Connection> Store<C> {
                             DEFINE FIELD IF NOT EXISTS text              ON {collection_table_name} TYPE string;
                             DEFINE FIELD IF NOT EXISTS embedding         ON {collection_table_name} TYPE array ASSERT (array::len($value) = {vector_dimensions}) || (array::len($value) = 0);
                             DEFINE FIELD IF NOT EXISTS embedding.*       ON {collection_table_name} TYPE float;
-                            DEFINE FIELD IF NOT EXISTS metadata          ON {collection_table_name} FLEXIBLE TYPE option<object>;"#
+                            DEFINE FIELD IF NOT EXISTS metadata          ON {collection_table_name} TYPE option<object> FLEXIBLE;"#
                     ))
                     .await?
                     .check()?;
@@ -202,7 +201,12 @@ impl<C: Connection> VectorStore for Store<C> {
             .await?
             .check()?;
 
-        let query_result: Vec<Row> = result.take(0)?;
+        // surrealdb 3 decodes into `SurrealValue`; go through JSON to keep a plain serde `Row`.
+        let rows: Vec<Value> = result.take(0)?;
+        let query_result = rows
+            .into_iter()
+            .map(serde_json::from_value::<Row>)
+            .collect::<Result<Vec<_>, _>>()?;
 
         let documents = query_result
             .into_iter()

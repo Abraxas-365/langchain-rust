@@ -83,7 +83,8 @@ impl Chain for ConversationalRetrieverChain {
             .get(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
 
-        let human_message = Message::new_human_message(input_variable);
+        let human_message =
+            Message::new_human_message(crate::schemas::messages::value_to_text(input_variable));
         let history = {
             let memory = self.memory.lock().await;
             memory.messages()
@@ -157,7 +158,8 @@ impl Chain for ConversationalRetrieverChain {
             .get(&self.input_key)
             .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
 
-        let human_message = Message::new_human_message(input_variable);
+        let human_message =
+            Message::new_human_message(crate::schemas::messages::value_to_text(input_variable));
         let history = {
             let memory = self.memory.lock().await;
             memory.messages()

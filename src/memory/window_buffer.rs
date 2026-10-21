@@ -46,12 +46,66 @@ impl BaseMemory for WindowBufferMemory {
         self.messages.iter().cloned().collect()
     }
     fn add_message(&mut self, message: Message) {
-        if self.window_size > 0 && self.messages.len() >= self.window_size {
+        if self.window_size == 0 {
+            return;
+        }
+        if self.messages.len() >= self.window_size {
             self.messages.pop_front();
         }
         self.messages.push_back(message);
     }
     fn clear(&mut self) {
         self.messages.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schemas::MessageType;
+
+    #[test]
+    fn keeps_only_last_window_size_messages() {
+        let mut memory = WindowBufferMemory::new(2);
+        memory.add_user_message(&"one");
+        memory.add_ai_message(&"two");
+        memory.add_user_message(&"three");
+
+        let messages = memory.messages();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].content, "two");
+        assert_eq!(messages[0].message_type, MessageType::AIMessage);
+        assert_eq!(messages[1].content, "three");
+        assert_eq!(messages[1].message_type, MessageType::HumanMessage);
+    }
+
+    #[test]
+    fn default_window_is_ten() {
+        let mut memory = WindowBufferMemory::default();
+        for i in 0..15 {
+            memory.add_user_message(&i);
+        }
+        let messages = memory.messages();
+        assert_eq!(messages.len(), 10);
+        assert_eq!(messages.first().unwrap().content, "5");
+        assert_eq!(messages.last().unwrap().content, "14");
+    }
+
+    #[test]
+    fn zero_window_stores_nothing_and_does_not_panic() {
+        let mut memory = WindowBufferMemory::new(0);
+        memory.add_user_message(&"hello");
+        assert!(memory.messages().is_empty());
+    }
+
+    #[test]
+    fn clear_and_to_string() {
+        let mut memory = WindowBufferMemory::new(5);
+        memory.add_user_message(&"hi");
+        memory.add_ai_message(&"hello");
+        assert_eq!(memory.to_string(), "human: hi\nai: hello");
+        memory.clear();
+        assert!(memory.messages().is_empty());
+        assert_eq!(memory.to_string(), "");
     }
 }
