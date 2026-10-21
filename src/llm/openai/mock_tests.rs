@@ -309,6 +309,34 @@ async fn stream_against_mock_server() {
     assert_eq!(usage.total_tokens, 3);
 }
 
+// #290: some OpenAI-compatible servers attach usage to every chunk,
+// the content of those chunks must not be dropped.
+#[tokio::test]
+async fn stream_keeps_content_of_chunks_that_carry_usage() {
+    let mut server = mockito::Server::new_async().await;
+    let usage = json!({"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3});
+    server
+        .mock("POST", "/chat/completions")
+        .with_header("content-type", "text/event-stream")
+        .with_body(sse(&[
+            chunk(Some("Hel"), Some(usage.clone())),
+            chunk(Some("lo"), Some(usage)),
+        ]))
+        .create_async()
+        .await;
+
+    let items: Vec<StreamData> = llm_for(&server)
+        .stream(&[Message::new_human_message("hi")])
+        .await
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+        .await;
+    let text: String = items.iter().map(|d| d.content.as_str()).collect();
+    assert_eq!(text, "Hello");
+    assert_eq!(items[1].tokens.as_ref().unwrap().total_tokens, 3);
+}
+
 #[tokio::test]
 async fn generate_with_streaming_func_collects_chunks() {
     let mut server = mockito::Server::new_async().await;
