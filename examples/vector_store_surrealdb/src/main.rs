@@ -1,11 +1,11 @@
-// To run this example execute: `cargo run` in the folder. Be sure to have an OpenAPI key
+// To run this example execute: `cargo run` in the folder. Be sure to have an OpenAI key
 // set to the OPENAI_API_KEY env var
 
 use anyhow::Error;
 use langchain_rust::{
     embedding::openai::openai_embedder::OpenAiEmbedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore, surrealdb::StoreBuilder},
+    vectorstore::{surrealdb::StoreBuilder, VecStoreOptions, VectorStore},
 };
 use std::io::Write;
 
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Error> {
     //  });
 
     let db = surrealdb::engine::any::connect((database_url, surrealdb_config)).await?;
-    db.query("DEFINE NAMESPACE test;").await.unwrap().check()?;
+    db.query("DEFINE NAMESPACE test;").await?.check()?;
     db.query("USE NAMESPACE test; DEFINE DATABASE test;")
         .await?
         .check()?;
