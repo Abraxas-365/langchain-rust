@@ -6,6 +6,8 @@ use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
 use tokio::time::error::Elapsed;
 
+#[cfg(feature = "bedrock")]
+use crate::llm::BedrockError;
 use crate::llm::{AnthropicError, DeepseekError, QwenError};
 
 #[derive(Error, Debug)]
@@ -25,6 +27,10 @@ pub enum LLMError {
     #[cfg(feature = "ollama")]
     #[error("Ollama error: {0}")]
     OllamaError(#[from] OllamaError),
+
+    #[cfg(feature = "bedrock")]
+    #[error("Bedrock error: {0}")]
+    BedrockError(#[from] BedrockError),
 
     #[error("Network request failed: {0}")]
     RequestError(#[from] ReqwestError),

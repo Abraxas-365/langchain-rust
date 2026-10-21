@@ -5,11 +5,13 @@
 //! - Access to AWS Bedrock models
 //! - Internet connectivity
 //!
-//! Run with: cargo test --features aws-sdk-bedrockruntime --test bedrock_integration_tests -- --ignored
+//! Run with: cargo test --features bedrock --test bedrock_integration_tests -- --ignored
 //! (Tests are ignored by default to avoid requiring AWS credentials in CI)
 
-use langchain_rust::llm::bedrock::{Bedrock, BedrockModel};
+#![cfg(feature = "bedrock")]
+
 use langchain_rust::language_models::llm::LLM;
+use langchain_rust::llm::bedrock::{Bedrock, BedrockModel};
 use langchain_rust::schemas::Message;
 
 /// Helper function to check if AWS credentials are available
@@ -44,7 +46,10 @@ async fn test_bedrock_claude_generate() {
     assert!(result.is_ok(), "Failed to generate: {:?}", result.err());
 
     let response = result.unwrap();
-    assert!(!response.generation.is_empty(), "Response should not be empty");
+    assert!(
+        !response.generation.is_empty(),
+        "Response should not be empty"
+    );
     println!("Response: {}", response.generation);
 }
 
@@ -93,7 +98,11 @@ async fn test_bedrock_haiku_model() {
 
     let result = bedrock.generate(&messages).await;
 
-    assert!(result.is_ok(), "Failed to generate with Haiku: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Failed to generate with Haiku: {:?}",
+        result.err()
+    );
 
     let response = result.unwrap();
     assert!(!response.generation.is_empty());
@@ -116,7 +125,11 @@ async fn test_bedrock_with_region() {
 
     let result = bedrock.generate(&messages).await;
 
-    assert!(result.is_ok(), "Failed to generate in us-east-1: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Failed to generate in us-east-1: {:?}",
+        result.err()
+    );
     assert!(!result.unwrap().generation.is_empty());
 }
 
@@ -139,8 +152,15 @@ async fn test_bedrock_custom_model_id() {
 
     let result = bedrock.generate(&messages).await;
 
-    assert!(result.is_ok(), "Failed to generate with custom model ID: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Failed to generate with custom model ID: {:?}",
+        result.err()
+    );
 
     let response = result.unwrap();
-    assert!(!response.generation.is_empty(), "Response should not be empty");
+    assert!(
+        !response.generation.is_empty(),
+        "Response should not be empty"
+    );
 }
