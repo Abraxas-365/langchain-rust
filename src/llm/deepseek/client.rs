@@ -6,10 +6,10 @@ use crate::{
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use reqwest::Client;
-use serde_json::Value;
-use std::{pin::Pin, str};
+use std::pin::Pin;
 
 use super::models::{ApiResponse, DeepseekMessage, Payload, ResponseFormat};
+use crate::llm::sse::{sse_json_events, usage_from_chunk};
 
 pub enum DeepseekModel {
     DeepseekChat,
@@ -190,26 +190,6 @@ impl Deepseek {
 
         payload
     }
-
-    fn parse_sse_chunk(chunk: &[u8]) -> Result<Vec<Value>, LLMError> {
-        let text = str::from_utf8(chunk).map_err(|e| LLMError::ParsingError(e.to_string()))?;
-        let mut values = Vec::new();
-
-        for line in text.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
-                if data == "[DONE]" {
-                    continue;
-                }
-                let value: Value = serde_json::from_str(data).map_err(|e| {
-                    LLMError::ParsingError(format!("Failed to parse SSE data: {}", e))
-                })?;
-                values.push(value);
-            }
-        }
-
-        Ok(values)
-    }
 }
 
 #[async_trait]
@@ -256,113 +236,30 @@ impl LLM for Deepseek {
         let include_reasoning = self.include_reasoning;
         let is_reasoner = self.model == DeepseekModel::DeepseekReasoner.to_string();
 
-        let processed_stream = stream
-            .then(move |result| {
-                async move {
-                    match result {
-                        Ok(bytes) => {
-                            let chunks = Self::parse_sse_chunk(&bytes)?;
-
-                            for chunk in chunks {
-                                if let Some(choices) =
-                                    chunk.get("choices").and_then(|c| c.as_array())
-                                {
-                                    if let Some(choice) = choices.first() {
-                                        if let Some(delta) = choice.get("delta") {
-                                            // Handle reasoning_content if it exists
-                                            if include_reasoning && is_reasoner {
-                                                if let Some(reasoning) = delta
-                                                    .get("reasoning_content")
-                                                    .and_then(|c| c.as_str())
-                                                {
-                                                    if !reasoning.is_empty() {
-                                                        let usage = if let Some(usage) =
-                                                            chunk.get("usage")
-                                                        {
-                                                            Some(TokenUsage {
-                                                                prompt_tokens: usage
-                                                                    .get("prompt_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                completion_tokens: usage
-                                                                    .get("completion_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                total_tokens: usage
-                                                                    .get("total_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                            })
-                                                        } else {
-                                                            None
-                                                        };
-
-                                                        return Ok(StreamData::new(
-                                                            chunk.clone(),
-                                                            usage,
-                                                            format!("Reasoning: {}", reasoning),
-                                                        ));
-                                                    }
-                                                }
-                                            }
-
-                                            // Handle content as before
-                                            if let Some(content) =
-                                                delta.get("content").and_then(|c| c.as_str())
-                                            {
-                                                if !content.is_empty() {
-                                                    let usage =
-                                                        if let Some(usage) = chunk.get("usage") {
-                                                            Some(TokenUsage {
-                                                                prompt_tokens: usage
-                                                                    .get("prompt_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                completion_tokens: usage
-                                                                    .get("completion_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                                total_tokens: usage
-                                                                    .get("total_tokens")
-                                                                    .and_then(|t| t.as_u64())
-                                                                    .unwrap_or(0)
-                                                                    as u32,
-                                                            })
-                                                        } else {
-                                                            None
-                                                        };
-
-                                                    return Ok(StreamData::new(
-                                                        chunk.clone(),
-                                                        usage,
-                                                        content,
-                                                    ));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // If we didn't return within the loop, return an empty stream data
-                            Ok(StreamData::new(Value::Null, None, ""))
-                        }
-                        Err(e) => Err(LLMError::OtherError(e.to_string())),
-                    }
+        let processed_stream = sse_json_events(stream).filter_map(move |event| async move {
+            let chunk = match event {
+                Ok(chunk) => chunk,
+                Err(e) => return Some(Err(e)),
+            };
+            let delta = chunk.get("choices")?.as_array()?.first()?.get("delta")?;
+            let usage = usage_from_chunk(&chunk);
+            if include_reasoning && is_reasoner {
+                if let Some(reasoning) = delta
+                    .get("reasoning_content")
+                    .and_then(|c| c.as_str())
+                    .filter(|r| !r.is_empty())
+                {
+                    let content = format!("Reasoning: {}", reasoning);
+                    return Some(Ok(StreamData::new(chunk.clone(), usage, content)));
                 }
-            })
-            .filter_map(|result| async move {
-                match result {
-                    Ok(data) if !data.content.is_empty() => Some(Ok(data)),
-                    Ok(_) => None,
-                    Err(e) => Some(Err(e)),
-                }
-            });
+            }
+            let content = delta
+                .get("content")
+                .and_then(|c| c.as_str())
+                .filter(|c| !c.is_empty())?
+                .to_string();
+            Some(Ok(StreamData::new(chunk, usage, content)))
+        });
 
         Ok(Box::pin(processed_stream))
     }

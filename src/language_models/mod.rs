@@ -72,3 +72,45 @@ impl TokenUsage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn token_usage_new_sum_add() {
+        let a = TokenUsage::new(3, 4);
+        assert_eq!(a.total_tokens, 7);
+        let b = TokenUsage::new(1, 2);
+        let s = a.sum(&b);
+        assert_eq!(
+            (s.prompt_tokens, s.completion_tokens, s.total_tokens),
+            (4, 6, 10)
+        );
+        let mut c = a.clone();
+        c.add(&b);
+        assert_eq!(c.total_tokens, 10);
+        // sum does not mutate
+        assert_eq!(a.total_tokens, 7);
+    }
+
+    #[test]
+    fn generate_result_to_hashmap() {
+        let without = GenerateResult {
+            generation: "hi".into(),
+            tokens: None,
+        };
+        let m = without.to_hashmap();
+        assert_eq!(m.len(), 1);
+        assert_eq!(m["generation"], "hi");
+
+        let with = GenerateResult {
+            generation: "hi".into(),
+            tokens: Some(TokenUsage::new(1, 2)),
+        };
+        let m = with.to_hashmap();
+        assert_eq!(m["prompt_tokens"], "1");
+        assert_eq!(m["completion_tokens"], "2");
+        assert_eq!(m["total_tokens"], "3");
+    }
+}

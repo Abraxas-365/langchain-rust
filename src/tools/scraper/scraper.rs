@@ -107,4 +107,20 @@ mod tests {
         // Verify that the mock was called as expected
         mock.assert();
     }
+
+    #[tokio::test]
+    async fn scrape_skips_scripts_and_collapses_whitespace() {
+        let mut server = mockito::Server::new_async().await;
+        server
+            .mock("GET", "/page")
+            .with_body(
+                "<html><head><title>T</title></head><body>\n<h1>Title</h1>\t<div><p>Hello\n   <b>bold</b></p>\
+                 <script>var x = 1;</script><span>end</span></div></body></html>",
+            )
+            .create_async()
+            .await;
+        let content = scrape_url(&format!("{}/page", server.url())).await.unwrap();
+        assert_eq!(content.trim(), "Title Hello bold end");
+        assert!(!content.contains("var x"));
+    }
 }

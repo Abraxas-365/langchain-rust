@@ -26,3 +26,6 @@ mod error;
 pub use error::*;
 
 pub mod options;
+
+#[cfg(test)]
+mod tests;

@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, sync::Arc};
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{AssertSqlSafe, Pool, Row, Sqlite};
 
 use crate::{
     embedding::embedder_trait::Embedder,
@@ -28,7 +28,7 @@ impl Store {
     async fn create_table_if_not_exists(&self) -> Result<(), Box<dyn Error>> {
         let table = &self.table;
 
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             r#"
                 CREATE TABLE IF NOT EXISTS {table}
                 (
@@ -39,23 +39,23 @@ impl Store {
                 )
                 ;
                 "#
-        ))
+        )))
         .execute(&self.pool)
         .await?;
 
         let dimensions = self.vector_dimensions;
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             r#"
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_{table} USING vec0(
                   text_embedding float[{dimensions}]
                 );
                 "#
-        ))
+        )))
         .execute(&self.pool)
         .await?;
 
         // NOTE: python langchain seems to only use "embed_text" as the trigger name
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             r#"
                 CREATE TRIGGER IF NOT EXISTS embed_text_{table}
                 AFTER INSERT ON {table}
@@ -65,7 +65,7 @@ impl Store {
                     ;
                 END;
                 "#
-        ))
+        )))
         .execute(&self.pool)
         .await?;
 
@@ -114,13 +114,13 @@ impl VectorStore for Store {
 
         for (doc, vector) in docs.iter().zip(vectors.iter()) {
             let text_embedding = json!(&vector);
-            let id = sqlx::query(&format!(
+            let id = sqlx::query(AssertSqlSafe(format!(
                 r#"
                     INSERT INTO {table}
                         (text, metadata, text_embedding)
                     VALUES
                         (?,?,?)"#
-            ))
+            )))
             .bind(&doc.page_content)
             .bind(json!(&doc.metadata))
             .bind(text_embedding.to_string())
@@ -158,7 +158,7 @@ impl VectorStore for Store {
             metadata_query = "TRUE".to_string();
         }
 
-        let rows = sqlx::query(&format!(
+        let rows = sqlx::query(AssertSqlSafe(format!(
             r#"SELECT
                     text,
                     metadata,
@@ -168,7 +168,7 @@ impl VectorStore for Store {
                 WHERE v.text_embedding match '{query_vector}' AND k = ? AND {metadata_query}
                 ORDER BY distance
                 LIMIT ?"#
-        ))
+        )))
         .bind(limit as i32)
         .bind(limit as i32)
         .fetch_all(&self.pool)

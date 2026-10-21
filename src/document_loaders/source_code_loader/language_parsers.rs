@@ -78,7 +78,7 @@ pub fn get_language_by_filename(name: &String) -> Language {
     match extension.to_lowercase().as_str() {
         "c" => Language::C,
         "cs" => Language::CSharp,
-        "cc" | "cpp" | ".h" | "hpp" => Language::Cpp,
+        "cc" | "cpp" | "h" | "hpp" => Language::Cpp,
         "go" => Language::Go,
         "java" => Language::Java,
         "js" => Language::Javascript,
@@ -235,5 +235,54 @@ mod tests {
             documents[1].metadata.get("content_type").unwrap(),
             LanguageContentTypes::SimplifiedCode.to_string().as_str()
         );
+    }
+
+    #[test]
+    fn language_by_filename() {
+        for (file, lang) in [
+            ("a.c", "C"),
+            ("a.cs", "CSharp"),
+            ("a.cpp", "Cpp"),
+            ("a.h", "Cpp"),
+            ("a.go", "Go"),
+            ("a.java", "Java"),
+            ("a.JS", "Javascript"),
+            ("a.kt", "Kotlin"),
+            ("a.py", "Python"),
+            ("a.rs", "Rust"),
+            ("a.sc", "Scala"),
+            ("a.tsx", "Typescript"),
+        ] {
+            assert_eq!(
+                get_language_by_filename(&file.to_string()).to_string(),
+                lang,
+                "{file}"
+            );
+        }
+    }
+
+    /// Every bundled grammar must be ABI-compatible with the tree-sitter runtime.
+    #[test]
+    fn all_grammars_load_and_parse() {
+        let samples = [
+            (Language::C, "int main() { return 0; }"),
+            (Language::CSharp, "class A { void M() {} }"),
+            (Language::Cpp, "int main() { return 0; }"),
+            (Language::Go, "package main\nfunc main() {}"),
+            (Language::Java, "class A { void m() {} }"),
+            (Language::Javascript, "function f() { return 1; }"),
+            (Language::Kotlin, "fun main() { println(1) }"),
+            (Language::Python, "def f():\n    return 1\n"),
+            (Language::Rust, "fn main() {}"),
+            (Language::Scala, "object A { def f = 1 }"),
+            (Language::Typescript, "function f(x: number) { return x; }"),
+        ];
+        for (language, code) in samples {
+            let name = language.to_string();
+            let mut parser = get_language_parser(&language);
+            let tree = parser.parse(code, None).expect(&name);
+            assert!(!tree.root_node().has_error(), "{name}: parse error");
+            assert!(tree.root_node().child_count() > 0, "{name}: empty tree");
+        }
     }
 }

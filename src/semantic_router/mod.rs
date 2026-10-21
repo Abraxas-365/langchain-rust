@@ -8,3 +8,6 @@ mod index;
 pub use index::*;
 
 pub mod utils;
+
+#[cfg(test)]
+mod tests;
