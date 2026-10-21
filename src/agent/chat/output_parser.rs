@@ -14,7 +14,17 @@ use super::prompt::FORMAT_INSTRUCTIONS;
 #[derive(Debug, Deserialize)]
 struct AgentOutput {
     action: String,
+    /// Usually a string, but models often send an object for tools with several
+    /// arguments; that is kept as its JSON text so `Tool::parse_input` can read it back.
+    #[serde(deserialize_with = "string_or_json")]
     action_input: String,
+}
+
+fn string_or_json<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::String(s) => s,
+        other => other.to_string(),
+    })
 }
 
 pub struct ChatOutputParser {}
@@ -176,6 +186,21 @@ mod tests {
         match ChatOutputParser::new().parse(text).unwrap() {
             AgentEvent::Finish(f) => assert_eq!(f.output, "ok"),
             other => panic!("expected finish, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn object_action_input_is_passed_as_json() {
+        // #293: tools with several arguments get an object from the model
+        let text = r#"```json
+{"action": "Weather", "action_input": {"city": "Lima", "days": 3}}
+```"#;
+        match ChatOutputParser::new().parse(text).unwrap() {
+            AgentEvent::Action(actions) => {
+                let input: Value = serde_json::from_str(&actions[0].tool_input).unwrap();
+                assert_eq!(input, json!({"city": "Lima", "days": 3}));
+            }
+            other => panic!("expected action, got {other:?}"),
         }
     }
 

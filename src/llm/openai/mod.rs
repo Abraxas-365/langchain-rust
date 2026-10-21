@@ -174,24 +174,27 @@ impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
         let new_stream = original_stream.map(|result| match result {
             Ok(completion) => {
                 let value_completion = serde_json::to_value(completion).map_err(LLMError::from)?;
-                let usage = value_completion.pointer("/usage");
-                if usage.is_some() && !usage.unwrap().is_null() {
-                    let usage = serde_json::from_value::<TokenUsage>(usage.unwrap().clone())
-                        .map_err(LLMError::from)?;
-                    return Ok(StreamData::new(value_completion, Some(usage), ""));
-                }
-                let content = value_completion
-                    .pointer("/choices/0/delta/content")
-                    .ok_or(LLMError::ContentNotFound(
+                let tokens = match value_completion.pointer("/usage") {
+                    Some(usage) if !usage.is_null() => Some(
+                        serde_json::from_value::<TokenUsage>(usage.clone())
+                            .map_err(LLMError::from)?,
+                    ),
+                    _ => None,
+                };
+                // Some OpenAI-compatible providers send usage together with the last
+                // content delta (#290), so the content is read even when usage is present.
+                let content = value_completion.pointer("/choices/0/delta/content");
+                if tokens.is_none() && content.is_none() {
+                    return Err(LLMError::ContentNotFound(
                         "/choices/0/delta/content".to_string(),
-                    ))?
-                    .clone();
+                    ));
+                }
+                let content = content
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
 
-                Ok(StreamData::new(
-                    value_completion,
-                    None,
-                    content.as_str().unwrap_or(""),
-                ))
+                Ok(StreamData::new(value_completion, tokens, content))
             }
             Err(e) => Err(LLMError::from(e)),
         });

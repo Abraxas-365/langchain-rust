@@ -171,43 +171,47 @@ impl VectorStore for Store {
             .client
             .search(SearchParts::Index(&[&self.index]))
             .from(0)
-            .size(3)
+            .size(limit as i64)
             .body(query)
             .send()
             .await?;
 
+        let status = response.status_code();
         let response_body = response.json::<Value>().await?;
+        if !status.is_success() {
+            return Err(format!("opensearch search failed ({status}): {response_body}").into());
+        }
 
-        let aoss_documents = response_body["hits"]["hits"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|raw_value| {
-                serde_json::from_value::<HashMap<String, Value>>(raw_value.clone()).unwrap()
-            })
-            .collect::<Vec<_>>();
-
-        let documents = aoss_documents
-            .into_iter()
-            .map(|item| {
-                let page_content =
-                    serde_json::from_value::<String>(item["_source"][&self.content_field].clone())
-                        .unwrap();
-                let metadata = serde_json::from_value::<HashMap<String, Value>>(
-                    item["_source"]["metadata"].clone(),
-                )
-                .unwrap();
-                let score = serde_json::from_value::<f64>(item["_score"].clone()).unwrap();
-                Document {
-                    page_content,
-                    metadata,
-                    score,
-                }
-            })
-            .collect();
-
-        Ok(documents)
+        parse_search_hits(&response_body, &self.content_field)
     }
+}
+
+/// Turns an OpenSearch `_search` response body into documents.
+fn parse_search_hits(body: &Value, content_field: &str) -> Result<Vec<Document>, Box<dyn Error>> {
+    let hits = body
+        .pointer("/hits/hits")
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("unexpected opensearch response, missing hits.hits: {body}"))?;
+
+    hits.iter()
+        .map(|hit| {
+            let source = &hit["_source"];
+            let page_content = source[content_field]
+                .as_str()
+                .ok_or_else(|| format!("hit has no string field `{content_field}`: {hit}"))?
+                .to_string();
+            let metadata = match &source["metadata"] {
+                Value::Object(map) => map.clone().into_iter().collect(),
+                _ => HashMap::new(),
+            };
+            let score = hit["_score"].as_f64().unwrap_or_default();
+            Ok(Document {
+                page_content,
+                metadata,
+                score,
+            })
+        })
+        .collect()
 }
 
 fn build_similarity_search_query(
@@ -245,5 +249,38 @@ fn build_similarity_search_query(
               }
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_search_hits;
+    use serde_json::json;
+
+    #[test]
+    fn parses_hits_into_documents() {
+        let body = json!({"hits": {"hits": [
+            {"_score": 0.9, "_source": {"text": "rust", "metadata": {"lang": "en"}}},
+            {"_score": 0.5, "_source": {"text": "go"}}
+        ]}});
+        let docs = parse_search_hits(&body, "text").unwrap();
+        assert_eq!(docs.len(), 2);
+        assert_eq!(docs[0].page_content, "rust");
+        assert_eq!(docs[0].score, 0.9);
+        assert_eq!(docs[0].metadata["lang"], json!("en"));
+        assert!(docs[1].metadata.is_empty());
+    }
+
+    // #308: an error body (or a mapping without the content field) used to panic.
+    #[test]
+    fn error_bodies_are_errors_not_panics() {
+        let err = json!({"error": {"type": "index_not_found_exception"}, "status": 404});
+        assert!(parse_search_hits(&err, "text").is_err());
+
+        let wrong_field = json!({"hits": {"hits": [{"_score": 1.0, "_source": {"body": "x"}}]}});
+        let msg = parse_search_hits(&wrong_field, "text")
+            .unwrap_err()
+            .to_string();
+        assert!(msg.contains("`text`"), "{msg}");
     }
 }

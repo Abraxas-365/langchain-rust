@@ -8,7 +8,8 @@
 ⚡ Building applications with LLMs through composability, with Rust! ⚡
 
 [![Discord](https://dcbadge.vercel.app/api/server/JJFcTFbanu?style=for-the-badge)](https://discord.gg/JJFcTFbanu)
-[![Docs: Tutorial](https://img.shields.io/badge/docs-tutorial-success?style=for-the-badge&logo=appveyor)](https://langchain-rust.sellie.tech/get-started/quickstart)
+[![Docs: docs.rs](https://img.shields.io/docsrs/langchain-rust?style=for-the-badge)](https://docs.rs/langchain-rust)
+[![Examples](https://img.shields.io/badge/examples-github-success?style=for-the-badge)](https://github.com/Abraxas-365/langchain-rust/tree/main/examples)
 
 ## 🤔 What is this?
 
