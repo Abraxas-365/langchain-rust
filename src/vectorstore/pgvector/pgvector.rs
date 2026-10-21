@@ -267,7 +267,7 @@ impl VectorStore for Store {
             ) AS data
             WHERE {}
             ORDER BY
-                data.distance DESC
+                data.distance ASC
             LIMIT $3"#,
             self.embedder_table_name,
             self.collection_table_name,

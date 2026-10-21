@@ -241,8 +241,10 @@ async fn openai_tools_agent_executes_parallel_tool_calls() {
         ]),
         "Sunny at noon".to_string(),
     ]);
+    // Tools collected at runtime in a Vec<Arc<dyn Tool>> work too (#323): &Vec derefs to a slice.
+    let tools: Vec<Arc<dyn Tool>> = vec![Arc::new(weather.clone()), Arc::new(time.clone())];
     let agent = OpenAiToolAgentBuilder::new()
-        .tools(&[Arc::new(weather.clone()), Arc::new(time.clone())])
+        .tools(&tools)
         .build(llm.clone())
         .unwrap();
     let memory = Arc::new(Mutex::new(SimpleMemory::new()));
