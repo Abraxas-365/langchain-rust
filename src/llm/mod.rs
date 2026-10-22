@@ -17,3 +17,9 @@ mod sse;
 
 #[cfg(test)]
 mod http_mock_tests;
+
+#[cfg(feature = "bedrock")]
+pub mod bedrock;
+
+#[cfg(feature = "bedrock")]
+pub use bedrock::*;

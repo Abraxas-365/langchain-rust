@@ -78,6 +78,8 @@ opensearch = { version = "2.3", optional = true, features = ["aws-auth"] }
 aws-config = { version = "1.8", optional = true, features = [
     "behavior-version-latest",
 ] }
+aws-sdk-bedrockruntime = { version = "1.120", optional = true }
+aws-smithy-types = { version = "1", optional = true }
 glob = "0.3.3"
 strum_macros = "0.28"
 async-recursion = "1.1.1"
@@ -107,7 +109,7 @@ mistralai = ["mistralai-client"]
 lopdf = ["dep:lopdf"]
 pdf-extract = ["dep:pdf-extract"]
 ollama = ["ollama-rs"]
-opensearch = ["dep:opensearch", "aws-config"]
+opensearch = ["dep:opensearch", "dep:aws-config"]
 postgres = ["pgvector", "sqlx", "uuid"]
 qdrant = ["qdrant-client", "uuid"]
 sqlite-vss = ["sqlx"]
@@ -128,6 +130,7 @@ tree-sitter = [
     "dep:tree-sitter-scala",
     "dep:tree-sitter-typescript",
 ]
+bedrock = ["dep:aws-sdk-bedrockruntime", "dep:aws-smithy-types", "dep:aws-config"]
 
 [dev-dependencies]
 base64 = "0.23"
