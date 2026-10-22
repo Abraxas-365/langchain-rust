@@ -133,6 +133,7 @@ tree-sitter = [
 bedrock = ["dep:aws-sdk-bedrockruntime", "dep:aws-smithy-types", "dep:aws-config"]
 
 [dev-dependencies]
+aws-smithy-eventstream = "0.61"
 base64 = "0.23"
 surrealdb = { version = "3", default-features = false, features = ["kv-mem"] }
 tokio-test = "0.4.6"

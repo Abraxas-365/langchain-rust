@@ -44,7 +44,7 @@ impl ClaudeMessage {
                 "type": "tool_use",
                 "id": call.id,
                 "name": call.function.name,
-                "input": arguments_to_input(&call.function.arguments),
+                "input": call.function.arguments_object(),
             }));
         }
         Self::new("assistant", Value::Array(blocks))
@@ -100,18 +100,6 @@ pub(crate) fn to_claude_messages(messages: &[&Message]) -> Vec<ClaudeMessage> {
         }
     }
     out
-}
-
-/// Tool arguments arrive as a JSON string; Anthropic wants a JSON object as `input`.
-fn arguments_to_input(arguments: &str) -> Value {
-    if arguments.trim().is_empty() {
-        return json!({});
-    }
-    match serde_json::from_str::<Value>(arguments) {
-        Ok(v @ Value::Object(_)) => v,
-        Ok(other) => json!({ "input": other }),
-        Err(_) => json!({ "input": arguments }),
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

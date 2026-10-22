@@ -15,6 +15,11 @@
 //! chain (environment variables, `~/.aws/credentials`, instance profile, ...).
 //! Calling [`Bedrock::with_region`] overrides the region.
 //!
+//! Tool calling and streaming are supported. Tools passed through
+//! [`CallOptions::functions`] (which `OpenAiToolAgent` does for you) are sent as a
+//! Converse `toolConfig`, and tool calls come back in the same OpenAI-like format as
+//! the other providers.
+//!
 //! ```rust,no_run
 //! use langchain_rust::language_models::llm::LLM;
 //! use langchain_rust::llm::bedrock::{Bedrock, BedrockModel};
@@ -33,23 +38,33 @@
 //! }
 //! ```
 
+use std::collections::BTreeMap;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_bedrockruntime::types::{
-    ContentBlock, ConversationRole, InferenceConfiguration, Message as BedrockMessage,
-    SystemContentBlock,
+    AutoToolChoice, ContentBlock, ContentBlockDelta, ContentBlockStart, ConversationRole,
+    ConverseStreamOutput, InferenceConfiguration, Message as BedrockMessage, SpecificToolChoice,
+    SystemContentBlock, Tool, ToolChoice, ToolConfiguration, ToolInputSchema, ToolResultBlock,
+    ToolResultContentBlock, ToolSpecification, ToolUseBlock,
 };
 use aws_sdk_bedrockruntime::Client as BedrockClient;
+use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_smithy_types::{Document, Number};
+use futures::Stream;
+use serde_json::{json, Value};
 use thiserror::Error;
 use tokio::sync::OnceCell;
 
 use crate::language_models::llm::LLM;
+use crate::language_models::options::CallOptions;
 use crate::language_models::{GenerateResult, LLMError, TokenUsage};
 use crate::schemas::messages::MessageType;
-use crate::schemas::{Message, StreamData};
+use crate::schemas::{
+    FunctionCallBehavior, FunctionCallResponse, FunctionDefinition, Message, StreamData,
+};
 
 /// Errors specific to the Bedrock integration.
 #[derive(Error, Debug)]
@@ -158,6 +173,7 @@ impl Default for BedrockConfig {
 pub struct Bedrock {
     client: Arc<OnceCell<BedrockClient>>,
     config: BedrockConfig,
+    options: CallOptions,
 }
 
 impl Bedrock {
@@ -169,6 +185,7 @@ impl Bedrock {
         Self {
             client: Arc::new(OnceCell::new()),
             config,
+            options: CallOptions::default(),
         }
     }
 
@@ -217,6 +234,20 @@ impl Bedrock {
         self
     }
 
+    /// Set call options (tools, tool choice, streaming callback, ...). Values set here
+    /// override the matching [`BedrockConfig`] settings.
+    pub fn with_options(mut self, options: CallOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    /// Tools the model may call. Tool calls come back in `generation` in the OpenAI-like
+    /// format used across the crate, so `OpenAiToolAgent` works with Bedrock.
+    pub fn with_tools(mut self, tools: Vec<FunctionDefinition>) -> Self {
+        self.options.functions = Some(tools);
+        self
+    }
+
     pub fn config(&self) -> &BedrockConfig {
         &self.config
     }
@@ -235,47 +266,226 @@ impl Bedrock {
 
     /// Split langchain messages into the Converse API's `system` blocks and
     /// `messages` list.
+    ///
+    /// AI tool calls become `toolUse` blocks and tool results become `toolResult`
+    /// blocks in a `user` turn (Converse has no tool role). Consecutive turns with the
+    /// same role are merged, because Converse requires alternating roles and wants all
+    /// results of a parallel tool call in a single user message.
     fn to_converse_messages(
         messages: &[Message],
     ) -> Result<(Vec<SystemContentBlock>, Vec<BedrockMessage>), BedrockError> {
         let mut system = Vec::new();
-        let mut converse = Vec::new();
+        let mut turns: Vec<(ConversationRole, Vec<ContentBlock>)> = Vec::new();
 
         for msg in messages {
-            let role = match msg.message_type {
+            let (role, blocks) = match msg.message_type {
                 MessageType::SystemMessage => {
                     system.push(SystemContentBlock::Text(msg.content.clone()));
                     continue;
                 }
-                MessageType::AIMessage => ConversationRole::Assistant,
-                MessageType::HumanMessage | MessageType::ToolMessage => ConversationRole::User,
+                MessageType::AIMessage => (ConversationRole::Assistant, assistant_blocks(msg)?),
+                MessageType::HumanMessage => (
+                    ConversationRole::User,
+                    vec![ContentBlock::Text(msg.content.clone())],
+                ),
+                MessageType::ToolMessage => {
+                    let result = ToolResultBlock::builder()
+                        .tool_use_id(msg.id.clone().unwrap_or_default())
+                        .content(ToolResultContentBlock::Text(msg.content.clone()))
+                        .build()
+                        .map_err(request_error)?;
+                    (
+                        ConversationRole::User,
+                        vec![ContentBlock::ToolResult(result)],
+                    )
+                }
             };
-            let built = BedrockMessage::builder()
-                .role(role)
-                .content(ContentBlock::Text(msg.content.clone()))
-                .build()
-                .map_err(|e| BedrockError::RequestError(e.to_string()))?;
-            converse.push(built);
+            match turns.last_mut() {
+                Some((last_role, last_blocks)) if *last_role == role => last_blocks.extend(blocks),
+                _ => turns.push((role, blocks)),
+            }
         }
+
+        let converse = turns
+            .into_iter()
+            .map(|(role, blocks)| {
+                BedrockMessage::builder()
+                    .role(role)
+                    .set_content(Some(blocks))
+                    .build()
+                    .map_err(request_error)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok((system, converse))
     }
 
+    /// Inference settings. Call options (set by chains/agents) win over [`BedrockConfig`].
     fn inference_config(&self) -> InferenceConfiguration {
-        let mut cfg = InferenceConfiguration::builder();
-        if let Some(v) = self.config.max_tokens {
-            cfg = cfg.max_tokens(v);
+        let mut stop_sequences = self.config.stop_sequences.clone();
+        if let Some(words) = &self.options.stop_words {
+            stop_sequences.extend(words.iter().cloned());
         }
-        if let Some(v) = self.config.temperature {
-            cfg = cfg.temperature(v);
+        InferenceConfiguration::builder()
+            .set_max_tokens(
+                self.options
+                    .max_tokens
+                    .map(|v| v as i32)
+                    .or(self.config.max_tokens),
+            )
+            .set_temperature(self.options.temperature.or(self.config.temperature))
+            .set_top_p(self.options.top_p.or(self.config.top_p))
+            .set_stop_sequences((!stop_sequences.is_empty()).then_some(stop_sequences))
+            .build()
+    }
+
+    fn tool_config(&self) -> Result<Option<ToolConfiguration>, BedrockError> {
+        let Some(functions) = self.options.functions.as_ref().filter(|f| !f.is_empty()) else {
+            return Ok(None);
+        };
+        // Converse has no "none" tool choice; leaving the tools out is the equivalent.
+        if matches!(
+            self.options.function_call_behavior,
+            Some(FunctionCallBehavior::None)
+        ) {
+            return Ok(None);
         }
-        if let Some(v) = self.config.top_p {
-            cfg = cfg.top_p(v);
+
+        let tools = functions
+            .iter()
+            .map(|f| {
+                ToolSpecification::builder()
+                    .name(&f.name)
+                    .set_description((!f.description.is_empty()).then(|| f.description.clone()))
+                    .input_schema(ToolInputSchema::Json(json_to_document(&f.parameters)))
+                    .build()
+                    .map(Tool::ToolSpec)
+                    .map_err(request_error)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let choice = match &self.options.function_call_behavior {
+            Some(FunctionCallBehavior::Named(name)) => Some(ToolChoice::Tool(
+                SpecificToolChoice::builder()
+                    .name(name)
+                    .build()
+                    .map_err(request_error)?,
+            )),
+            Some(FunctionCallBehavior::Auto) => {
+                Some(ToolChoice::Auto(AutoToolChoice::builder().build()))
+            }
+            _ => None,
+        };
+
+        ToolConfiguration::builder()
+            .set_tools(Some(tools))
+            .set_tool_choice(choice)
+            .build()
+            .map(Some)
+            .map_err(request_error)
+    }
+
+    fn additional_fields(&self) -> Option<Document> {
+        let fields = &self.config.additional_model_request_fields;
+        (!fields.is_null()).then(|| json_to_document(fields))
+    }
+
+    async fn generate_blocking(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+        let (system, converse_messages) = Self::to_converse_messages(messages)?;
+        let response = self
+            .client()
+            .await
+            .converse()
+            .model_id(self.config.model.model_id())
+            .set_system(Some(system))
+            .set_messages(Some(converse_messages))
+            .inference_config(self.inference_config())
+            .set_tool_config(self.tool_config()?)
+            .set_additional_model_request_fields(self.additional_fields())
+            .send()
+            .await
+            .map_err(invocation_error)?;
+
+        let blocks = response
+            .output()
+            .and_then(|o| o.as_message().ok())
+            .map(|m| m.content())
+            .unwrap_or_default();
+        let generation = generation_from_blocks(blocks.iter().filter_map(|block| match block {
+            ContentBlock::Text(text) => Some(Block::Text(text.clone())),
+            ContentBlock::ToolUse(tool) => Some(Block::ToolUse {
+                id: tool.tool_use_id().to_string(),
+                name: tool.name().to_string(),
+                input: document_to_json(tool.input()).to_string(),
+            }),
+            _ => None,
+        }))?;
+
+        Ok(GenerateResult {
+            generation,
+            tokens: response.usage().map(token_usage),
+        })
+    }
+
+    async fn converse_stream(
+        &self,
+        messages: &[Message],
+    ) -> Result<impl Stream<Item = Result<ConverseStreamOutput, LLMError>> + Send, LLMError> {
+        let (system, converse_messages) = Self::to_converse_messages(messages)?;
+        let output = self
+            .client()
+            .await
+            .converse_stream()
+            .model_id(self.config.model.model_id())
+            .set_system(Some(system))
+            .set_messages(Some(converse_messages))
+            .inference_config(self.inference_config())
+            .set_tool_config(self.tool_config()?)
+            .set_additional_model_request_fields(self.additional_fields())
+            .send()
+            .await
+            .map_err(invocation_error)?;
+
+        let mut receiver = output.stream;
+        Ok(async_stream::stream! {
+            loop {
+                match receiver.recv().await {
+                    Ok(Some(event)) => yield Ok(event),
+                    Ok(None) => break,
+                    Err(e) => {
+                        yield Err(invocation_error(e).into());
+                        break;
+                    }
+                }
+            }
+        })
+    }
+
+    /// Streams the response, forwarding text deltas to `streaming_func` while rebuilding
+    /// the full content blocks (tool input arrives as JSON fragments).
+    async fn generate_streaming(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+        use futures::StreamExt;
+
+        let func = self
+            .options
+            .streaming_func
+            .clone()
+            .ok_or_else(|| LLMError::OtherError("streaming_func not set".into()))?;
+        let events = self.converse_stream(messages).await?;
+        futures::pin_mut!(events);
+
+        let mut acc = StreamAccumulator::default();
+        while let Some(event) = events.next().await {
+            let event = event?;
+            if let Some(text) = acc.push(&event) {
+                let mut func = func.lock().await;
+                let _ = func(text).await;
+            }
         }
-        for stop in &self.config.stop_sequences {
-            cfg = cfg.stop_sequences(stop.clone());
-        }
-        cfg.build()
+        Ok(GenerateResult {
+            generation: generation_from_blocks(acc.blocks.into_values())?,
+            tokens: acc.usage,
+        })
     }
 }
 
@@ -285,8 +495,145 @@ impl Default for Bedrock {
     }
 }
 
+fn request_error(e: impl std::fmt::Display) -> BedrockError {
+    BedrockError::RequestError(e.to_string())
+}
+
+/// Keeps the full error chain (the top-level SDK error alone is just "service error").
+fn invocation_error<E: std::error::Error>(e: E) -> BedrockError {
+    BedrockError::InvocationError(DisplayErrorContext(e).to_string())
+}
+
+fn token_usage(u: &aws_sdk_bedrockruntime::types::TokenUsage) -> TokenUsage {
+    TokenUsage {
+        prompt_tokens: u.input_tokens() as u32,
+        completion_tokens: u.output_tokens() as u32,
+        total_tokens: u.total_tokens() as u32,
+    }
+}
+
+/// Assistant content: the text (if any) followed by one `toolUse` block per tool call
+/// stored in the OpenAI-like format used across the crate.
+fn assistant_blocks(msg: &Message) -> Result<Vec<ContentBlock>, BedrockError> {
+    let calls = msg
+        .tool_calls
+        .clone()
+        .and_then(|v| serde_json::from_value::<Vec<FunctionCallResponse>>(v).ok())
+        .unwrap_or_default();
+
+    let mut blocks = Vec::new();
+    if !msg.content.trim().is_empty() || calls.is_empty() {
+        blocks.push(ContentBlock::Text(msg.content.clone()));
+    }
+    for call in calls {
+        let block = ToolUseBlock::builder()
+            .tool_use_id(call.id)
+            .name(&call.function.name)
+            .input(json_to_document(&call.function.arguments_object()))
+            .build()
+            .map_err(request_error)?;
+        blocks.push(ContentBlock::ToolUse(block));
+    }
+    Ok(blocks)
+}
+
+/// A provider-agnostic view of the response content we care about.
+#[derive(Debug, Clone, PartialEq)]
+enum Block {
+    Text(String),
+    /// `input` is the raw JSON string of the tool arguments.
+    ToolUse {
+        id: String,
+        name: String,
+        input: String,
+    },
+}
+
+/// The generation string: OpenAI-like tool calls as JSON when the model asked for tools
+/// (what `OpenAiToolAgent` expects), otherwise the joined text.
+fn generation_from_blocks(blocks: impl IntoIterator<Item = Block>) -> Result<String, LLMError> {
+    let mut text = String::new();
+    let mut calls = Vec::new();
+    for block in blocks {
+        match block {
+            Block::Text(t) => text.push_str(&t),
+            Block::ToolUse { id, name, input } => calls.push(json!({
+                "id": id,
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": if input.trim().is_empty() { "{}".to_string() } else { input },
+                },
+            })),
+        }
+    }
+    if !calls.is_empty() {
+        return Ok(Value::Array(calls).to_string());
+    }
+    if text.is_empty() {
+        return Err(BedrockError::EmptyResponse.into());
+    }
+    Ok(text)
+}
+
+/// Rebuilds content blocks and usage from `ConverseStream` events.
+#[derive(Default)]
+struct StreamAccumulator {
+    blocks: BTreeMap<i32, Block>,
+    usage: Option<TokenUsage>,
+}
+
+impl StreamAccumulator {
+    /// Applies an event; returns the text delta, if the event carried one.
+    fn push(&mut self, event: &ConverseStreamOutput) -> Option<String> {
+        match event {
+            ConverseStreamOutput::ContentBlockStart(start) => {
+                if let Some(ContentBlockStart::ToolUse(tool)) = start.start() {
+                    self.blocks.insert(
+                        start.content_block_index(),
+                        Block::ToolUse {
+                            id: tool.tool_use_id().to_string(),
+                            name: tool.name().to_string(),
+                            input: String::new(),
+                        },
+                    );
+                }
+                None
+            }
+            ConverseStreamOutput::ContentBlockDelta(delta) => {
+                let index = delta.content_block_index();
+                match delta.delta()? {
+                    ContentBlockDelta::Text(text) => {
+                        match self
+                            .blocks
+                            .entry(index)
+                            .or_insert_with(|| Block::Text(String::new()))
+                        {
+                            Block::Text(t) => t.push_str(text),
+                            Block::ToolUse { .. } => return None,
+                        }
+                        Some(text.clone())
+                    }
+                    ContentBlockDelta::ToolUse(tool) => {
+                        if let Some(Block::ToolUse { input, .. }) = self.blocks.get_mut(&index) {
+                            input.push_str(tool.input());
+                        }
+                        None
+                    }
+                    _ => None,
+                }
+            }
+            ConverseStreamOutput::Metadata(meta) => {
+                self.usage = meta.usage().map(token_usage);
+                None
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Convert a `serde_json::Value` into the Smithy `Document` type used for
-/// `additionalModelRequestFields`.
+/// `additionalModelRequestFields`, tool schemas and tool input.
 fn json_to_document(value: &serde_json::Value) -> Document {
     match value {
         serde_json::Value::Null => Document::Null,
@@ -312,66 +659,74 @@ fn json_to_document(value: &serde_json::Value) -> Document {
     }
 }
 
+/// The inverse of [`json_to_document`], for tool input returned by the model.
+fn document_to_json(doc: &Document) -> Value {
+    match doc {
+        Document::Null => Value::Null,
+        Document::Bool(b) => Value::Bool(*b),
+        Document::Number(Number::PosInt(u)) => json!(u),
+        Document::Number(Number::NegInt(i)) => json!(i),
+        Document::Number(Number::Float(f)) => json!(f),
+        Document::String(s) => Value::String(s.clone()),
+        Document::Array(items) => Value::Array(items.iter().map(document_to_json).collect()),
+        Document::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), document_to_json(v)))
+                .collect(),
+        ),
+    }
+}
+
 #[async_trait]
 impl LLM for Bedrock {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
-        let (system, converse_messages) = Self::to_converse_messages(messages)?;
-
-        let mut request = self
-            .client()
-            .await
-            .converse()
-            .model_id(self.config.model.model_id())
-            .set_system(Some(system))
-            .set_messages(Some(converse_messages))
-            .inference_config(self.inference_config());
-
-        if !self.config.additional_model_request_fields.is_null() {
-            request = request.additional_model_request_fields(json_to_document(
-                &self.config.additional_model_request_fields,
-            ));
+        match &self.options.streaming_func {
+            Some(_) => self.generate_streaming(messages).await,
+            None => self.generate_blocking(messages).await,
         }
-
-        let response = request
-            .send()
-            .await
-            .map_err(|e| BedrockError::InvocationError(e.into_service_error().to_string()))?;
-
-        let generation = response
-            .output()
-            .and_then(|o| o.as_message().ok())
-            .map(|m| {
-                m.content()
-                    .iter()
-                    .filter_map(|c| c.as_text().ok())
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join("")
-            })
-            .filter(|s| !s.is_empty())
-            .ok_or(BedrockError::EmptyResponse)?;
-
-        let tokens = response.usage().map(|u| TokenUsage {
-            prompt_tokens: u.input_tokens() as u32,
-            completion_tokens: u.output_tokens() as u32,
-            total_tokens: u.total_tokens() as u32,
-        });
-
-        Ok(GenerateResult { generation, tokens })
     }
 
     async fn stream(
         &self,
-        _messages: &[Message],
-    ) -> Result<
-        std::pin::Pin<Box<dyn futures::Stream<Item = Result<StreamData, LLMError>> + Send>>,
-        LLMError,
-    > {
-        Err(LLMError::OtherError(
-            "Streaming is not yet implemented for Bedrock".to_string(),
-        ))
+        messages: &[Message],
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
+        use futures::StreamExt;
+
+        let events = self.converse_stream(messages).await?;
+        let mut acc = StreamAccumulator::default();
+        let stream = events.filter_map(move |event| {
+            let item = match event {
+                Err(e) => Some(Err(e)),
+                Ok(event) => {
+                    let text = acc.push(&event);
+                    match event {
+                        ConverseStreamOutput::Metadata(_) => Some(Ok(StreamData::new(
+                            json!({"type": "metadata"}),
+                            acc.usage.clone(),
+                            "",
+                        ))),
+                        _ => text.map(|t| {
+                            Ok(StreamData::new(
+                                json!({"type": "content_block_delta", "text": t}),
+                                None,
+                                t,
+                            ))
+                        }),
+                    }
+                }
+            };
+            futures::future::ready(item)
+        });
+        Ok(Box::pin(stream))
+    }
+
+    fn add_options(&mut self, options: CallOptions) {
+        self.options.merge_options(options);
     }
 }
+
+#[cfg(test)]
+mod mock_tests;
 
 #[cfg(test)]
 mod tests {
@@ -462,6 +817,55 @@ mod tests {
             ]
         );
         assert_eq!(converse[1].content()[0].as_text().unwrap(), "hello");
+    }
+
+    #[test]
+    fn parallel_tool_results_share_one_user_turn() {
+        let calls = json!([
+            {"id": "a", "type": "function", "function": {"name": "t1", "arguments": "{}"}},
+            {"id": "b", "type": "function", "function": {"name": "t2", "arguments": "x"}}
+        ]);
+        let messages = [
+            Message::new_human_message("go"),
+            Message::new_ai_message("").with_tool_calls(calls),
+            Message::new_tool_message("r1", "a"),
+            Message::new_tool_message("r2", "b"),
+        ];
+        let (_, converse) = Bedrock::to_converse_messages(&messages).unwrap();
+        assert_eq!(converse.len(), 3);
+
+        let assistant = converse[1].content();
+        assert_eq!(assistant.len(), 2, "no empty text block before tool calls");
+        let second = assistant[1].as_tool_use().unwrap();
+        assert_eq!(second.tool_use_id(), "b");
+        assert_eq!(document_to_json(second.input()), json!({"input": "x"}));
+
+        let results: Vec<_> = converse[2]
+            .content()
+            .iter()
+            .map(|b| b.as_tool_result().unwrap().tool_use_id())
+            .collect();
+        assert_eq!(results, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn call_options_override_config_and_none_drops_tools() {
+        let mut llm = Bedrock::default()
+            .with_max_tokens(10)
+            .with_stop_sequence("A")
+            .with_tools(vec![FunctionDefinition::new("t", "", json!({}))]);
+        llm.add_options(
+            CallOptions::new()
+                .with_max_tokens(99)
+                .with_stop_words(vec!["B".into()]),
+        );
+        let cfg = llm.inference_config();
+        assert_eq!(cfg.max_tokens(), Some(99));
+        assert_eq!(cfg.stop_sequences(), &["A".to_string(), "B".to_string()]);
+        assert!(llm.tool_config().unwrap().is_some());
+
+        llm.add_options(CallOptions::new().with_function_call_behavior(FunctionCallBehavior::None));
+        assert!(llm.tool_config().unwrap().is_none());
     }
 
     #[test]

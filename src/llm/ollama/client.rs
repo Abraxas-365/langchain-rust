@@ -132,12 +132,7 @@ fn to_ollama_tool_calls(tool_calls: &Option<Value>) -> Vec<ToolCall> {
         .into_iter()
         .map(|c| ToolCall {
             function: ToolCallFunction {
-                arguments: match serde_json::from_str::<Value>(&c.function.arguments) {
-                    Ok(v @ Value::Object(_)) => v,
-                    _ if c.function.arguments.trim().is_empty() => json!({}),
-                    Ok(other) => json!({ "input": other }),
-                    Err(_) => json!({ "input": c.function.arguments }),
-                },
+                arguments: c.function.arguments_object(),
                 name: c.function.name,
             },
         })
