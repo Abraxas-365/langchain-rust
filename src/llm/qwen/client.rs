@@ -273,7 +273,11 @@ impl Qwen {
                     total_tokens: api_response.usage.total_tokens,
                 });
 
-                Ok(GenerateResult { tokens, generation })
+                Ok(GenerateResult {
+                    tokens,
+                    generation,
+                    ..Default::default()
+                })
             }
             400 => {
                 let error = res.json::<ErrorResponse>().await?;

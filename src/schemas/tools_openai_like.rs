@@ -103,14 +103,7 @@ impl FunctionDetail {
     /// (Anthropic, Ollama, Bedrock). Non-object JSON or plain text is wrapped as
     /// `{"input": ...}`, and empty arguments become `{}`.
     pub fn arguments_object(&self) -> Value {
-        if self.arguments.trim().is_empty() {
-            return Value::Object(Default::default());
-        }
-        match serde_json::from_str::<Value>(&self.arguments) {
-            Ok(v @ Value::Object(_)) => v,
-            Ok(other) => serde_json::json!({ "input": other }),
-            Err(_) => serde_json::json!({ "input": self.arguments }),
-        }
+        super::ToolCall::new("", "", self.arguments.clone()).arguments_value()
     }
 }
 

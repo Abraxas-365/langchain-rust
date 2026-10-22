@@ -12,7 +12,7 @@ use crate::{
     language_models::{llm::LLM, options::CallOptions, LLMError},
     llm::{AnthropicError, Claude},
     prompt_args,
-    schemas::Message,
+    schemas::{Message, ToolCall},
     tools::Tool,
 };
 
@@ -100,6 +100,15 @@ async fn claude_generate_returns_tool_calls() {
         json!([{"id": "toolu_1", "type": "function",
                 "function": {"name": "weather", "arguments": "{\"city\":\"Lima\"}"}}])
     );
+
+    let res = claude(&server)
+        .generate(&[Message::new_human_message("weather?")])
+        .await
+        .unwrap();
+    assert_eq!(
+        res.tool_calls,
+        vec![ToolCall::new("toolu_1", "weather", r#"{"city":"Lima"}"#)]
+    );
 }
 
 #[tokio::test]
@@ -171,6 +180,12 @@ async fn claude_streaming_generate_collects_tool_calls() {
     let calls: Value = serde_json::from_str(&res.generation).unwrap();
     assert_eq!(calls[0]["id"], "toolu_9");
     assert_eq!(calls[0]["function"]["arguments"], "{\"city\":\"Cusco\"}");
+    assert_eq!(res.tool_calls.len(), 1);
+    assert_eq!(res.tool_calls[0].id, "toolu_9");
+    assert_eq!(
+        res.tool_calls[0].arguments_value(),
+        json!({"city": "Cusco"})
+    );
 }
 
 #[tokio::test]

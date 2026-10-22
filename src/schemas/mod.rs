@@ -19,6 +19,9 @@ pub use retrievers::*;
 mod tools_openai_like;
 pub use tools_openai_like::*;
 
+mod tool_call;
+pub use tool_call::*;
+
 pub mod response_format_openai_like;
 pub use response_format_openai_like::*;
 

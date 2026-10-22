@@ -237,6 +237,19 @@ async fn generate_returns_tool_calls_as_json() {
     let result = llm_for(&server).invoke("compute").await.unwrap();
     let parsed: Value = serde_json::from_str(&result).unwrap();
     assert_eq!(parsed, tool_calls);
+
+    let res = llm_for(&server)
+        .generate(&[Message::new_human_message("compute")])
+        .await
+        .unwrap();
+    assert_eq!(
+        res.tool_calls,
+        vec![crate::schemas::ToolCall::new(
+            "call_9",
+            "calc",
+            r#"{"x":2}"#
+        )]
+    );
 }
 
 #[tokio::test]

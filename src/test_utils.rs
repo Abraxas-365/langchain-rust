@@ -17,15 +17,24 @@ use crate::{
 /// LLM that replays scripted responses in order and records every prompt it receives.
 #[derive(Clone, Default)]
 pub struct FakeLLM {
-    responses: Arc<Mutex<VecDeque<String>>>,
+    responses: Arc<Mutex<VecDeque<GenerateResult>>>,
     pub calls: Arc<Mutex<Vec<Vec<Message>>>>,
     pub options: Arc<Mutex<Vec<CallOptions>>>,
 }
 
 impl FakeLLM {
     pub fn new<S: Into<String>>(responses: impl IntoIterator<Item = S>) -> Self {
+        Self::with_results(responses.into_iter().map(|s| GenerateResult {
+            generation: s.into(),
+            tokens: Some(TokenUsage::new(1, 1)),
+            ..Default::default()
+        }))
+    }
+
+    /// Scripts full results, e.g. typed `tool_calls` alongside plain text.
+    pub fn with_results(results: impl IntoIterator<Item = GenerateResult>) -> Self {
         Self {
-            responses: Arc::new(Mutex::new(responses.into_iter().map(Into::into).collect())),
+            responses: Arc::new(Mutex::new(results.into_iter().collect())),
             ..Default::default()
         }
     }
@@ -34,7 +43,7 @@ impl FakeLLM {
         self.calls.lock().unwrap().clone()
     }
 
-    fn next(&self, messages: &[Message]) -> Result<String, LLMError> {
+    fn next(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         self.calls.lock().unwrap().push(messages.to_vec());
         self.responses
             .lock()
@@ -47,17 +56,14 @@ impl FakeLLM {
 #[async_trait]
 impl LLM for FakeLLM {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
-        Ok(GenerateResult {
-            generation: self.next(messages)?,
-            tokens: Some(TokenUsage::new(1, 1)),
-        })
+        self.next(messages)
     }
 
     async fn stream(
         &self,
         messages: &[Message],
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
-        let text = self.next(messages)?;
+        let text = self.next(messages)?.generation;
         let chunks: Vec<Result<StreamData, LLMError>> = text
             .split_inclusive(' ')
             .map(|c| Ok(StreamData::new(serde_json::json!(c), None, c)))

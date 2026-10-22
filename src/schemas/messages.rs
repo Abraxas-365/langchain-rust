@@ -142,6 +142,23 @@ impl Message {
         self
     }
 
+    /// An AI message that requests tool calls, stored in the shared wire format.
+    pub fn new_ai_message_with_tool_calls<T: std::fmt::Display>(
+        content: T,
+        tool_calls: &[super::ToolCall],
+    ) -> Self {
+        Self::new_ai_message(content).with_tool_calls(serde_json::json!(tool_calls))
+    }
+
+    /// The tool calls on this message as typed [`ToolCall`](super::ToolCall)s.
+    /// Empty when there are none or `tool_calls` is not in the OpenAI-like format.
+    pub fn parse_tool_calls(&self) -> Vec<super::ToolCall> {
+        self.tool_calls
+            .as_ref()
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default()
+    }
+
     pub fn messages_from_value(value: &Value) -> Result<Vec<Message>, serde_json::error::Error> {
         serde_json::from_value(value.clone())
     }
@@ -235,5 +252,34 @@ mod tests {
             Message::new_ai_message("b"),
         ]);
         assert_eq!(s, "HumanMessage: a\nAIMessage: b");
+    }
+
+    #[test]
+    fn typed_tool_calls_round_trip_through_message() {
+        use crate::schemas::ToolCall;
+        let calls = vec![
+            ToolCall::new("c1", "weather", r#"{"city":"Lima"}"#),
+            ToolCall::new("c2", "time", "{}"),
+        ];
+        let m = Message::new_ai_message_with_tool_calls("checking", &calls);
+        assert_eq!(m.content, "checking");
+        assert_eq!(m.message_type, MessageType::AIMessage);
+        assert_eq!(m.tool_calls.as_ref().unwrap()[0]["type"], "function");
+        assert_eq!(m.parse_tool_calls(), calls);
+
+        // Raw JSON set the old way parses the same.
+        let raw = Message::new_ai_message("").with_tool_calls(json!([
+            {"id": "c1", "type": "function", "function": {"name": "weather", "arguments": "{}"}}
+        ]));
+        assert_eq!(
+            raw.parse_tool_calls(),
+            vec![ToolCall::new("c1", "weather", "{}")]
+        );
+
+        assert!(Message::new_ai_message("x").parse_tool_calls().is_empty());
+        assert!(Message::new_ai_message("")
+            .with_tool_calls(json!([{"id": "1"}]))
+            .parse_tool_calls()
+            .is_empty());
     }
 }

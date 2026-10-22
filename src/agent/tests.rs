@@ -319,3 +319,72 @@ async fn openai_tools_agent_plain_text_is_final() {
         .unwrap();
     assert_eq!(out, "hello");
 }
+
+#[tokio::test]
+async fn openai_tools_agent_uses_typed_tool_calls() {
+    use crate::{language_models::GenerateResult, schemas::ToolCall};
+
+    let weather = RecordingTool::ok("weather", "sunny");
+    // `generation` is plain text: only the typed `tool_calls` can drive the action.
+    let calls = vec![ToolCall::new("toolu_1", "weather", r#"{"input":"Lima"}"#)];
+    let llm = FakeLLM::with_results([
+        GenerateResult {
+            generation: "Let me check".into(),
+            tool_calls: calls.clone(),
+            ..Default::default()
+        },
+        GenerateResult {
+            generation: "Sunny in Lima".into(),
+            ..Default::default()
+        },
+    ]);
+    let tools: Vec<Arc<dyn Tool>> = vec![Arc::new(weather.clone())];
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&tools)
+        .build(llm.clone())
+        .unwrap();
+    let memory = Arc::new(Mutex::new(SimpleMemory::new()));
+    let out = AgentExecutor::from_agent(agent)
+        .with_memory(memory.clone())
+        .invoke(prompt_args! {"input" => "weather?"})
+        .await
+        .unwrap();
+
+    assert_eq!(out, "Sunny in Lima");
+    assert_eq!(weather.inputs(), vec![json!("Lima")]);
+
+    // The scratchpad replays the typed calls in the shared wire format.
+    let second = &llm.calls()[1];
+    let ai = second.iter().find(|m| m.tool_calls.is_some()).unwrap();
+    assert_eq!(ai.parse_tool_calls(), calls);
+    let tool_msg = second
+        .iter()
+        .find(|m| m.message_type == MessageType::ToolMessage)
+        .unwrap();
+    assert_eq!(
+        (tool_msg.id.as_deref(), tool_msg.content.as_str()),
+        (Some("toolu_1"), "sunny")
+    );
+
+    // ...and so does memory.
+    let stored = memory.lock().await.messages().await.unwrap();
+    assert_eq!(stored[1].parse_tool_calls(), calls);
+}
+
+#[tokio::test]
+async fn openai_tools_agent_empty_or_invalid_json_list_is_final() {
+    // A JSON array that is not tool calls must not be treated as an action.
+    let llm = FakeLLM::new([r#"[1, 2, 3]"#, "[]"]);
+    let agent = OpenAiToolAgentBuilder::new().build(llm).unwrap();
+    let executor = AgentExecutor::from_agent(agent);
+    let out = executor
+        .invoke(prompt_args! {"input" => "list?"})
+        .await
+        .unwrap();
+    assert_eq!(out, "[1, 2, 3]");
+    let out = executor
+        .invoke(prompt_args! {"input" => "empty?"})
+        .await
+        .unwrap();
+    assert_eq!(out, "[]");
+}
