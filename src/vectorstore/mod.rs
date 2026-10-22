@@ -12,6 +12,9 @@ pub mod sqlite_vec;
 #[cfg(feature = "surrealdb")]
 pub mod surrealdb;
 
+#[cfg(feature = "weaviate")]
+pub mod weaviate;
+
 #[cfg(feature = "opensearch")]
 pub mod opensearch;
 

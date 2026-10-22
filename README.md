@@ -40,6 +40,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Chroma](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_chroma.rs)
   - [x] [Sqlite](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_sqlite_vss.rs)
   - [x] [SurrealDB](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_surrealdb/src/main.rs)
+  - [x] [Weaviate](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_weaviate.rs)
 
 - Chain
 
@@ -273,6 +274,12 @@ cargo add langchain-rust --features postgres
 
 ```bash
 cargo add langchain-rust --features surrealdb
+```
+
+#### With Weaviate
+
+```bash
+cargo add langchain-rust --features weaviate
 ```
 
 #### With Qdrant

@@ -118,6 +118,7 @@ chroma = ["uuid"]
 sqlite-vss = ["sqlx"]
 sqlite-vec = ["sqlx"]
 surrealdb = ["dep:surrealdb"]
+weaviate = ["uuid"]
 tree-sitter = [
     "cc",
     "dep:tree-sitter",
