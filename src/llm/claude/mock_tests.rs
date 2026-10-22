@@ -12,7 +12,7 @@ use crate::{
     language_models::{llm::LLM, options::CallOptions, LLMError},
     llm::{AnthropicError, Claude},
     prompt_args,
-    schemas::{Message, ToolCall},
+    schemas::{messages::ImageContent, Message, ToolCall},
     tools::Tool,
 };
 
@@ -76,6 +76,36 @@ async fn claude_generate_sends_headers_and_parses_text() {
         ),
         (10, 5, 15)
     );
+}
+
+#[tokio::test]
+async fn claude_sends_images_as_image_blocks_before_the_text() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("POST", "/v1/messages")
+        .match_body(Matcher::PartialJson(json!({
+            "messages": [{"role": "user", "content": [
+                {"type": "image", "source": {"type": "url", "url": "https://example.com/cat.png"}},
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "iVBORw0KGgo"}},
+                {"type": "image", "source": {"type": "base64", "media_type": "image/webp", "data": "AAAA"}},
+                {"type": "text", "text": "What is this?"}
+            ]}]
+        })))
+        .with_body(message_body(
+            json!([{"type": "text", "text": "A cat"}]),
+            "end_turn",
+        ))
+        .create_async()
+        .await;
+
+    let message = Message::new_human_message("What is this?").with_images(vec![
+        ImageContent::from("https://example.com/cat.png"),
+        ImageContent::from("iVBORw0KGgo"),
+        ImageContent::from("data:image/webp;base64,AAAA"),
+    ]);
+    let res = claude(&server).generate(&[message]).await.unwrap();
+    mock.assert_async().await;
+    assert_eq!(res.generation, "A cat");
 }
 
 #[tokio::test]

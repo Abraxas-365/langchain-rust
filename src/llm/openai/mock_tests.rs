@@ -62,9 +62,58 @@ fn request_maps_images_to_content_parts() {
         "data:image/png;base64,AAA",
     ])];
     let req = request_json(&OpenAI::default(), &messages, false);
-    let part = &req["messages"][0]["content"][0];
-    assert_eq!(part["type"], "image_url");
-    assert_eq!(part["image_url"]["url"], "data:image/png;base64,AAA");
+    // No text: only the image part, no empty text part.
+    assert_eq!(
+        req["messages"][0]["content"],
+        json!([{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAA"}}])
+    );
+}
+
+#[test]
+fn request_sends_text_and_images_together() {
+    let messages = vec![
+        Message::new_human_message("What is this?").with_images(vec![
+            ImageContent::from("https://example.com/cat.png").with_detail("LOW"),
+            // Bare base64 gets a data: URL with the sniffed media type.
+            ImageContent::from("/9j/4AAQ"),
+        ]),
+    ];
+    let req = request_json(&OpenAI::default(), &messages, false);
+    assert_eq!(
+        req["messages"][0]["content"],
+        json!([
+            {"type": "text", "text": "What is this?"},
+            {"type": "image_url", "image_url": {"url": "https://example.com/cat.png", "detail": "low"}},
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,/9j/4AAQ"}}
+        ])
+    );
+
+    // `Some(vec![])` is plain text, not an empty parts list.
+    let mut empty = Message::new_human_message("hi");
+    empty.images = Some(vec![]);
+    let req = request_json(&OpenAI::default(), &[empty], false);
+    assert_eq!(req["messages"][0]["content"], "hi");
+
+    for (detail, expected) in [("auto", "auto"), ("high", "high")] {
+        let m = Message::new_human_message("x")
+            .with_images(vec![
+                ImageContent::from("https://a/b.png").with_detail(detail)
+            ]);
+        let req = request_json(&OpenAI::default(), &[m], false);
+        assert_eq!(
+            req["messages"][0]["content"][1]["image_url"]["detail"],
+            expected
+        );
+    }
+
+    let bad = Message::new_human_message("x")
+        .with_images(vec![
+            ImageContent::from("https://a/b.png").with_detail("ultra")
+        ]);
+    let err = OpenAI::default()
+        .generate_request(&[bad], false)
+        .unwrap_err();
+    assert!(err.to_string().contains("ultra"), "{err}");
 }
 
 #[test]

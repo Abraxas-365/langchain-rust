@@ -5,12 +5,12 @@ pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::types::chat::{
     ChatChoiceStream, ChatCompletionMessageToolCalls, ChatCompletionRequestAssistantMessageArgs,
     ChatCompletionRequestMessage, ChatCompletionRequestMessageContentPartImageArgs,
-    ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
-    ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
-    ChatCompletionRequestUserMessageContentPart, ChatCompletionStreamOptions,
-    ChatCompletionToolChoiceOption, ChatCompletionTools, CreateChatCompletionRequest,
-    CreateChatCompletionRequestArgs, CreateChatCompletionStreamResponse, ResponseFormat,
-    StopConfiguration,
+    ChatCompletionRequestMessageContentPartTextArgs, ChatCompletionRequestSystemMessageArgs,
+    ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
+    ChatCompletionRequestUserMessageContent, ChatCompletionRequestUserMessageContentPart,
+    ChatCompletionStreamOptions, ChatCompletionToolChoiceOption, ChatCompletionTools,
+    CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+    CreateChatCompletionStreamResponse, ImageDetail, ImageUrl, ResponseFormat, StopConfiguration,
 };
 use async_openai::{error::OpenAIError, Client};
 use async_trait::async_trait;
@@ -24,7 +24,7 @@ use crate::{
         LLMEventStream, TokenUsage,
     },
     schemas::{
-        messages::{Message, MessageType},
+        messages::{ImageContent, Message, MessageType},
         StreamData, ToolCall,
     },
 };
@@ -303,6 +303,26 @@ impl StreamAccumulator {
     }
 }
 
+/// An image as an OpenAI `image_url` part: http(s) URLs pass through, base64 data
+/// becomes a `data:` URL, and `detail` maps to OpenAI's levels.
+fn openai_image_url(image: &ImageContent) -> Result<ImageUrl, OpenAIError> {
+    let detail = match image.detail.as_deref().map(str::to_ascii_lowercase) {
+        None => None,
+        Some(d) if d == "auto" => Some(ImageDetail::Auto),
+        Some(d) if d == "low" => Some(ImageDetail::Low),
+        Some(d) if d == "high" => Some(ImageDetail::High),
+        Some(other) => {
+            return Err(OpenAIError::InvalidArgument(format!(
+                "unknown image detail {other:?}, expected auto, low or high"
+            )))
+        }
+    };
+    Ok(ImageUrl {
+        url: image.source().to_url(),
+        detail,
+    })
+}
+
 impl<C: Config> OpenAI<C> {
     fn to_openai_messages(
         &self,
@@ -327,24 +347,29 @@ impl<C: Config> OpenAI<C> {
                         .into(),
                 }),
                 MessageType::HumanMessage => {
-                    let content: ChatCompletionRequestUserMessageContent = match m.images.clone() {
-                        Some(images) => {
-                            let content: Result<
-                                Vec<ChatCompletionRequestUserMessageContentPart>,
-                                OpenAIError,
-                            > = images
-                                .into_iter()
-                                .map(|image| {
-                                    Ok(ChatCompletionRequestMessageContentPartImageArgs::default()
-                                        .image_url(image.image_url)
+                    let content: ChatCompletionRequestUserMessageContent = match &m.images {
+                        Some(images) if !images.is_empty() => {
+                            let mut parts: Vec<ChatCompletionRequestUserMessageContentPart> =
+                                Vec::with_capacity(images.len() + 1);
+                            if !m.content.is_empty() {
+                                parts.push(
+                                    ChatCompletionRequestMessageContentPartTextArgs::default()
+                                        .text(m.content.clone())
                                         .build()?
-                                        .into())
-                                })
-                                .collect();
-
-                            content?.into()
+                                        .into(),
+                                );
+                            }
+                            for image in images {
+                                parts.push(
+                                    ChatCompletionRequestMessageContentPartImageArgs::default()
+                                        .image_url(openai_image_url(image)?)
+                                        .build()?
+                                        .into(),
+                                );
+                            }
+                            parts.into()
                         }
-                        None => m.content.clone().into(),
+                        _ => m.content.clone().into(),
                     };
 
                     openai_messages.push(

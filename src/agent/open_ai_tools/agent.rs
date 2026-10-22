@@ -14,7 +14,7 @@ use crate::{
     fmt_message, fmt_placeholder, fmt_template,
     language_models::{GenerateResult, LLMEvent, TokenUsage},
     message_formatter,
-    prompt::{HumanMessagePromptTemplate, MessageFormatterStruct, PromptArgs},
+    prompt::{HumanMessagePromptTemplate, MessageFormatterStruct, PromptArgs, DEFAULT_IMAGES_KEY},
     schemas::{
         agent::{AgentAction, AgentEvent, AgentFinish, LogTools},
         messages::Message,
@@ -34,10 +34,10 @@ impl OpenAiToolAgent {
         let prompt = message_formatter![
             fmt_message!(Message::new_system_message(prefix)),
             fmt_placeholder!("chat_history"),
-            fmt_template!(HumanMessagePromptTemplate::new(template_jinja2!(
-                "{{input}}",
-                "input"
-            ))),
+            fmt_template!(
+                HumanMessagePromptTemplate::new(template_jinja2!("{{input}}", "input"))
+                    .with_images(DEFAULT_IMAGES_KEY)
+            ),
             fmt_placeholder!("agent_scratchpad")
         ];
 

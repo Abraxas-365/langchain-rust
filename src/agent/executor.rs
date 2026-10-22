@@ -15,7 +15,7 @@ use crate::schemas::{LogTools, Message};
 use crate::{
     chain::{chain_trait::Chain, ChainError},
     language_models::{GenerateResult, TokenUsage},
-    prompt::PromptArgs,
+    prompt::{human_message_from_inputs, PromptArgs, DEFAULT_IMAGES_KEY},
     schemas::{
         agent::{AgentAction, AgentEvent},
         memory::BaseMemory,
@@ -286,12 +286,13 @@ where
                     if let Some(memory) = &self.memory {
                         let mut memory = memory.lock().await;
 
+                        // Text without extra quotes, plus the images the user sent.
                         memory
-                            .add_user_message(match &input_variables["input"] {
-                                // This avoids adding extra quotes to the user input in the history.
-                                serde_json::Value::String(s) => s,
-                                x => x, // this the json encoded value.
-                            })
+                            .add_message(human_message_from_inputs(
+                                &input_variables,
+                                "input",
+                                DEFAULT_IMAGES_KEY,
+                            )?)
                             .await?;
 
                         let mut tools_ai_message_seen: HashMap<String, ()> = HashMap::default();
