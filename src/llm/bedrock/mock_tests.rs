@@ -128,11 +128,11 @@ async fn generate_sends_tools_and_returns_tool_calls() {
     );
     let out = llm.invoke("weather in Lima?").await.unwrap();
 
-    let calls: Vec<FunctionCallResponse> = serde_json::from_str(&out).unwrap();
+    let calls = ToolCall::parse_list(&out).unwrap();
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].id, "tu_1");
-    assert_eq!(calls[0].function.name, "weather");
-    let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+    assert_eq!(calls[0].name, "weather");
+    let args: Value = serde_json::from_str(&calls[0].arguments).unwrap();
     assert_eq!(args, json!({"city": "Lima"}));
     mock.assert_async().await;
 }
@@ -255,9 +255,15 @@ async fn generate_with_streaming_func_rebuilds_tool_calls() {
 
     assert_eq!(*seen.lock().unwrap(), "Checking.");
     assert_eq!(out.tokens.unwrap().total_tokens, 10);
-    let calls: Vec<FunctionCallResponse> = serde_json::from_str(&out.generation).unwrap();
-    assert_eq!(calls[0].id, "tu_9");
-    assert_eq!(calls[0].function.arguments, "{\"city\":\"Lima\"}");
+    assert_eq!(
+        out.tool_calls,
+        vec![ToolCall::new("tu_9", "weather", r#"{"city":"Lima"}"#)]
+    );
+    // `generation` still mirrors the calls for code that parses it.
+    assert_eq!(
+        ToolCall::parse_list(&out.generation).unwrap(),
+        out.tool_calls
+    );
 }
 
 #[derive(Clone)]

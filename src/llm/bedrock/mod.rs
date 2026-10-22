@@ -62,9 +62,7 @@ use crate::language_models::llm::LLM;
 use crate::language_models::options::CallOptions;
 use crate::language_models::{GenerateResult, LLMError, TokenUsage};
 use crate::schemas::messages::MessageType;
-use crate::schemas::{
-    FunctionCallBehavior, FunctionCallResponse, FunctionDefinition, Message, StreamData,
-};
+use crate::schemas::{FunctionCallBehavior, FunctionDefinition, Message, StreamData, ToolCall};
 
 /// Errors specific to the Bedrock integration.
 #[derive(Error, Debug)]
@@ -411,7 +409,7 @@ impl Bedrock {
             .and_then(|o| o.as_message().ok())
             .map(|m| m.content())
             .unwrap_or_default();
-        let generation = generation_from_blocks(blocks.iter().filter_map(|block| match block {
+        let result = result_from_blocks(blocks.iter().filter_map(|block| match block {
             ContentBlock::Text(text) => Some(Block::Text(text.clone())),
             ContentBlock::ToolUse(tool) => Some(Block::ToolUse {
                 id: tool.tool_use_id().to_string(),
@@ -422,8 +420,8 @@ impl Bedrock {
         }))?;
 
         Ok(GenerateResult {
-            generation,
             tokens: response.usage().map(token_usage),
+            ..result
         })
     }
 
@@ -483,8 +481,8 @@ impl Bedrock {
             }
         }
         Ok(GenerateResult {
-            generation: generation_from_blocks(acc.blocks.into_values())?,
             tokens: acc.usage,
+            ..result_from_blocks(acc.blocks.into_values())?
         })
     }
 }
@@ -515,11 +513,7 @@ fn token_usage(u: &aws_sdk_bedrockruntime::types::TokenUsage) -> TokenUsage {
 /// Assistant content: the text (if any) followed by one `toolUse` block per tool call
 /// stored in the OpenAI-like format used across the crate.
 fn assistant_blocks(msg: &Message) -> Result<Vec<ContentBlock>, BedrockError> {
-    let calls = msg
-        .tool_calls
-        .clone()
-        .and_then(|v| serde_json::from_value::<Vec<FunctionCallResponse>>(v).ok())
-        .unwrap_or_default();
+    let calls = msg.parse_tool_calls();
 
     let mut blocks = Vec::new();
     if !msg.content.trim().is_empty() || calls.is_empty() {
@@ -527,9 +521,9 @@ fn assistant_blocks(msg: &Message) -> Result<Vec<ContentBlock>, BedrockError> {
     }
     for call in calls {
         let block = ToolUseBlock::builder()
-            .tool_use_id(call.id)
-            .name(&call.function.name)
-            .input(json_to_document(&call.function.arguments_object()))
+            .tool_use_id(&call.id)
+            .name(&call.name)
+            .input(json_to_document(&call.arguments_value()))
             .build()
             .map_err(request_error)?;
         blocks.push(ContentBlock::ToolUse(block));
@@ -549,31 +543,33 @@ enum Block {
     },
 }
 
-/// The generation string: OpenAI-like tool calls as JSON when the model asked for tools
-/// (what `OpenAiToolAgent` expects), otherwise the joined text.
-fn generation_from_blocks(blocks: impl IntoIterator<Item = Block>) -> Result<String, LLMError> {
+/// The result: typed tool calls (mirrored into `generation` as OpenAI-like JSON, which is what
+/// `OpenAiToolAgent` reads) when the model asked for tools, otherwise the joined text.
+fn result_from_blocks(blocks: impl IntoIterator<Item = Block>) -> Result<GenerateResult, LLMError> {
     let mut text = String::new();
     let mut calls = Vec::new();
     for block in blocks {
         match block {
             Block::Text(t) => text.push_str(&t),
-            Block::ToolUse { id, name, input } => calls.push(json!({
-                "id": id,
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "arguments": if input.trim().is_empty() { "{}".to_string() } else { input },
+            Block::ToolUse { id, name, input } => calls.push(ToolCall::new(
+                id,
+                name,
+                if input.trim().is_empty() {
+                    "{}".to_string()
+                } else {
+                    input
                 },
-            })),
+            )),
         }
     }
-    if !calls.is_empty() {
-        return Ok(Value::Array(calls).to_string());
-    }
-    if text.is_empty() {
+    if calls.is_empty() && text.is_empty() {
         return Err(BedrockError::EmptyResponse.into());
     }
-    Ok(text)
+    Ok(GenerateResult {
+        generation: text,
+        ..Default::default()
+    }
+    .with_tool_calls(calls))
 }
 
 /// Rebuilds content blocks and usage from `ConverseStream` events.

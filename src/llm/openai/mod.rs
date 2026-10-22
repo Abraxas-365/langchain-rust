@@ -20,7 +20,7 @@ use crate::{
     language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
     schemas::{
         messages::{Message, MessageType},
-        StreamData,
+        StreamData, ToolCall,
     },
 };
 
@@ -143,9 +143,25 @@ impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
 
                 if let Some(choice) = &response.choices.first() {
                     generate_result.generation = choice.message.content.clone().unwrap_or_default();
-                    if let Some(function) = &choice.message.tool_calls {
-                        generate_result.generation =
-                            serde_json::to_string(&function).unwrap_or_default();
+                    if let Some(calls) = &choice.message.tool_calls {
+                        let typed: Vec<ToolCall> = calls
+                            .iter()
+                            .filter_map(|c| match c {
+                                ChatCompletionMessageToolCalls::Function(f) => Some(ToolCall::new(
+                                    &f.id,
+                                    &f.function.name,
+                                    &f.function.arguments,
+                                )),
+                                _ => None,
+                            })
+                            .collect();
+                        if typed.is_empty() {
+                            // Only non-function (custom) tool calls: keep the raw JSON.
+                            generate_result.generation =
+                                serde_json::to_string(&calls).unwrap_or_default();
+                        } else {
+                            generate_result = generate_result.with_tool_calls(typed);
+                        }
                     }
                 } else {
                     generate_result.generation = "".to_string();

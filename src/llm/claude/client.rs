@@ -10,8 +10,7 @@ use serde_json::Value;
 use std::pin::Pin;
 
 use super::models::{
-    generation_from_blocks, to_claude_messages, tool_choice, ApiResponse, ClaudeTool, Content,
-    Payload,
+    result_from_blocks, to_claude_messages, tool_choice, ApiResponse, ClaudeTool, Content, Payload,
 };
 use crate::llm::sse::sse_json_events;
 
@@ -142,10 +141,7 @@ impl Claude {
             total_tokens: res.usage.input_tokens + res.usage.output_tokens,
         });
 
-        Ok(GenerateResult {
-            tokens,
-            generation: generation_from_blocks(&res.content),
-        })
+        Ok(result_from_blocks(&res.content, tokens))
     }
 
     /// Streams the response, forwarding text deltas to `streaming_func` while rebuilding the
@@ -316,13 +312,13 @@ impl StreamAccumulator {
 
     fn finish(self) -> GenerateResult {
         let usage = self.usage;
-        GenerateResult {
-            tokens: Some(TokenUsage::new(
+        result_from_blocks(
+            &self.blocks,
+            Some(TokenUsage::new(
                 usage.prompt_tokens,
                 usage.completion_tokens,
             )),
-            generation: generation_from_blocks(&self.blocks),
-        }
+        )
     }
 }
 
@@ -584,6 +580,14 @@ mod offline_tests {
         let tokens = result.tokens.unwrap();
         assert_eq!((tokens.prompt_tokens, tokens.completion_tokens), (7, 12));
         let calls: Value = serde_json::from_str(&result.generation).unwrap();
+        assert_eq!(
+            result.tool_calls,
+            vec![crate::schemas::ToolCall::new(
+                "toolu_1",
+                "weather",
+                r#"{"city":"Lima"}"#
+            )]
+        );
         assert_eq!(
             calls,
             json!([{"id": "toolu_1", "type": "function",

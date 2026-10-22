@@ -1,6 +1,6 @@
 use crate::{
     language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
-    schemas::{FunctionCallResponse, FunctionDefinition, Message, MessageType, StreamData},
+    schemas::{self, FunctionDefinition, Message, MessageType, StreamData},
 };
 use async_trait::async_trait;
 use futures::Stream;
@@ -15,7 +15,7 @@ pub use ollama_rs::{
     models::ModelOptions as GenerationOptions,
     Ollama as OllamaClient,
 };
-use serde_json::{json, Value};
+use serde_json::json;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -100,40 +100,25 @@ fn next_call_id() -> String {
     format!("call_{}", COUNTER.fetch_add(1, Ordering::Relaxed))
 }
 
-/// Renders Ollama tool calls as the OpenAI-like JSON array the tools agent reads (same contract
-/// as the OpenAI and Claude clients).
-fn tool_calls_to_generation(calls: &[ToolCall]) -> String {
-    Value::Array(
-        calls
-            .iter()
-            .map(|c| {
-                json!({
-                    "id": next_call_id(),
-                    "type": "function",
-                    "function": {
-                        "name": c.function.name,
-                        "arguments": c.function.arguments.to_string(),
-                    },
-                })
-            })
-            .collect(),
-    )
-    .to_string()
+/// Converts Ollama tool calls to the crate's [`schemas::ToolCall`]. Ollama has no call ids,
+/// so one is synthesized per call.
+fn from_ollama_tool_calls(calls: &[ToolCall]) -> Vec<schemas::ToolCall> {
+    calls
+        .iter()
+        .map(|c| {
+            schemas::ToolCall::from_value(next_call_id(), &c.function.name, &c.function.arguments)
+        })
+        .collect()
 }
 
-fn to_ollama_tool_calls(tool_calls: &Option<Value>) -> Vec<ToolCall> {
-    let Some(calls) = tool_calls
-        .clone()
-        .and_then(|v| serde_json::from_value::<Vec<FunctionCallResponse>>(v).ok())
-    else {
-        return Vec::new();
-    };
-    calls
+fn to_ollama_tool_calls(message: &Message) -> Vec<ToolCall> {
+    message
+        .parse_tool_calls()
         .into_iter()
         .map(|c| ToolCall {
             function: ToolCallFunction {
-                arguments: c.function.arguments_object(),
-                name: c.function.name,
+                arguments: c.arguments_value(),
+                name: c.name,
             },
         })
         .collect()
@@ -155,7 +140,7 @@ impl From<&Message> for ChatMessage {
             ChatMessage::new(message.message_type.clone().into(), message.content.clone());
         chat_message.images = images;
         if message.message_type == MessageType::AIMessage {
-            chat_message.tool_calls = to_ollama_tool_calls(&message.tool_calls);
+            chat_message.tool_calls = to_ollama_tool_calls(message);
         }
         chat_message
     }
@@ -191,15 +176,14 @@ impl LLM for Ollama {
         let request = self.generate_request(messages)?;
         let result = self.client.send_chat_messages(request).await?;
 
-        let generation = if result.message.tool_calls.is_empty() {
-            result.message.content
-        } else {
-            tool_calls_to_generation(&result.message.tool_calls)
-        };
-
         let tokens = result.final_data.as_ref().map(token_usage);
 
-        Ok(GenerateResult { tokens, generation })
+        Ok(GenerateResult {
+            tokens,
+            generation: result.message.content,
+            ..Default::default()
+        }
+        .with_tool_calls(from_ollama_tool_calls(&result.message.tool_calls)))
     }
 
     async fn stream(
@@ -450,6 +434,20 @@ mod tests {
         assert_eq!(calls[0]["function"]["name"], "weather");
         assert_eq!(calls[0]["function"]["arguments"], "{\"city\":\"Lima\"}");
         assert!(calls[0]["id"].as_str().unwrap().starts_with("call_"));
+
+        let res = ollama_for(&server)
+            .generate(&[Message::new_human_message("weather?")])
+            .await
+            .unwrap();
+        assert_eq!(res.tool_calls.len(), 1);
+        assert_eq!(res.tool_calls[0].name, "weather");
+        assert_eq!(res.tool_calls[0].arguments, r#"{"city":"Lima"}"#);
+        assert!(res.tool_calls[0].id.starts_with("call_"));
+        // generation mirrors the typed calls (same ids)
+        assert_eq!(
+            schemas::ToolCall::parse_list(&res.generation).unwrap(),
+            res.tool_calls
+        );
     }
 
     #[derive(Clone)]

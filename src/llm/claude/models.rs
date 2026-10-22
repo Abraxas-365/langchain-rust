@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::schemas::{FunctionCallBehavior, FunctionCallResponse, FunctionDefinition, Message};
+use crate::language_models::{GenerateResult, TokenUsage};
+use crate::schemas::{FunctionCallBehavior, FunctionDefinition, Message, ToolCall};
 
 /// A message in the Anthropic Messages API. `content` is either a plain string or a list of
 /// content blocks (`text`, `tool_use`, `tool_result`, ...).
@@ -26,11 +27,7 @@ impl ClaudeMessage {
     /// An assistant turn. Tool calls (stored in the OpenAI-like format used across the crate)
     /// become `tool_use` blocks, preceded by the text if there is any.
     pub fn assistant(message: &Message) -> Self {
-        let calls = message
-            .tool_calls
-            .clone()
-            .and_then(|v| serde_json::from_value::<Vec<FunctionCallResponse>>(v).ok())
-            .unwrap_or_default();
+        let calls = message.parse_tool_calls();
         if calls.is_empty() {
             return Self::text("assistant", &message.content);
         }
@@ -43,8 +40,8 @@ impl ClaudeMessage {
             blocks.push(json!({
                 "type": "tool_use",
                 "id": call.id,
-                "name": call.function.name,
-                "input": call.function.arguments_object(),
+                "name": call.name,
+                "input": call.arguments_value(),
             }));
         }
         Self::new("assistant", Value::Array(blocks))
@@ -188,30 +185,30 @@ pub(crate) struct Usage {
     pub output_tokens: u32,
 }
 
-/// Turns response blocks into the crate's `generation` string: the text, or — when Claude asks
-/// for tools — the tool calls as an OpenAI-like JSON array, which is what the tools agent reads
-/// (same contract as the OpenAI client).
-pub(crate) fn generation_from_blocks(blocks: &[Content]) -> String {
-    let calls: Vec<Value> = blocks
+/// Turns response blocks into a [`GenerateResult`]: the text, or — when Claude asks for tools —
+/// typed `tool_calls`, mirrored into `generation` as an OpenAI-like JSON array (same contract
+/// as the other providers).
+pub(crate) fn result_from_blocks(blocks: &[Content], tokens: Option<TokenUsage>) -> GenerateResult {
+    let calls: Vec<ToolCall> = blocks
         .iter()
         .filter(|b| b.content_type == "tool_use")
         .map(|b| {
-            json!({
-                "id": b.id.clone().unwrap_or_default(),
-                "type": "function",
-                "function": {
-                    "name": b.name.clone().unwrap_or_default(),
-                    "arguments": b.input.clone().unwrap_or_else(|| json!({})).to_string(),
-                },
-            })
+            ToolCall::from_value(
+                b.id.clone().unwrap_or_default(),
+                b.name.clone().unwrap_or_default(),
+                b.input.as_ref().unwrap_or(&json!({})),
+            )
         })
         .collect();
-    if !calls.is_empty() {
-        return Value::Array(calls).to_string();
-    }
-    blocks
+    let text = blocks
         .iter()
         .filter(|b| b.content_type == "text")
         .filter_map(|b| b.text.as_deref())
-        .collect()
+        .collect();
+    GenerateResult {
+        tokens,
+        generation: text,
+        ..Default::default()
+    }
+    .with_tool_calls(calls)
 }

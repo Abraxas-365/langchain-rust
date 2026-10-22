@@ -143,7 +143,11 @@ impl Deepseek {
             total_tokens: res.usage.total_tokens,
         });
 
-        Ok(GenerateResult { tokens, generation })
+        Ok(GenerateResult {
+            tokens,
+            generation,
+            ..Default::default()
+        })
     }
 
     fn build_payload(&self, messages: &[Message], stream: bool) -> Payload {

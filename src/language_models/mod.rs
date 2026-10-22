@@ -2,21 +2,42 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::schemas::ToolCall;
+
 pub mod llm;
 pub mod options;
 
 mod error;
 pub use error::*;
 
-//TODO: check if its this should have a data:serde::Value to save all other things, like OpenAI
-//function responses
+/// The result of an LLM call.
+///
+/// When the model asks for tools, `tool_calls` holds them (same type for every provider)
+/// and `generation` holds the same calls as an OpenAI-style JSON array, so code that
+/// reads `generation` keeps working. Use [`GenerateResult::with_tool_calls`] to build one.
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct GenerateResult {
     pub tokens: Option<TokenUsage>,
     pub generation: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_calls: Vec<ToolCall>,
 }
 
 impl GenerateResult {
+    /// Sets `tool_calls` and mirrors them into `generation` as JSON. Empty `calls`
+    /// leave the result untouched.
+    pub fn with_tool_calls(mut self, calls: Vec<ToolCall>) -> Self {
+        if !calls.is_empty() {
+            self.generation = ToolCall::list_to_string(&calls);
+            self.tool_calls = calls;
+        }
+        self
+    }
+
+    pub fn has_tool_calls(&self) -> bool {
+        !self.tool_calls.is_empty()
+    }
+
     pub fn to_hashmap(&self) -> HashMap<String, String> {
         let mut map = HashMap::new();
 
@@ -98,7 +119,7 @@ mod tests {
     fn generate_result_to_hashmap() {
         let without = GenerateResult {
             generation: "hi".into(),
-            tokens: None,
+            ..Default::default()
         };
         let m = without.to_hashmap();
         assert_eq!(m.len(), 1);
@@ -107,10 +128,49 @@ mod tests {
         let with = GenerateResult {
             generation: "hi".into(),
             tokens: Some(TokenUsage::new(1, 2)),
+            ..Default::default()
         };
         let m = with.to_hashmap();
         assert_eq!(m["prompt_tokens"], "1");
         assert_eq!(m["completion_tokens"], "2");
         assert_eq!(m["total_tokens"], "3");
+    }
+
+    #[test]
+    fn with_tool_calls_mirrors_into_generation() {
+        let calls = vec![ToolCall::new("c1", "weather", r#"{"city":"Lima"}"#)];
+        let r = GenerateResult {
+            generation: "let me check".into(),
+            ..Default::default()
+        }
+        .with_tool_calls(calls.clone());
+        assert!(r.has_tool_calls());
+        assert_eq!(r.tool_calls, calls);
+        assert_eq!(ToolCall::parse_list(&r.generation).unwrap(), calls);
+
+        let plain = GenerateResult {
+            generation: "hi".into(),
+            ..Default::default()
+        }
+        .with_tool_calls(vec![]);
+        assert!(!plain.has_tool_calls());
+        assert_eq!(plain.generation, "hi");
+    }
+
+    #[test]
+    fn generate_result_serde_is_backward_compatible() {
+        // Old payloads without `tool_calls` still deserialize.
+        let old: GenerateResult =
+            serde_json::from_str(r#"{"tokens":null,"generation":"hi"}"#).unwrap();
+        assert!(old.tool_calls.is_empty());
+        // No tool calls -> field omitted.
+        let v = serde_json::to_value(&old).unwrap();
+        assert!(v.get("tool_calls").is_none());
+
+        let with = GenerateResult::default().with_tool_calls(vec![ToolCall::new("a", "f", "{}")]);
+        let v = serde_json::to_value(&with).unwrap();
+        assert_eq!(v["tool_calls"][0]["function"]["name"], "f");
+        let back: GenerateResult = serde_json::from_value(v).unwrap();
+        assert_eq!(back.tool_calls, with.tool_calls);
     }
 }
