@@ -10,7 +10,7 @@ use crate::{
     message_formatter,
     prompt::{
         HumanMessagePromptTemplate, MessageFormatterStruct, MessageOrTemplate, PromptArgs,
-        PromptFromatter,
+        PromptFromatter, DEFAULT_IMAGES_KEY,
     },
     prompt_args,
     schemas::{
@@ -63,6 +63,7 @@ impl ConversationalAgent {
                     &sufix_prompt.to_string(),
                     "input"
                 ))
+                .with_images(DEFAULT_IMAGES_KEY)
                 .into()
             ),
             MessageOrTemplate::MessagesPlaceholder("agent_scratchpad".to_string()),

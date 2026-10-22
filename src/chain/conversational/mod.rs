@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     language_models::GenerateResult,
-    prompt::PromptArgs,
+    prompt::{human_message_from_inputs, PromptArgs, PromptError, DEFAULT_IMAGES_KEY},
     prompt_args,
     schemas::{memory::BaseMemory, messages::Message, StreamData},
 };
@@ -55,16 +55,22 @@ impl ConversationalChain {
     pub fn prompt_builder(&self) -> ConversationalChainPromptBuilder {
         ConversationalChainPromptBuilder::new()
     }
+
+    /// The user's turn as saved to memory, with the images from the `images` input.
+    fn human_message(&self, inputs: &PromptArgs) -> Result<Message, ChainError> {
+        human_message_from_inputs(inputs, &self.input_key, DEFAULT_IMAGES_KEY).map_err(
+            |e| match e {
+                PromptError::MissingVariable(key) => ChainError::MissingInputVariable(key),
+                other => other.into(),
+            },
+        )
+    }
 }
 
 #[async_trait]
 impl Chain for ConversationalChain {
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
-        let input_variable = &input_variables
-            .get(&self.input_key)
-            .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
-        let human_message =
-            Message::new_human_message(crate::schemas::messages::value_to_text(input_variable));
+        let human_message = self.human_message(&input_variables)?;
 
         let history = self.memory.lock().await.to_string().await?;
         let mut input_variables = input_variables;
@@ -84,11 +90,7 @@ impl Chain for ConversationalChain {
         input_variables: PromptArgs,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
-        let input_variable = &input_variables
-            .get(&self.input_key)
-            .ok_or(ChainError::MissingInputVariable(self.input_key.clone()))?;
-        let human_message =
-            Message::new_human_message(crate::schemas::messages::value_to_text(input_variable));
+        let human_message = self.human_message(&input_variables)?;
 
         let history = self.memory.lock().await.to_string().await?;
 

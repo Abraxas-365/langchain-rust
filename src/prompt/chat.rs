@@ -1,4 +1,9 @@
-use crate::schemas::{messages::Message, prompt::PromptValue};
+use serde_json::Value;
+
+use crate::schemas::{
+    messages::{ImageContent, Message},
+    prompt::PromptValue,
+};
 
 use super::{
     FormatPrompter, MessageFormatter, PromptArgs, PromptError, PromptFromatter, PromptTemplate,
@@ -14,19 +19,103 @@ use super::{
 ///    "content",
 /// ));
 /// ```
+///
+/// # Images
+///
+/// [`with_images`](Self::with_images) names an input variable that holds images to
+/// attach to the message, so a chain or agent can take them like any other input:
+///
+/// ```rust,ignore
+/// let prompt = HumanMessagePromptTemplate::new(template_fstring!("{input}", "input"))
+///     .with_images("images");
+/// chain.invoke(prompt_args! {
+///     "input" => "What is in this picture?",
+///     "images" => ["https://example.com/cat.png"],
+/// }).await?;
+/// ```
 #[derive(Clone)]
 pub struct HumanMessagePromptTemplate {
     prompt: PromptTemplate,
+    images_key: Option<String>,
 }
 
 impl HumanMessagePromptTemplate {
     pub fn new(prompt: PromptTemplate) -> Self {
-        Self { prompt }
+        Self {
+            prompt,
+            images_key: None,
+        }
+    }
+
+    /// Attaches the images found in the `key` input variable to the message.
+    ///
+    /// The variable can be one image or a list of them. An image is either a string
+    /// (an `http(s)` URL, a `data:` URL or bare base64 data) or an
+    /// [`ImageContent`] object (`{"image_url": "...", "detail": "low"}`).
+    /// A missing variable, `null` or an empty list means no images.
+    pub fn with_images<S: Into<String>>(mut self, key: S) -> Self {
+        self.images_key = Some(key.into());
+        self
     }
 }
+
+/// Reads the images held in an input variable (see
+/// [`HumanMessagePromptTemplate::with_images`]).
+pub(crate) fn images_from_value(value: &Value) -> Result<Vec<ImageContent>, PromptError> {
+    fn one(value: &Value) -> Result<ImageContent, PromptError> {
+        match value {
+            Value::String(url) if !url.trim().is_empty() => Ok(ImageContent::from(url)),
+            Value::Object(_) => Ok(serde_json::from_value(value.clone())?),
+            other => Err(PromptError::OtherError(format!(
+                "expected an image URL, base64 string or {{\"image_url\": ...}} object, got {other}"
+            ))),
+        }
+    }
+    match value {
+        Value::Null => Ok(Vec::new()),
+        Value::Array(items) => items.iter().map(one).collect(),
+        other => Ok(vec![one(other)?]),
+    }
+}
+
+/// Input variable the built-in chain and agent prompts read images from.
+pub const DEFAULT_IMAGES_KEY: &str = "images";
+
+/// The human turn of a chain or agent call, as it is saved to memory: the text of
+/// `input_key` plus any images in `images_key`.
+pub(crate) fn human_message_from_inputs(
+    inputs: &PromptArgs,
+    input_key: &str,
+    images_key: &str,
+) -> Result<Message, PromptError> {
+    let input = inputs
+        .get(input_key)
+        .ok_or_else(|| PromptError::MissingVariable(input_key.to_string()))?;
+    let message = Message::new_human_message(crate::schemas::messages::value_to_text(input));
+    let images = match inputs.get(images_key) {
+        Some(value) => images_from_value(value)?,
+        None => Vec::new(),
+    };
+    Ok(if images.is_empty() {
+        message
+    } else {
+        message.with_images(images)
+    })
+}
+
 impl MessageFormatter for HumanMessagePromptTemplate {
     fn format_messages(&self, input_variables: PromptArgs) -> Result<Vec<Message>, PromptError> {
-        let message = Message::new_human_message(self.prompt.format(input_variables)?);
+        let images = match &self.images_key {
+            Some(key) => match input_variables.get(key) {
+                Some(value) => images_from_value(value)?,
+                None => Vec::new(),
+            },
+            None => Vec::new(),
+        };
+        let mut message = Message::new_human_message(self.prompt.format(input_variables)?);
+        if !images.is_empty() {
+            message = message.with_images(images);
+        }
         tracing::debug!("message: {:?}", message);
         Ok(vec![message])
     }
@@ -299,9 +388,9 @@ macro_rules! message_formatter {
 mod tests {
     use crate::{
         message_formatter,
-        prompt::{chat::AIMessagePromptTemplate, FormatPrompter},
+        prompt::{chat::AIMessagePromptTemplate, FormatPrompter, PromptError},
         prompt_args,
-        schemas::messages::Message,
+        schemas::messages::{Message, MessageType},
         template_fstring,
     };
 
@@ -406,5 +495,111 @@ mod tests {
             .format_messages(prompt_args! {"role" => "x", "q" => "y", "history" => "nope"})
             .unwrap_err();
         assert!(matches!(err, PromptError::SerializationError(_)));
+    }
+
+    #[test]
+    fn human_template_attaches_images_from_a_variable() {
+        use crate::prompt::{HumanMessagePromptTemplate, MessageFormatter};
+        use crate::schemas::messages::ImageContent;
+        use serde_json::json;
+
+        let template = HumanMessagePromptTemplate::new(template_fstring!("Q: {input}", "input"))
+            .with_images("images");
+        // Images are not prompt variables: the template only needs `input`.
+        assert_eq!(template.input_variables(), vec!["input".to_string()]);
+
+        let urls = |messages: &[Message]| -> Vec<String> {
+            messages[0]
+                .images
+                .iter()
+                .flatten()
+                .map(|i| i.image_url.clone())
+                .collect()
+        };
+
+        // A list mixing strings and ImageContent objects.
+        let messages = template
+            .format_messages(prompt_args! {
+                "input" => "what is it?",
+                "images" => json!(["https://a/cat.png", {"image_url": "iVBORw0KGgo", "detail": "low"}]),
+            })
+            .unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "Q: what is it?");
+        assert_eq!(urls(&messages), vec!["https://a/cat.png", "iVBORw0KGgo"]);
+        assert_eq!(
+            messages[0].images.as_ref().unwrap()[1],
+            ImageContent::from("iVBORw0KGgo").with_detail("low")
+        );
+
+        // A single string works too.
+        let messages = template
+            .format_messages(prompt_args! {"input" => "x", "images" => "https://a/b.png"})
+            .unwrap();
+        assert_eq!(urls(&messages), vec!["https://a/b.png"]);
+
+        // Missing, null or empty: a plain text message (images stays None).
+        for args in [
+            prompt_args! {"input" => "x"},
+            prompt_args! {"input" => "x", "images" => json!(null)},
+            prompt_args! {"input" => "x", "images" => json!([])},
+        ] {
+            assert_eq!(template.format_messages(args).unwrap()[0].images, None);
+        }
+
+        // Without with_images the variable is ignored.
+        let plain = HumanMessagePromptTemplate::new(template_fstring!("{input}", "input"));
+        let messages = plain
+            .format_messages(prompt_args! {"input" => "x", "images" => "https://a/b.png"})
+            .unwrap();
+        assert_eq!(messages[0].images, None);
+
+        // Bad values are errors, not silently dropped.
+        for bad in [
+            json!(42),
+            json!([""]),
+            json!([{"detail": "low"}]),
+            json!([[]]),
+        ] {
+            let err = template
+                .format_messages(prompt_args! {"input" => "x", "images" => bad.clone()})
+                .unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    PromptError::OtherError(_) | PromptError::SerializationError(_)
+                ),
+                "{bad}: {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn human_message_from_inputs_reads_text_and_images() {
+        use crate::prompt::human_message_from_inputs;
+        use serde_json::json;
+
+        let m = human_message_from_inputs(
+            &prompt_args! {"input" => "hi", "images" => json!(["https://a/b.png"])},
+            "input",
+            "images",
+        )
+        .unwrap();
+        assert_eq!(m.message_type, MessageType::HumanMessage);
+        assert_eq!(m.content, "hi");
+        assert_eq!(m.images.unwrap()[0].image_url, "https://a/b.png");
+
+        // Non-string input is rendered without JSON quotes for strings only.
+        let m = human_message_from_inputs(
+            &prompt_args! {"input" => json!({"a": 1})},
+            "input",
+            "images",
+        )
+        .unwrap();
+        assert_eq!(m.content, r#"{"a":1}"#);
+        assert_eq!(m.images, None);
+
+        let err = human_message_from_inputs(&prompt_args! {}, "input", "images").unwrap_err();
+        assert!(matches!(err, PromptError::MissingVariable(v) if v == "input"));
     }
 }

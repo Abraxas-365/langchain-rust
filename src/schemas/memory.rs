@@ -70,7 +70,13 @@ pub trait BaseMemory: Send + Sync {
             .messages()
             .await?
             .iter()
-            .map(|msg| format!("{}: {}", msg.message_type.to_string(), msg.content))
+            .map(|msg| {
+                format!(
+                    "{}: {}",
+                    msg.message_type.to_string(),
+                    msg.text_with_image_markers()
+                )
+            })
             .collect::<Vec<String>>()
             .join("\n"))
     }

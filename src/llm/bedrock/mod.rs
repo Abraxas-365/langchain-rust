@@ -46,13 +46,14 @@ use async_trait::async_trait;
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_bedrockruntime::types::{
     AutoToolChoice, ContentBlock, ContentBlockDelta, ContentBlockStart, ConversationRole,
-    ConverseStreamOutput, InferenceConfiguration, Message as BedrockMessage, SpecificToolChoice,
-    SystemContentBlock, Tool, ToolChoice, ToolConfiguration, ToolInputSchema, ToolResultBlock,
-    ToolResultContentBlock, ToolSpecification, ToolUseBlock,
+    ConverseStreamOutput, ImageBlock, ImageFormat, ImageSource as BedrockImageSource,
+    InferenceConfiguration, Message as BedrockMessage, SpecificToolChoice, SystemContentBlock,
+    Tool, ToolChoice, ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock,
+    ToolSpecification, ToolUseBlock,
 };
 use aws_sdk_bedrockruntime::Client as BedrockClient;
 use aws_smithy_types::error::display::DisplayErrorContext;
-use aws_smithy_types::{Document, Number};
+use aws_smithy_types::{Blob, Document, Number};
 use futures::Stream;
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -67,7 +68,7 @@ use crate::observability::{traced_event_stream, traced_generate};
 
 /// `provider` field of the `llm.generate` span.
 const PROVIDER: &str = "bedrock";
-use crate::schemas::messages::MessageType;
+use crate::schemas::messages::{ImageSource, MessageType};
 use crate::schemas::{FunctionCallBehavior, FunctionDefinition, Message, StreamData, ToolCall};
 
 /// Errors specific to the Bedrock integration.
@@ -288,10 +289,7 @@ impl Bedrock {
                     continue;
                 }
                 MessageType::AIMessage => (ConversationRole::Assistant, assistant_blocks(msg)?),
-                MessageType::HumanMessage => (
-                    ConversationRole::User,
-                    vec![ContentBlock::Text(msg.content.clone())],
-                ),
+                MessageType::HumanMessage => (ConversationRole::User, user_blocks(msg)?),
                 MessageType::ToolMessage => {
                     let result = ToolResultBlock::builder()
                         .tool_use_id(msg.id.clone().unwrap_or_default())
@@ -501,6 +499,43 @@ impl Default for Bedrock {
 
 fn request_error(e: impl std::fmt::Display) -> BedrockError {
     BedrockError::RequestError(e.to_string())
+}
+
+/// A user turn: one `image` block per image, then the text. Converse takes image
+/// bytes only, so base64 data is decoded and http(s) URLs are rejected.
+fn user_blocks(msg: &Message) -> Result<Vec<ContentBlock>, BedrockError> {
+    let mut blocks = Vec::new();
+    for image in msg.images.iter().flatten() {
+        let ImageSource::Base64 { media_type, data } = image.source() else {
+            return Err(BedrockError::RequestError(format!(
+                "Bedrock only accepts inline images; download {} and pass it as base64 or a data: URL",
+                image.image_url
+            )));
+        };
+        let format = match media_type {
+            Some("image/png") => ImageFormat::Png,
+            Some("image/gif") => ImageFormat::Gif,
+            Some("image/webp") => ImageFormat::Webp,
+            Some("image/jpeg") | Some("image/jpg") | None => ImageFormat::Jpeg,
+            Some(other) => {
+                return Err(BedrockError::RequestError(format!(
+                    "unsupported image type {other} (Bedrock takes png, jpeg, gif or webp)"
+                )))
+            }
+        };
+        let bytes = aws_smithy_types::base64::decode(data)
+            .map_err(|e| request_error(format!("invalid base64 image: {e}")))?;
+        let block = ImageBlock::builder()
+            .format(format)
+            .source(BedrockImageSource::Bytes(Blob::new(bytes)))
+            .build()
+            .map_err(request_error)?;
+        blocks.push(ContentBlock::Image(block));
+    }
+    if !msg.content.is_empty() || blocks.is_empty() {
+        blocks.push(ContentBlock::Text(msg.content.clone()));
+    }
+    Ok(blocks)
 }
 
 /// Keeps the full error chain (the top-level SDK error alone is just "service error").
@@ -844,6 +879,62 @@ mod tests {
             ]
         );
         assert_eq!(converse[1].content()[0].as_text().unwrap(), "hello");
+    }
+
+    #[test]
+    fn user_images_become_image_blocks() {
+        use crate::schemas::messages::ImageContent;
+        // Real PNG signature, so the media type is sniffed from the bytes.
+        const PNG: [u8; 9] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 7];
+        let png = aws_smithy_types::base64::encode(PNG);
+        let message = Message::new_human_message("what is it?").with_images(vec![
+            ImageContent::from(png.as_str()),
+            ImageContent::from("data:image/webp;base64,AAEC"),
+            ImageContent::from("data:;base64,AAEC"),
+        ]);
+        let (_, converse) = Bedrock::to_converse_messages(&[message]).unwrap();
+        let blocks = converse[0].content();
+        assert_eq!(blocks.len(), 4);
+
+        let image = |i: usize| blocks[i].as_image().unwrap();
+        assert_eq!(image(0).format(), &ImageFormat::Png);
+        assert_eq!(
+            image(0).source().unwrap().as_bytes().unwrap().as_ref(),
+            &PNG
+        );
+        assert_eq!(image(1).format(), &ImageFormat::Webp);
+        assert_eq!(
+            image(1).source().unwrap().as_bytes().unwrap().as_ref(),
+            &[0, 1, 2]
+        );
+        // Unknown media type falls back to jpeg.
+        assert_eq!(image(2).format(), &ImageFormat::Jpeg);
+        assert_eq!(blocks[3].as_text().unwrap(), "what is it?");
+
+        // Image-only turn: no empty text block.
+        let only = Message::new_human_message("")
+            .with_images(vec![ImageContent::from("data:image/gif;base64,AAEC")]);
+        let (_, converse) = Bedrock::to_converse_messages(&[only]).unwrap();
+        assert_eq!(converse[0].content().len(), 1);
+        assert_eq!(
+            converse[0].content()[0].as_image().unwrap().format(),
+            &ImageFormat::Gif
+        );
+    }
+
+    #[test]
+    fn user_images_errors() {
+        use crate::schemas::messages::ImageContent;
+        let cases = [
+            ("https://example.com/cat.png", "download"),
+            ("data:image/tiff;base64,AAEC", "image/tiff"),
+            ("data:image/png;base64,***", "invalid base64"),
+        ];
+        for (url, expected) in cases {
+            let m = Message::new_human_message("x").with_images(vec![ImageContent::from(url)]);
+            let err = Bedrock::to_converse_messages(&[m]).unwrap_err();
+            assert!(err.to_string().contains(expected), "{url}: {err}");
+        }
     }
 
     #[test]

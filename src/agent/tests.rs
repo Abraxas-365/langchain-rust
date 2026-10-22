@@ -321,6 +321,68 @@ async fn openai_tools_agent_plain_text_is_final() {
 }
 
 #[tokio::test]
+async fn agents_send_input_images_and_save_them_to_memory() {
+    // Tools agent: the images ride on the human message, also on the step after a tool.
+    let tools: Vec<Arc<dyn Tool>> = vec![Arc::new(RecordingTool::ok("Lookup", "an orange cat"))];
+    let llm = FakeLLM::new([
+        tool_calls_json(&[("call_1", "Lookup", "{}")]),
+        "It's a cat".to_string(),
+    ]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&tools)
+        .build(llm.clone())
+        .unwrap();
+    let memory = Arc::new(Mutex::new(SimpleMemory::new()));
+    let out = AgentExecutor::from_agent(agent)
+        .with_memory(memory.clone())
+        .invoke(prompt_args! {
+            "input" => "What is this?",
+            "images" => ["https://example.com/cat.png", "iVBORw0KGgo"],
+        })
+        .await
+        .unwrap();
+    assert_eq!(out, "It's a cat");
+
+    assert_eq!(llm.calls().len(), 2);
+    for call in llm.calls() {
+        let human: Vec<_> = call
+            .iter()
+            .filter(|m| m.message_type == MessageType::HumanMessage)
+            .collect();
+        assert_eq!(human.len(), 1);
+        assert_eq!(human[0].content, "What is this?");
+        let urls: Vec<_> = human[0]
+            .images
+            .iter()
+            .flatten()
+            .map(|i| i.image_url.as_str())
+            .collect();
+        assert_eq!(urls, ["https://example.com/cat.png", "iVBORw0KGgo"]);
+    }
+    let saved = memory.lock().await.messages().await.unwrap();
+    assert_eq!(saved[0].message_type, MessageType::HumanMessage);
+    assert_eq!(saved[0].content, "What is this?");
+    assert_eq!(saved[0].images.as_ref().unwrap().len(), 2);
+
+    // Conversational (ReAct-style) agent.
+    let llm = FakeLLM::new([final_answer("A cat")]);
+    let agent = ConversationalAgentBuilder::new()
+        .build(llm.clone())
+        .unwrap();
+    AgentExecutor::from_agent(agent)
+        .invoke(prompt_args! {"input" => "What is this?", "images" => "https://a/b.png"})
+        .await
+        .unwrap();
+    let human = llm.calls()[0]
+        .iter()
+        .find(|m| m.message_type == MessageType::HumanMessage)
+        .cloned()
+        .unwrap();
+    assert!(human.content.contains("What is this?"));
+    assert_eq!(human.images.unwrap()[0].image_url, "https://a/b.png");
+}
+
+#[tokio::test]
 async fn openai_tools_agent_uses_typed_tool_calls() {
     use crate::{language_models::GenerateResult, schemas::ToolCall};
 
