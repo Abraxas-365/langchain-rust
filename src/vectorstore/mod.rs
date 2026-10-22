@@ -24,6 +24,9 @@ pub mod qdrant;
 #[cfg(feature = "chroma")]
 pub mod chroma;
 
+#[cfg(feature = "pinecone")]
+pub mod pinecone;
+
 mod vectorstore;
 
 pub use options::*;

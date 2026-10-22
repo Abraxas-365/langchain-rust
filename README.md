@@ -35,6 +35,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 - VectorStores
 
   - [x] [OpenSearch](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_opensearch.rs)
+  - [x] [Pinecone](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_pinecone.rs)
   - [x] [Postgres](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_postgres.rs)
   - [x] [Qdrant](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_qdrant.rs)
   - [x] [Chroma](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_chroma.rs)
@@ -280,6 +281,12 @@ cargo add langchain-rust --features surrealdb
 
 ```bash
 cargo add langchain-rust --features weaviate
+```
+
+#### With Pinecone
+
+```bash
+cargo add langchain-rust --features pinecone
 ```
 
 #### With Qdrant
