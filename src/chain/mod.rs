@@ -25,6 +25,9 @@ pub use question_answering::*;
 mod conversational_retrieval_qa;
 pub use conversational_retrieval_qa::*;
 
+mod router;
+pub use router::*;
+
 mod error;
 pub use error::*;
 
