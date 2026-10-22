@@ -1,11 +1,17 @@
 mod chat;
 mod error;
+mod example_selector;
+mod few_shot;
+#[cfg(test)]
+mod few_shot_tests;
 mod prompt;
 
 use std::collections::HashMap;
 
 pub use chat::*;
 pub use error::*;
+pub use example_selector::*;
+pub use few_shot::*;
 pub use prompt::*;
 use serde_json::Value;
 
@@ -43,9 +49,20 @@ where
     }
 }
 
+#[async_trait::async_trait]
 pub trait FormatPrompter: Send + Sync {
     fn format_prompt(&self, input_variables: PromptArgs) -> Result<PromptValue, PromptError>;
     fn get_input_variables(&self) -> Vec<String>;
+
+    /// Formats the prompt, for prompts that need async work to do it (e.g. a
+    /// [`FewShotPromptTemplate`] choosing examples by embedding similarity). Chains call
+    /// this one. Defaults to [`format_prompt`](Self::format_prompt).
+    async fn format_prompt_async(
+        &self,
+        input_variables: PromptArgs,
+    ) -> Result<PromptValue, PromptError> {
+        self.format_prompt(input_variables)
+    }
 }
 impl<FP> From<FP> for Box<dyn FormatPrompter>
 where

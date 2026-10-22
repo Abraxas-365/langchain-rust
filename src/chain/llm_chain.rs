@@ -97,8 +97,11 @@ pub struct LLMChain {
 
 impl LLMChain {
     /// The prompt's text for `input_variables`, its messages joined by newlines.
-    pub(crate) fn prompt_text(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
-        let prompt = self.prompt.format_prompt(input_variables)?;
+    pub(crate) async fn prompt_text(
+        &self,
+        input_variables: PromptArgs,
+    ) -> Result<String, ChainError> {
+        let prompt = self.prompt.format_prompt_async(input_variables).await?;
         Ok(prompt
             .to_chat_messages()
             .iter()
@@ -127,7 +130,10 @@ impl Chain for LLMChain {
         traced(
             span,
             async {
-                let prompt = self.prompt.format_prompt(input_variables.clone())?;
+                let prompt = self
+                    .prompt
+                    .format_prompt_async(input_variables.clone())
+                    .await?;
                 tracing::debug!("Prompt: {:?}", prompt);
                 let mut output = self.llm.generate(&prompt.to_chat_messages()).await?;
                 output.generation = self.output_parser.parse(&output.generation).await?;
@@ -139,7 +145,10 @@ impl Chain for LLMChain {
     }
 
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
-        let prompt = self.prompt.format_prompt(input_variables.clone())?;
+        let prompt = self
+            .prompt
+            .format_prompt_async(input_variables.clone())
+            .await?;
         tracing::debug!("Prompt: {:?}", prompt);
         let output = self
             .llm
@@ -154,7 +163,10 @@ impl Chain for LLMChain {
         input_variables: PromptArgs,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
-        let prompt = self.prompt.format_prompt(input_variables.clone())?;
+        let prompt = self
+            .prompt
+            .format_prompt_async(input_variables.clone())
+            .await?;
         tracing::debug!("Prompt: {:?}", prompt);
         let llm_stream = self.llm.stream(&prompt.to_chat_messages()).await?;
 
@@ -168,7 +180,7 @@ impl Chain for LLMChain {
     /// already been through the chain's output parser, as with [`call`](Chain::call).
     fn call_stream<'a>(&'a self, input_variables: PromptArgs) -> ChainEventStream<'a> {
         box_chain_events(async_stream::try_stream! {
-            let messages = self.prompt.format_prompt(input_variables)?.to_chat_messages();
+            let messages = self.prompt.format_prompt_async(input_variables).await?.to_chat_messages();
             let mut events = self.llm.generate_stream(&messages);
             while let Some(event) = events.next().await {
                 match event? {
