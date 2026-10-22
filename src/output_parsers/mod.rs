@@ -18,6 +18,7 @@ mod error;
 pub use error::*;
 
 mod typed;
+pub(crate) use typed::strip_reasoning;
 pub use typed::TypedOutputParser;
 
 mod boolean_parser;

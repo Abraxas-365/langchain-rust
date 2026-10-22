@@ -31,6 +31,12 @@ pub use router::*;
 mod error;
 pub use error::*;
 
+mod llm_math;
+pub use llm_math::{
+    LLMMathChain, MathAnswer, LLM_MATH_DEFAULT_INPUT_KEY, LLM_MATH_DEFAULT_OUTPUT_KEY,
+    LLM_MATH_EXPRESSION_KEY,
+};
+
 pub mod options;
 
 #[cfg(test)]
