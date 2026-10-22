@@ -99,9 +99,19 @@ impl Embedder for FastEmbed {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Creates a model, one test at a time: with an empty `.fastembed_cache` (fresh CI
+    /// checkout) parallel tests would download the same model files concurrently and
+    /// trip over each other's partial downloads ("Failed to retrieve model file").
+    fn new_model() -> FastEmbed {
+        static CREATE: Mutex<()> = Mutex::new(());
+        let _guard = CREATE.lock().unwrap_or_else(|e| e.into_inner());
+        FastEmbed::try_new().unwrap()
+    }
+
     #[tokio::test]
     async fn test_fastembed() {
-        let fastembed = FastEmbed::try_new().unwrap();
+        let fastembed = new_model();
         let embeddings = fastembed
             .embed_documents(&["hello world".to_string(), "foo bar".to_string()])
             .await
@@ -113,10 +123,10 @@ mod tests {
     /// created after the first is dropped must still work.
     #[tokio::test]
     async fn fastembed_can_be_created_twice() {
-        let first = FastEmbed::try_new().unwrap();
+        let first = new_model();
         drop(first);
-        let second = FastEmbed::try_new().unwrap();
-        let both_alive = FastEmbed::try_new().unwrap();
+        let second = new_model();
+        let both_alive = new_model();
         assert_eq!(second.embed_query("hi").await.unwrap().len(), 384);
         assert_eq!(both_alive.embed_query("hi").await.unwrap().len(), 384);
     }
@@ -125,7 +135,7 @@ mod tests {
     /// keep running while the model works (#142).
     #[tokio::test]
     async fn fastembed_does_not_block_the_runtime() {
-        let fastembed = FastEmbed::try_new().unwrap();
+        let fastembed = new_model();
         let texts: Vec<String> = (0..64)
             .map(|i| format!("document number {i} about rust and async runtimes"))
             .collect();
