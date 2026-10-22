@@ -98,6 +98,7 @@ tree-sitter-rust = { version = "0.24", optional = true }
 tree-sitter-scala = { version = "0.26", optional = true }
 tree-sitter-typescript = { version = "0.23", optional = true }
 qdrant-client = { version = "1.19", optional = true }
+mongodb = { version = "3.5", optional = true }
 ollama-rs = { version = "0.3.6", optional = true, features = ["stream"] }
 mistralai-client = { version = "0.14.0", optional = true }
 redis = { version = "1.7", optional = true, default-features = false, features = [
@@ -119,6 +120,7 @@ ollama = ["ollama-rs"]
 opensearch = ["dep:opensearch", "dep:aws-config"]
 postgres = ["pgvector", "sqlx", "uuid"]
 qdrant = ["qdrant-client", "uuid"]
+mongodb = ["dep:mongodb"]
 chroma = ["uuid"]
 pinecone = ["uuid"]
 sqlite-vss = ["sqlx"]

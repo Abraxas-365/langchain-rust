@@ -36,6 +36,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
 - VectorStores
 
+  - [x] [MongoDB Atlas](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_mongodb.rs)
   - [x] [OpenSearch](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_opensearch.rs)
   - [x] [Pinecone](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_pinecone.rs)
   - [x] [Postgres](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_postgres.rs)
@@ -307,6 +308,12 @@ cargo add langchain-rust --features qdrant
 
 ```bash
 cargo add langchain-rust --features chroma
+```
+
+#### With MongoDB Atlas
+
+```bash
+cargo add langchain-rust --features mongodb
 ```
 
 #### With Redis (chat history and vector store)

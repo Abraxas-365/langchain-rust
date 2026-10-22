@@ -24,6 +24,9 @@ pub mod opensearch;
 #[cfg(feature = "qdrant")]
 pub mod qdrant;
 
+#[cfg(feature = "mongodb")]
+pub mod mongodb;
+
 #[cfg(feature = "chroma")]
 pub mod chroma;
 
