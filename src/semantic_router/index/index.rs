@@ -2,8 +2,10 @@ use async_trait::async_trait;
 
 use crate::semantic_router::{IndexError, Router};
 
+/// Where a [`RouteLayer`](crate::semantic_router::RouteLayer) keeps its routes.
+/// `Send + Sync` so a route layer can live in shared state and be used from spawned tasks.
 #[async_trait]
-pub trait Index {
+pub trait Index: Send + Sync {
     async fn add(&mut self, router: &[Router]) -> Result<(), IndexError>;
 
     async fn delete(&mut self, route_name: &str) -> Result<(), IndexError>;
