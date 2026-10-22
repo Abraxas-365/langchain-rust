@@ -57,6 +57,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Q&A Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/qa_chain.rs)
   - [x] [Map-reduce / refine summarization + Retrieval QA](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/summarize_documents.rs)
   - [x] [SQL Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sql_chain.rs)
+  - [x] [Router Chain (LLM picks the chain)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/router_chain.rs)
 
 - Memory
 
