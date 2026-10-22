@@ -18,6 +18,9 @@ pub mod opensearch;
 #[cfg(feature = "qdrant")]
 pub mod qdrant;
 
+#[cfg(feature = "chroma")]
+pub mod chroma;
+
 mod vectorstore;
 
 pub use options::*;
