@@ -38,10 +38,17 @@ impl TokenSplitter {
 #[async_trait]
 impl TextSplitter for TokenSplitter {
     async fn split_text(&self, text: &str) -> Result<Vec<String>, TextSplitterError> {
-        let chunk_config = ChunkConfig::try_from(&self.splitter_options)?;
-        Ok(text_splitter::TextSplitter::new(chunk_config)
-            .chunks(text)
-            .map(|x| x.to_string())
-            .collect())
+        let options = self.splitter_options.clone();
+        let text = text.to_string();
+        // Tokenizing and splitting a large document is CPU-bound; keep it off the async
+        // worker thread.
+        crate::blocking::run_blocking(move || {
+            let chunk_config = ChunkConfig::try_from(&options)?;
+            Ok(text_splitter::TextSplitter::new(chunk_config)
+                .chunks(&text)
+                .map(|x| x.to_string())
+                .collect())
+        })
+        .await
     }
 }

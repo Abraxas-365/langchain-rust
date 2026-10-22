@@ -55,10 +55,16 @@ impl Loader for PdfExtractLoader {
         Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
         LoaderError,
     > {
-        let mut buffer: Vec<u8> = Vec::new();
-        let mut output = PlainTextOutput::new(&mut buffer as &mut dyn std::io::Write);
-        output_doc(&self.document, &mut output)?;
-        let doc = Document::new(String::from_utf8(buffer)?);
+        // Rendering the whole document to text is CPU-bound; keep it off the async worker.
+        let document = self.document;
+        let text = crate::blocking::run_blocking(move || -> Result<String, LoaderError> {
+            let mut buffer: Vec<u8> = Vec::new();
+            let mut output = PlainTextOutput::new(&mut buffer as &mut dyn std::io::Write);
+            output_doc(&document, &mut output)?;
+            Ok(String::from_utf8(buffer)?)
+        })
+        .await?;
+        let doc = Document::new(text);
 
         let stream = stream! {
             yield Ok(doc);
@@ -126,5 +132,20 @@ mod tests {
 
         assert_eq!(&docs[0].page_content[..100], "\n\nSample PDF Document\n\nRobert Maron\nGrzegorz Grudzi´nski\n\nFebruary 20, 1999\n\n2\n\nContents\n\n1 Templat");
         assert_eq!(docs.len(), 1);
+    }
+
+    /// Rendering runs on the blocking pool without stalling the runtime thread (#142).
+    #[tokio::test]
+    async fn pdf_extract_loader_does_not_block_the_runtime() {
+        let loader = PdfExtractLoader::from_path("./src/document_loaders/test_data/sample.pdf")
+            .expect("Failed to create PdfExtractLoader");
+        let (stream, ticks) = crate::blocking::testing::ticks_while(loader.load()).await;
+        let docs = stream
+            .unwrap()
+            .map(|d| d.unwrap())
+            .collect::<Vec<_>>()
+            .await;
+        assert!(docs[0].page_content.contains("Sample PDF Document"));
+        assert!(ticks > 0, "PDF rendering blocked the runtime thread");
     }
 }
