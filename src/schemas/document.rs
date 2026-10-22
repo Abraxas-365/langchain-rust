@@ -9,10 +9,12 @@ use serde_json::Value;
 /// The `score` field represents a relevance score for the document and is a floating point number.
 /// The optional `id` field is a caller-supplied identifier for the final indexed document.
 ///
-/// Adding `id` is a Rust source compatibility change: downstream exhaustive struct
-/// literals must include the field. `Document::new`, `Document::default`, documents
-/// serialized before this field existed, and the `VectorStore` trait (including the
-/// `add_documents!` macro) stay compatible.
+/// `Document` is `#[non_exhaustive]`. Downstream crates build it with
+/// [`Document::new`] or [`Document::default`] and the `with_*` methods, so the next
+/// field can be added without another source break. Adding `id` is still a breaking
+/// change for struct literals that already existed. Documents serialized before `id`
+/// existed, and the `VectorStore` trait (including the `add_documents!` macro), stay
+/// compatible.
 ///
 /// # Usage
 /// ```rust,ignore
@@ -25,6 +27,7 @@ use serde_json::Value;
 ///    .with_score(0.75);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Document {
     pub page_content: String,
     pub metadata: HashMap<String, Value>,
