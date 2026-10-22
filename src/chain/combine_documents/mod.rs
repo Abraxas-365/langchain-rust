@@ -1,12 +1,16 @@
 //! Chains that combine many documents into one answer, beyond
-//! [`StuffDocument`](crate::chain::StuffDocument): refine, map-reduce, summarization, and
-//! [`RetrievalQA`] on top of a retriever.
+//! [`StuffDocument`](crate::chain::StuffDocument): refine, map-reduce, map-rerank,
+//! summarization, and [`RetrievalQA`] on top of a retriever.
 mod map_reduce;
+mod map_rerank;
 mod prompts;
 mod refine;
 mod retrieval_qa;
 
 pub use map_reduce::MapReduceDocuments;
+pub use map_rerank::{
+    MapRerankDocuments, RankedAnswer, MAP_RERANK_INTERMEDIATE_STEPS_KEY, MAP_RERANK_SCORE_KEY,
+};
 pub use refine::RefineDocuments;
 pub use retrieval_qa::{RetrievalQA, RETRIEVAL_QA_SOURCE_DOCUMENTS_KEY};
 
@@ -102,6 +106,18 @@ impl MapReduceDocuments {
             llm_chain(llm.clone_box(), prompts::SUMMARIZE_TEMPLATE, &["context"]),
             StuffDocument::load_summarize(llm),
         )
+    }
+}
+
+impl MapRerankDocuments {
+    /// Answers `question` from each document with a self-reported score and returns the
+    /// best-scored answer. Inputs: `input_documents`, `question`.
+    pub fn load_qa<L: Into<Box<dyn LLM>>>(llm: L) -> Self {
+        MapRerankDocuments::new(llm_chain(
+            llm.into(),
+            prompts::MAP_RERANK_QA_TEMPLATE,
+            &["context", "question"],
+        ))
     }
 }
 
