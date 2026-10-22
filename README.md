@@ -60,6 +60,10 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [SQL Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sql_chain.rs)
   - [x] [Router Chain (LLM picks the chain)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/router_chain.rs)
 
+- Output parsers
+
+  - [x] [Typed JSON, structured fields, lists, yes/no and regex](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/output_parsers.rs)
+
 - Memory
 
   - [x] [Persistent memory (SQLite/Postgres) + token buffer](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/persistent_memory.rs)
