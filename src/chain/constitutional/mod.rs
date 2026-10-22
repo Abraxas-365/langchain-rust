@@ -172,7 +172,7 @@ impl ConstitutionalChain {
         &self,
         input_variables: PromptArgs,
     ) -> Result<ConstitutionalOutput, ChainError> {
-        let input_prompt = self.chain.prompt_text(input_variables.clone())?;
+        let input_prompt = self.chain.prompt_text(input_variables.clone()).await?;
         let first = self.chain.call(input_variables).await?;
         let mut tokens = first.tokens;
         let initial_output = strip_reasoning(&first.generation).trim().to_string();
