@@ -13,6 +13,9 @@ pub use qwen::*;
 pub mod deepseek;
 pub use deepseek::*;
 
+mod cache;
+pub use cache::{CachedLLM, InMemoryLLMCache, LLMCache};
+
 mod sse;
 
 #[cfg(test)]

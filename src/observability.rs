@@ -7,7 +7,7 @@
 //! | `llm.generate` | `provider`, `model`, `stream`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `tool_calls`, `error` |
 //! | `embed.documents` / `embed.query` | `provider`, `model`, `count`, `error` |
 //! | `chain.call` | `chain`, `error` |
-//! | `agent.run` | `max_iterations`, `steps`, `error` |
+//! | `agent.run` | `max_iterations`, `steps`, `total_tokens`, `error` |
 //! | `agent.plan` | `step` |
 //! | `tool.call` | `tool`, `error` |
 //!

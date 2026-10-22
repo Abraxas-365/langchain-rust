@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::language_models::{GenerateResult, TokenUsage};
+use crate::schemas::messages::ImageSource;
 use crate::schemas::{FunctionCallBehavior, FunctionDefinition, Message, ToolCall};
 
 /// A message in the Anthropic Messages API. `content` is either a plain string or a list of
@@ -22,6 +23,33 @@ impl ClaudeMessage {
 
     pub fn text<S: Into<String>>(role: S, text: &str) -> Self {
         Self::new(role, Value::String(text.to_string()))
+    }
+
+    /// A user turn. With images it becomes a list of `image` blocks followed by the
+    /// text (Anthropic recommends images before the question).
+    pub fn user(message: &Message) -> Self {
+        let images = message.images.as_deref().unwrap_or_default();
+        if images.is_empty() {
+            return Self::text("user", &message.content);
+        }
+        let mut blocks: Vec<Value> = images
+            .iter()
+            .map(|image| {
+                let source = match image.source() {
+                    ImageSource::Url(url) => json!({"type": "url", "url": url}),
+                    ImageSource::Base64 { media_type, data } => json!({
+                        "type": "base64",
+                        "media_type": media_type.unwrap_or("image/jpeg"),
+                        "data": data,
+                    }),
+                };
+                json!({"type": "image", "source": source})
+            })
+            .collect();
+        if !message.content.is_empty() {
+            blocks.push(json!({"type": "text", "text": message.content}));
+        }
+        Self::new("user", Value::Array(blocks))
     }
 
     /// An assistant turn. Tool calls (stored in the OpenAI-like format used across the crate)
@@ -80,9 +108,7 @@ pub(crate) fn to_claude_messages(messages: &[&Message]) -> Vec<ClaudeMessage> {
     for message in messages {
         let next = match message.message_type {
             MessageType::AIMessage => ClaudeMessage::assistant(message),
-            MessageType::HumanMessage | MessageType::SystemMessage => {
-                ClaudeMessage::text("user", &message.content)
-            }
+            MessageType::HumanMessage | MessageType::SystemMessage => ClaudeMessage::user(message),
             MessageType::ToolMessage => ClaudeMessage::tool_result(message),
         };
         match out.last_mut() {

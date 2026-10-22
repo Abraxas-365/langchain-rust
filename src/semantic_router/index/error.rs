@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum IndexError {
     #[error("No Emedding on Route: {0}")]
     MissingEmbedding(String),

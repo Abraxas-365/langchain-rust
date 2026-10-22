@@ -201,3 +201,42 @@ async fn split_documents_keeps_per_document_metadata() {
     assert_eq!(out[0].metadata, m1);
     assert_eq!(out[1].metadata, m2);
 }
+
+/// Splitting runs on the blocking pool: other tasks on the same runtime thread keep
+/// running while a large document is split (#142).
+#[tokio::test]
+async fn splitters_do_not_block_the_runtime() {
+    use crate::blocking::testing::ticks_while;
+
+    let big = format!("# Title\n\n{}", TEXT.repeat(4_000));
+    let options = SplitterOptions::default().with_chunk_size(64);
+    let splitters: Vec<(&str, Box<dyn TextSplitter>)> = vec![
+        (
+            "plain",
+            Box::new(PlainTextSplitter::new(
+                PlainTextSplitterOptions::default().with_chunk_size(64),
+            )),
+        ),
+        ("token", Box::new(TokenSplitter::new(options.clone()))),
+        ("markdown", Box::new(MarkdownSplitter::new(options))),
+    ];
+    for (name, splitter) in splitters {
+        let (chunks, ticks) = ticks_while(splitter.split_text(&big)).await;
+        assert!(chunks.unwrap().len() > 100, "{name}");
+        assert!(ticks > 0, "{name} splitter blocked the runtime thread");
+    }
+}
+
+/// Config errors still come back as errors from the blocking pool.
+#[tokio::test]
+async fn splitter_errors_cross_the_blocking_pool() {
+    let err = MarkdownSplitter::new(
+        SplitterOptions::default()
+            .with_chunk_size(10)
+            .with_chunk_overlap(10),
+    )
+    .split_text(TEXT)
+    .await
+    .unwrap_err();
+    assert!(matches!(err, TextSplitterError::InvalidSplitterOptions));
+}

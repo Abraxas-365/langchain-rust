@@ -98,7 +98,7 @@ pub(crate) fn result_events(result: GenerateResult) -> Vec<LLMEvent> {
     events
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 pub struct TokenUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,

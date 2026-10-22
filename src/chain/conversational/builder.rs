@@ -9,7 +9,7 @@ use crate::{
     language_models::llm::LLM,
     memory::SimpleMemory,
     output_parsers::OutputParser,
-    prompt::{FormatPrompter, HumanMessagePromptTemplate},
+    prompt::{FormatPrompter, HumanMessagePromptTemplate, DEFAULT_IMAGES_KEY},
     schemas::memory::BaseMemory,
     template_fstring,
 };
@@ -81,11 +81,14 @@ impl ConversationalChainBuilder {
             .ok_or_else(|| ChainError::MissingObject("LLM must be set".into()))?;
         let prompt = match self.prompt {
             Some(prompt) => prompt,
-            None => Box::new(HumanMessagePromptTemplate::new(template_fstring!(
-                DEFAULT_TEMPLATE,
-                "history",
-                "input"
-            ))),
+            None => Box::new(
+                HumanMessagePromptTemplate::new(template_fstring!(
+                    DEFAULT_TEMPLATE,
+                    "history",
+                    "input"
+                ))
+                .with_images(DEFAULT_IMAGES_KEY),
+            ),
         };
         let llm_chain = {
             let mut builder = LLMChainBuilder::new()

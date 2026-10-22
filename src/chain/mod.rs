@@ -16,14 +16,32 @@ pub use sql_datbase::*;
 mod stuff_documents;
 pub use stuff_documents::*;
 
+mod combine_documents;
+pub use combine_documents::*;
+
 mod question_answering;
 pub use question_answering::*;
 
 mod conversational_retrieval_qa;
 pub use conversational_retrieval_qa::*;
 
+mod router;
+pub use router::*;
+
+mod constitutional;
+pub use constitutional::{
+    ConstitutionalChain, ConstitutionalOutput, ConstitutionalPrinciple, CritiqueRevision,
+    CONSTITUTIONAL_INITIAL_OUTPUT_KEY, CONSTITUTIONAL_STEPS_KEY,
+};
+
 mod error;
 pub use error::*;
+
+mod llm_math;
+pub use llm_math::{
+    LLMMathChain, MathAnswer, LLM_MATH_DEFAULT_INPUT_KEY, LLM_MATH_DEFAULT_OUTPUT_KEY,
+    LLM_MATH_EXPRESSION_KEY,
+};
 
 pub mod options;
 

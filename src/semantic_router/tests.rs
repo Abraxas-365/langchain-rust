@@ -124,6 +124,45 @@ async fn route_layer_picks_best_route() {
     assert_eq!(layer.get_routers().await.unwrap().len(), 2);
 }
 
+/// A `RouteLayer` (and its index) can be shared across spawned tasks (#276).
+#[tokio::test]
+async fn route_layer_is_send_and_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<crate::semantic_router::RouteLayer>();
+    assert_send_sync::<Box<dyn Index>>();
+
+    let layer = std::sync::Arc::new(
+        RouteLayerBuilder::new()
+            .embedder(embedder())
+            .llm(FakeLLM::default())
+            .index(MemoryIndex::new())
+            .threshold(0.8)
+            .add_route(Router::new("greeting", &["hello", "hi there"]))
+            .build()
+            .await
+            .unwrap(),
+    );
+    let tasks: Vec<_> = (0..4)
+        .map(|_| {
+            let layer = layer.clone();
+            tokio::spawn(async move { layer.call("hey!").await.unwrap().unwrap().route })
+        })
+        .collect();
+    for task in tasks {
+        assert_eq!(task.await.unwrap(), "greeting");
+    }
+
+    // Mutation from a spawned task too.
+    let mut layer = std::sync::Arc::into_inner(layer).unwrap();
+    let layer = tokio::spawn(async move {
+        layer.delete_route("greeting").await.unwrap();
+        layer
+    })
+    .await
+    .unwrap();
+    assert!(layer.get_routers().await.unwrap().is_empty());
+}
+
 #[tokio::test]
 async fn route_layer_generates_tool_input() {
     let llm = FakeLLM::new([r#"{"city": "Lima"}"#, "plain text input"]);

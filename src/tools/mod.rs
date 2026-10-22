@@ -1,6 +1,9 @@
 mod tool;
 pub use tool::*;
 
+mod function_tool;
+pub use function_tool::FunctionTool;
+
 pub use wolfram::*;
 mod wolfram;
 
@@ -24,3 +27,6 @@ pub use text2speech::*;
 
 mod wikipedia;
 pub use wikipedia::*;
+
+mod calculator;
+pub use calculator::{evaluate_expression, format_number, Calculator, CalculatorError};

@@ -5,6 +5,7 @@ use thiserror::Error;
 use crate::text_splitter::TextSplitterError;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum LoaderError {
     #[error("Error loading document: {0}")]
     LoadDocumentError(String),

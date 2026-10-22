@@ -169,6 +169,76 @@ async fn conversational_chain_stream_updates_memory() {
 }
 
 #[tokio::test]
+async fn conversational_chain_sends_images_and_remembers_them() {
+    let llm = FakeLLM::new(["A cat", "It was orange", "streamed"]);
+    let chain = ConversationalChainBuilder::new()
+        .llm(llm.clone())
+        .build()
+        .unwrap();
+
+    let r = chain
+        .invoke(prompt_args! {
+            "input" => "What is this?",
+            "images" => ["https://example.com/cat.png"],
+        })
+        .await
+        .unwrap();
+    assert_eq!(r, "A cat");
+    let first = &llm.calls()[0];
+    assert_eq!(first.len(), 1);
+    assert!(first[0].content.contains("Human: What is this?"));
+    assert_eq!(
+        first[0].images.as_ref().unwrap()[0].image_url,
+        "https://example.com/cat.png"
+    );
+
+    // The next turn has no images, but the history says one was sent.
+    chain
+        .invoke(prompt_args! {"input" => "What color?"})
+        .await
+        .unwrap();
+    let second = &llm.calls()[1][0];
+    assert_eq!(second.images, None);
+    assert!(
+        second
+            .content
+            .contains("human: What is this? [image: https://example.com/cat.png]"),
+        "{}",
+        second.content
+    );
+    let saved = chain.memory.lock().await.messages().await.unwrap();
+    assert_eq!(
+        saved[0].images.as_ref().unwrap()[0].image_url,
+        "https://example.com/cat.png"
+    );
+
+    // Streaming takes images as well.
+    chain
+        .stream(prompt_args! {"input" => "and this?", "images" => "iVBORw0KGgo"})
+        .await
+        .unwrap()
+        .for_each(|_| async {})
+        .await;
+    assert_eq!(
+        llm.calls()[2][0].images.as_ref().unwrap()[0].image_url,
+        "iVBORw0KGgo"
+    );
+    let saved = chain.memory.lock().await.messages().await.unwrap();
+    assert_eq!(saved.len(), 6);
+    assert_eq!(
+        saved[4].images.as_ref().unwrap()[0].image_url,
+        "iVBORw0KGgo"
+    );
+
+    // A bad images value is a prompt error, not "missing input".
+    let err = chain
+        .invoke(prompt_args! {"input" => "x", "images" => 42})
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ChainError::PromptError(_)), "{err:?}");
+}
+
+#[tokio::test]
 async fn sequential_chain_pipes_outputs_and_sums_tokens() {
     let first = LLMChainBuilder::new()
         .prompt(HumanMessagePromptTemplate::new(template_fstring!(
@@ -401,4 +471,57 @@ async fn llm_chain_call_runs_in_a_chain_span() {
         .await
         .unwrap_err();
     assert!(spans.named("chain.call")[1].field("error").is_some());
+}
+
+/// Live: `OLLAMA_VISION_MODEL=gemma4:e4b cargo test --lib --all-features vision_live -- --ignored --nocapture`
+///
+/// Sends a photo through a chain and an agent's default prompts (OpenAI-compatible
+/// API) and through the native Ollama client.
+#[tokio::test]
+#[ignore]
+async fn vision_live_images_through_chain_and_agent() {
+    use crate::{
+        agent::{AgentExecutor, OpenAiToolAgentBuilder},
+        llm::{ollama::openai::OllamaConfig, OpenAI},
+    };
+    use base64::prelude::*;
+
+    let model = std::env::var("OLLAMA_VISION_MODEL").unwrap_or_else(|_| "gemma4:e4b".into());
+    let image = BASE64_STANDARD.encode(std::fs::read("src/llm/test_data/example.jpg").unwrap());
+    let question = "This photo was taken from space. Answer in one short sentence: \
+                    is it day or night on the ground?";
+    let says_night = |s: &str| s.to_lowercase().contains("night");
+
+    let llm = OpenAI::new(OllamaConfig::default()).with_model(&model);
+    let chain = ConversationalChainBuilder::new()
+        .llm(llm.clone())
+        .build()
+        .unwrap();
+    let answer = chain
+        .invoke(prompt_args! {"input" => question, "images" => vec![image.clone()]})
+        .await
+        .unwrap();
+    println!("chain: {answer}");
+    assert!(says_night(&answer), "{answer}");
+
+    let agent = OpenAiToolAgentBuilder::new().build(llm).unwrap();
+    let answer = AgentExecutor::from_agent(agent)
+        .invoke(prompt_args! {"input" => question, "images" => [format!("data:image/jpeg;base64,{image}")]})
+        .await
+        .unwrap();
+    println!("agent: {answer}");
+    assert!(says_night(&answer), "{answer}");
+
+    #[cfg(feature = "ollama")]
+    {
+        use crate::{language_models::llm::LLM, llm::ollama::client::Ollama, schemas::Message};
+        let answer = Ollama::default()
+            .with_model(&model)
+            .generate(&[Message::new_human_message(question).with_images(vec![image])])
+            .await
+            .unwrap()
+            .generation;
+        println!("native ollama: {answer}");
+        assert!(says_night(&answer), "{answer}");
+    }
 }

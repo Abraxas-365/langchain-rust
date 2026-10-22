@@ -7,12 +7,14 @@ use crate::{
 use serde_json::Error as SerdeJsonError;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum RouterBuilderError {
     #[error("Invalid Router configuration: at least one of utterances or embedding must be provided, and utterances cannot be an empty vector.")]
     InvalidConfiguration,
 }
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum RouteLayerBuilderError {
     #[error("Route layer should have an embedder")]
     MissingEmbedder,
@@ -37,6 +39,7 @@ pub enum RouteLayerBuilderError {
 }
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum RouteLayerError {
     #[error("Embedding error: {0}")]
     EmbeddingError(#[from] EmbedderError),

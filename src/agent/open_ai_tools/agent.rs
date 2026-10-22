@@ -12,9 +12,9 @@ use crate::{
     },
     chain::Chain,
     fmt_message, fmt_placeholder, fmt_template,
-    language_models::{GenerateResult, LLMEvent},
+    language_models::{GenerateResult, LLMEvent, TokenUsage},
     message_formatter,
-    prompt::{HumanMessagePromptTemplate, MessageFormatterStruct, PromptArgs},
+    prompt::{HumanMessagePromptTemplate, MessageFormatterStruct, PromptArgs, DEFAULT_IMAGES_KEY},
     schemas::{
         agent::{AgentAction, AgentEvent, AgentFinish, LogTools},
         messages::Message,
@@ -34,10 +34,10 @@ impl OpenAiToolAgent {
         let prompt = message_formatter![
             fmt_message!(Message::new_system_message(prefix)),
             fmt_placeholder!("chat_history"),
-            fmt_template!(HumanMessagePromptTemplate::new(template_jinja2!(
-                "{{input}}",
-                "input"
-            ))),
+            fmt_template!(
+                HumanMessagePromptTemplate::new(template_jinja2!("{{input}}", "input"))
+                    .with_images(DEFAULT_IMAGES_KEY)
+            ),
             fmt_placeholder!("agent_scratchpad")
         ];
 
@@ -80,9 +80,18 @@ impl Agent for OpenAiToolAgent {
         intermediate_steps: &[(AgentAction, String)],
         inputs: PromptArgs,
     ) -> Result<AgentEvent, AgentError> {
+        Ok(self.plan_with_usage(intermediate_steps, inputs).await?.0)
+    }
+
+    async fn plan_with_usage(
+        &self,
+        intermediate_steps: &[(AgentAction, String)],
+        inputs: PromptArgs,
+    ) -> Result<(AgentEvent, Option<TokenUsage>), AgentError> {
         let inputs = self.plan_inputs(intermediate_steps, inputs)?;
-        let result = self.chain.call(inputs).await?;
-        Self::event_from_result(result)
+        let mut result = self.chain.call(inputs).await?;
+        let usage = result.tokens.take();
+        Ok((Self::event_from_result(result)?, usage))
     }
 
     /// Streams the model's text as it arrives (with native tool calling that is the
@@ -115,10 +124,14 @@ impl Agent for OpenAiToolAgent {
                             }
                         }
                     }
-                    LLMEvent::Done(result) => {
+                    LLMEvent::Done(mut result) => {
+                        let usage = result.tokens.take();
                         let event = Self::event_from_result(result)?;
                         if matches!(event, AgentEvent::Finish(_)) && !held.is_empty() {
                             yield PlanEvent::Text(held);
+                        }
+                        if let Some(usage) = usage {
+                            yield PlanEvent::Usage(usage);
                         }
                         yield PlanEvent::Done(event);
                         return;

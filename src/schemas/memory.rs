@@ -5,6 +5,7 @@ use super::messages::Message;
 
 /// Errors returned by [`BaseMemory`] implementations (mostly persistent backends).
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum MemoryError {
     #[error("Memory storage error: {0}")]
     Storage(String),
@@ -19,6 +20,20 @@ pub enum MemoryError {
 #[cfg(feature = "sqlx")]
 impl From<sqlx::Error> for MemoryError {
     fn from(e: sqlx::Error) -> Self {
+        MemoryError::Storage(e.to_string())
+    }
+}
+
+#[cfg(feature = "redis")]
+impl From<redis::RedisError> for MemoryError {
+    fn from(e: redis::RedisError) -> Self {
+        MemoryError::Storage(e.to_string())
+    }
+}
+
+#[cfg(feature = "mongodb")]
+impl From<mongodb::error::Error> for MemoryError {
+    fn from(e: mongodb::error::Error) -> Self {
         MemoryError::Storage(e.to_string())
     }
 }
@@ -56,7 +71,13 @@ pub trait BaseMemory: Send + Sync {
             .messages()
             .await?
             .iter()
-            .map(|msg| format!("{}: {}", msg.message_type.to_string(), msg.content))
+            .map(|msg| {
+                format!(
+                    "{}: {}",
+                    msg.message_type.to_string(),
+                    msg.text_with_image_markers()
+                )
+            })
             .collect::<Vec<String>>()
             .join("\n"))
     }

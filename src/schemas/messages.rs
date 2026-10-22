@@ -41,7 +41,7 @@ impl MessageType {
 }
 
 /// Struct `ImageContent` represents an image provided to an LLM.
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, Eq)]
 pub struct ImageContent {
     pub image_url: String,
     pub detail: Option<String>,
@@ -54,6 +54,82 @@ impl<S: AsRef<str>> From<S> for ImageContent {
             detail: None,
         }
     }
+}
+
+impl ImageContent {
+    /// Sets the detail level (`"auto"`, `"low"` or `"high"`). Only OpenAI uses it.
+    pub fn with_detail<S: Into<String>>(mut self, detail: S) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    /// Where the image comes from: a remote URL, or inline base64 data.
+    pub(crate) fn source(&self) -> ImageSource<'_> {
+        ImageSource::parse(&self.image_url)
+    }
+}
+
+/// An image reference as found in [`ImageContent::image_url`].
+///
+/// `image_url` can be an `http(s)` URL, a `data:<media type>;base64,<data>` URL or
+/// bare base64 data. For bare data the media type is sniffed from the first bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ImageSource<'a> {
+    Url(&'a str),
+    Base64 {
+        media_type: Option<&'a str>,
+        data: &'a str,
+    },
+}
+
+impl<'a> ImageSource<'a> {
+    pub(crate) fn parse(image: &'a str) -> Self {
+        let image = image.trim();
+        if let Some(rest) = image.strip_prefix("data:") {
+            if let Some((header, data)) = rest.split_once(',') {
+                if let Some(media_type) = header.strip_suffix(";base64") {
+                    let media_type = (!media_type.is_empty()).then_some(media_type);
+                    return ImageSource::Base64 {
+                        media_type: media_type.or_else(|| sniff_media_type(data)),
+                        data,
+                    };
+                }
+            }
+            return ImageSource::Url(image);
+        }
+        if image.starts_with("http://") || image.starts_with("https://") {
+            return ImageSource::Url(image);
+        }
+        ImageSource::Base64 {
+            media_type: sniff_media_type(image),
+            data: image,
+        }
+    }
+
+    /// The image as something OpenAI-compatible APIs accept: the URL itself, or a
+    /// `data:` URL for inline data.
+    pub(crate) fn to_url(self) -> String {
+        match self {
+            ImageSource::Url(url) => url.to_string(),
+            ImageSource::Base64 { media_type, data } => format!(
+                "data:{};base64,{data}",
+                media_type.unwrap_or("application/octet-stream")
+            ),
+        }
+    }
+}
+
+/// Media type of base64 image data, from the encoded magic bytes.
+fn sniff_media_type(data: &str) -> Option<&'static str> {
+    [
+        ("/9j/", "image/jpeg"),
+        ("iVBORw0KGgo", "image/png"),
+        ("R0lGOD", "image/gif"),
+        ("UklGR", "image/webp"),
+    ]
+    .into_iter()
+    .find(|(prefix, _)| data.starts_with(prefix))
+    .map(|(_, media_type)| media_type)
 }
 
 /// Struct `Message` represents a message with its content and type.
@@ -128,6 +204,13 @@ impl Message {
         }
     }
 
+    /// Attaches images to the message (keeping its text). Providers that support
+    /// vision send them along with the text.
+    pub fn with_images<T: Into<ImageContent>>(mut self, images: Vec<T>) -> Self {
+        self.images = Some(images.into_iter().map(Into::into).collect());
+        self
+    }
+
     /// Sets the tool calls for the OpenAI-like API call.
     ///
     /// Use this method when you need to specify tool calls in the configuration.
@@ -163,12 +246,29 @@ impl Message {
         serde_json::from_value(value.clone())
     }
 
+    /// Renders messages as text, one per line. Images show up as `[image: <url>]`, or
+    /// `[image]` for inline data, so a transcript shows that an image was there.
     pub fn messages_to_string(messages: &[Message]) -> String {
         messages
             .iter()
-            .map(|m| format!("{:?}: {}", m.message_type, m.content))
+            .map(|m| format!("{:?}: {}", m.message_type, m.text_with_image_markers()))
             .collect::<Vec<String>>()
             .join("\n")
+    }
+
+    /// The message text followed by a marker per attached image.
+    pub(crate) fn text_with_image_markers(&self) -> String {
+        let mut text = self.content.clone();
+        for image in self.images.iter().flatten() {
+            if !text.is_empty() {
+                text.push(' ');
+            }
+            match image.source() {
+                ImageSource::Url(url) => text.push_str(&format!("[image: {url}]")),
+                ImageSource::Base64 { .. } => text.push_str("[image]"),
+            }
+        }
+        text
     }
 }
 
@@ -281,5 +381,109 @@ mod tests {
             .with_tool_calls(json!([{"id": "1"}]))
             .parse_tool_calls()
             .is_empty());
+    }
+
+    #[test]
+    fn image_source_parses_urls_data_urls_and_bare_base64() {
+        use ImageSource::*;
+        let cases = [
+            ("https://a/b.png", Url("https://a/b.png")),
+            ("http://a/b", Url("http://a/b")),
+            (
+                "data:image/webp;base64,AAAA",
+                Base64 {
+                    media_type: Some("image/webp"),
+                    data: "AAAA",
+                },
+            ),
+            // Empty media type in a data: URL is sniffed from the data.
+            (
+                "data:;base64,/9j/4AA",
+                Base64 {
+                    media_type: Some("image/jpeg"),
+                    data: "/9j/4AA",
+                },
+            ),
+            // Not base64 encoded: left as a URL.
+            ("data:text/plain,hello", Url("data:text/plain,hello")),
+            (
+                "  iVBORw0KGgoAAA \n",
+                Base64 {
+                    media_type: Some("image/png"),
+                    data: "iVBORw0KGgoAAA",
+                },
+            ),
+            (
+                "R0lGODlh",
+                Base64 {
+                    media_type: Some("image/gif"),
+                    data: "R0lGODlh",
+                },
+            ),
+            (
+                "UklGRgAA",
+                Base64 {
+                    media_type: Some("image/webp"),
+                    data: "UklGRgAA",
+                },
+            ),
+            (
+                "AAAA",
+                Base64 {
+                    media_type: None,
+                    data: "AAAA",
+                },
+            ),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(ImageSource::parse(input), expected, "{input}");
+        }
+
+        assert_eq!(
+            ImageSource::parse("https://a/b.png").to_url(),
+            "https://a/b.png"
+        );
+        assert_eq!(
+            ImageSource::parse("iVBORw0KGgo").to_url(),
+            "data:image/png;base64,iVBORw0KGgo"
+        );
+        assert_eq!(
+            ImageSource::parse("AAAA").to_url(),
+            "data:application/octet-stream;base64,AAAA"
+        );
+        assert_eq!(
+            ImageSource::parse("data:image/gif;base64,R0l").to_url(),
+            "data:image/gif;base64,R0l"
+        );
+    }
+
+    #[test]
+    fn with_images_keeps_text_and_transcripts_show_markers() {
+        let m = Message::new_human_message("look").with_images(vec![
+            ImageContent::from("https://a/cat.png").with_detail("high"),
+            ImageContent::from("iVBORw0KGgo"),
+        ]);
+        assert_eq!(m.content, "look");
+        assert_eq!(m.images.as_ref().unwrap().len(), 2);
+        assert_eq!(
+            m.images.as_ref().unwrap()[0].detail.as_deref(),
+            Some("high")
+        );
+        assert_eq!(
+            m.text_with_image_markers(),
+            "look [image: https://a/cat.png] [image]"
+        );
+
+        let only = Message::new_human_message("").with_images(vec!["https://a/b.png"]);
+        assert_eq!(only.text_with_image_markers(), "[image: https://a/b.png]");
+        assert_eq!(
+            Message::new_ai_message("hi").text_with_image_markers(),
+            "hi"
+        );
+
+        assert_eq!(
+            Message::messages_to_string(&[m, Message::new_ai_message("a cat")]),
+            "HumanMessage: look [image: https://a/cat.png] [image]\nAIMessage: a cat"
+        );
     }
 }

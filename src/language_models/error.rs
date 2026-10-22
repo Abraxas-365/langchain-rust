@@ -11,6 +11,7 @@ use crate::llm::BedrockError;
 use crate::llm::{AnthropicError, DeepseekError, QwenError};
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum LLMError {
     #[error("OpenAI error: {0}")]
     OpenAIError(#[from] OpenAIError),

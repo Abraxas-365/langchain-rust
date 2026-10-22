@@ -5,6 +5,7 @@ use crate::{
 };
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum AgentError {
     #[error("LLM error: {0}")]
     LLMError(#[from] LLMError),

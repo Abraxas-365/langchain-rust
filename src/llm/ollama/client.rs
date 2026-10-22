@@ -70,6 +70,16 @@ impl Ollama {
     }
 
     fn generate_request(&self, messages: &[Message]) -> Result<ChatMessageRequest, LLMError> {
+        let remote_image = messages
+            .iter()
+            .flat_map(|m| m.images.iter().flatten())
+            .find(|image| matches!(image.source(), schemas::messages::ImageSource::Url(_)));
+        if let Some(image) = remote_image {
+            return Err(LLMError::OtherError(format!(
+                "Ollama only accepts inline images; download {} and pass it as base64 or a data: URL",
+                image.image_url
+            )));
+        }
         let mapped_messages = messages.iter().map(|message| message.into()).collect();
         let mut request = ChatMessageRequest::new(self.model.clone(), mapped_messages);
         if !self.tools.is_empty() {
@@ -131,17 +141,18 @@ fn to_ollama_tool_calls(message: &Message) -> Vec<ToolCall> {
 }
 
 impl From<&Message> for ChatMessage {
+    /// Images become Ollama base64 images (a `data:` URL prefix is stripped). Ollama
+    /// can't fetch http(s) URLs; [`Ollama`] rejects those before sending.
     fn from(message: &Message) -> Self {
-        let images = match message.images.clone() {
-            Some(images) => {
-                let images = images
-                    .iter()
-                    .map(|image| Image::from_base64(&image.image_url))
-                    .collect();
-                Some(images)
-            }
-            None => None,
-        };
+        let images = message.images.as_ref().map(|images| {
+            images
+                .iter()
+                .map(|image| match image.source() {
+                    schemas::messages::ImageSource::Base64 { data, .. } => Image::from_base64(data),
+                    schemas::messages::ImageSource::Url(url) => Image::from_base64(url),
+                })
+                .collect()
+        });
         let mut chat_message =
             ChatMessage::new(message.message_type.clone().into(), message.content.clone());
         chat_message.images = images;
@@ -497,6 +508,34 @@ mod tests {
         assert_eq!(v["messages"][1]["role"], "tool");
         assert_eq!(v["messages"][1]["content"], "sunny");
         assert!(v.get("tools").is_none());
+    }
+
+    #[test]
+    fn images_are_sent_as_bare_base64() {
+        use crate::schemas::messages::ImageContent;
+        let request = Ollama::default()
+            .generate_request(
+                &[Message::new_human_message("what is it?").with_images(vec![
+                    ImageContent::from("data:image/png;base64,iVBORw0KGgo"),
+                    ImageContent::from("/9j/4AAQ"),
+                ])],
+            )
+            .unwrap();
+        let v = serde_json::to_value(&request).unwrap();
+        assert_eq!(v["messages"][0]["content"], "what is it?");
+        assert_eq!(
+            v["messages"][0]["images"],
+            serde_json::json!(["iVBORw0KGgo", "/9j/4AAQ"])
+        );
+
+        let err = Ollama::default()
+            .generate_request(&[Message::new_human_message("x")
+                .with_images(vec![ImageContent::from("https://example.com/cat.png")])])
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("https://example.com/cat.png"),
+            "{err}"
+        );
     }
 
     #[test]

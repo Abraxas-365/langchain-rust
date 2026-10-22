@@ -7,6 +7,7 @@ use reqwest::{Error as ReqwestError, StatusCode};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum EmbedderError {
     #[error("Network request failed: {0}")]
     RequestError(#[from] ReqwestError),
@@ -37,4 +38,8 @@ pub enum EmbedderError {
     #[cfg(feature = "mistralai")]
     #[error("MistralAI API error: {0}")]
     MistralAIApiError(#[from] ApiError),
+
+    #[cfg(feature = "bedrock")]
+    #[error("Bedrock error: {0}")]
+    BedrockError(String),
 }

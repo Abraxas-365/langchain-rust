@@ -74,12 +74,17 @@ impl PlainTextSplitter {
 #[async_trait]
 impl TextSplitter for PlainTextSplitter {
     async fn split_text(&self, text: &str) -> Result<Vec<String>, TextSplitterError> {
-        let splitter = text_splitter::TextSplitter::new(
-            text_splitter::ChunkConfig::new(self.splitter_options.chunk_size)
-                .with_trim(self.splitter_options.trim_chunks)
-                .with_overlap(self.splitter_options.chunk_overlap)?,
-        );
-
-        Ok(splitter.chunks(text).map(|x| x.to_string()).collect())
+        let options = self.splitter_options.clone();
+        let text = text.to_string();
+        // Splitting a large document is CPU-bound; keep it off the async worker thread.
+        crate::blocking::run_blocking(move || {
+            let splitter = text_splitter::TextSplitter::new(
+                text_splitter::ChunkConfig::new(options.chunk_size)
+                    .with_trim(options.trim_chunks)
+                    .with_overlap(options.chunk_overlap)?,
+            );
+            Ok(splitter.chunks(&text).map(|x| x.to_string()).collect())
+        })
+        .await
     }
 }

@@ -55,11 +55,14 @@ impl Loader for LoPdfLoader {
         Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send + 'static>>,
         LoaderError,
     > {
+        let document = std::sync::Arc::new(self.document);
         let stream = stream! {
-            let pages = self.document.get_pages();
+            let pages = document.get_pages();
             for (i, _) in pages.iter().enumerate() {
                 let page_number = (i + 1) as u32;
-                let text = self.document.extract_text(&[page_number])?;
+                // Text extraction is CPU-bound: one page at a time on the blocking pool.
+                let page = document.clone();
+                let text = crate::blocking::run_blocking(move || page.extract_text(&[page_number])).await?;
                 let mut metadata = HashMap::new();
                 metadata.insert("page_number".to_string(), Value::from(page_number));
                 let doc=Document::new(text).with_metadata(metadata);
@@ -136,5 +139,29 @@ mod tests {
             "Sample PDF Document Robert Maron Grzegorz Grudzi · nski February 20, 1999 \n"
         );
         assert_eq!(docs.len(), 10);
+    }
+
+    /// Pages are extracted on the blocking pool, in order, without stalling the runtime
+    /// thread (#142).
+    #[tokio::test]
+    async fn lo_pdf_loader_does_not_block_the_runtime() {
+        let loader = LoPdfLoader::from_path("./src/document_loaders/test_data/sample.pdf")
+            .expect("Failed to create LoPdfLoader");
+        let (docs, ticks) = crate::blocking::testing::ticks_while(async {
+            loader
+                .load()
+                .await
+                .unwrap()
+                .map(|d| d.unwrap())
+                .collect::<Vec<_>>()
+                .await
+        })
+        .await;
+        let pages: Vec<_> = docs
+            .iter()
+            .map(|d| d.metadata["page_number"].clone())
+            .collect();
+        assert_eq!(pages, (1..=10).map(Value::from).collect::<Vec<_>>());
+        assert!(ticks > 0, "PDF extraction blocked the runtime thread");
     }
 }
