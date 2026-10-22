@@ -9,6 +9,7 @@
 //! Without one, log events are forwarded to the [`log`](https://docs.rs/log) crate, so
 //! `env_logger` keeps working.
 pub mod agent;
+mod blocking;
 pub mod chain;
 pub mod document_loaders;
 pub mod embedding;
