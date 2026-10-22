@@ -409,6 +409,16 @@ fn text(s: &str) -> AgentStreamEvent {
     AgentStreamEvent::Text(s.into())
 }
 
+/// Drops `Usage` events (FakeLLM reports 1+1 tokens per call) for tests about the rest.
+fn without_usage<E>(
+    events: impl IntoIterator<Item = Result<AgentStreamEvent, E>>,
+) -> Vec<Result<AgentStreamEvent, E>> {
+    events
+        .into_iter()
+        .filter(|e| !matches!(e, Ok(AgentStreamEvent::Usage(_))))
+        .collect()
+}
+
 #[tokio::test]
 async fn stream_events_tools_agent_streams_tools_then_answer_tokens() {
     let weather = RecordingTool::ok("weather", "sunny");
@@ -488,11 +498,11 @@ async fn stream_events_default_plan_stream_works_for_any_agent() {
         .tools(&[Arc::new(calc.clone())])
         .build(llm)
         .unwrap();
-    let events: Vec<_> = collect_events(&AgentExecutor::from_agent(agent), "2+2?")
-        .await
-        .into_iter()
-        .map(Result::unwrap)
-        .collect();
+    let events: Vec<_> =
+        without_usage(collect_events(&AgentExecutor::from_agent(agent), "2+2?").await)
+            .into_iter()
+            .map(Result::unwrap)
+            .collect();
     assert_eq!(
         events,
         vec![
@@ -545,7 +555,7 @@ async fn stream_events_errors_end_the_stream_with_err() {
     // Unknown tool: ToolStart is never emitted, the stream ends with the error.
     let llm = FakeLLM::new([tool_calls_json(&[("c1", "nope", "x")])]);
     let agent = OpenAiToolAgentBuilder::new().build(llm).unwrap();
-    let events = collect_events(&AgentExecutor::from_agent(agent), "go").await;
+    let events = without_usage(collect_events(&AgentExecutor::from_agent(agent), "go").await);
     assert_eq!(events.len(), 1, "{events:?}");
     let err = events[0].as_ref().unwrap_err().to_string();
     assert!(err.contains("Tool nope not found"), "{err}");
@@ -622,7 +632,7 @@ async fn cancellation_stops_a_running_agent_and_skips_memory() {
     let err = seen.pop().unwrap().unwrap_err().to_string();
     assert!(err.contains("agent run cancelled"), "{err}");
     assert!(matches!(
-        seen.as_slice(),
+        without_usage(seen).as_slice(),
         [
             Ok(AgentStreamEvent::ToolStart { .. }),
             Ok(AgentStreamEvent::ToolEnd { .. })
@@ -687,7 +697,12 @@ async fn dropping_the_stream_stops_the_run() {
     {
         let mut events = executor.stream_events(prompt_args! {"input" => "go"});
         // Take the first tool start and walk away.
-        let first = events.next().await.unwrap().unwrap();
+        let first = loop {
+            match events.next().await.unwrap().unwrap() {
+                AgentStreamEvent::Usage(_) => continue,
+                other => break other,
+            }
+        };
         assert!(matches!(first, AgentStreamEvent::ToolStart { .. }));
     }
     // Lazily polled: once dropped, the run made no further LLM calls.
@@ -733,11 +748,11 @@ async fn stream_events_never_leaks_text_tool_call_json_split_across_chunks() {
         .tools(&[Arc::new(RecordingTool::ok("t", "obs"))])
         .build(llm)
         .unwrap();
-    let events: Vec<_> = collect_events(&AgentExecutor::from_agent(agent), "q")
-        .await
-        .into_iter()
-        .map(Result::unwrap)
-        .collect();
+    let events: Vec<_> =
+        without_usage(collect_events(&AgentExecutor::from_agent(agent), "q").await)
+            .into_iter()
+            .map(Result::unwrap)
+            .collect();
     assert_eq!(
         events,
         vec![
@@ -916,4 +931,248 @@ async fn max_iterations_records_steps() {
         .unwrap();
     assert_eq!(spans.named("agent.run")[0].field("steps"), Some("2"));
     assert_eq!(spans.named("tool.call").len(), 2);
+}
+
+// ---- token usage ----
+
+use crate::language_models::TokenUsage;
+
+fn with_usage(result: GenerateResult, prompt: u32, completion: u32) -> GenerateResult {
+    GenerateResult {
+        tokens: Some(TokenUsage::new(prompt, completion)),
+        ..result
+    }
+}
+
+/// Tools agent over a 2-call run: a tool call (10+2 tokens), then the answer (30+5).
+fn usage_tools_run() -> AgentExecutor<impl crate::agent::Agent> {
+    let llm = FakeLLM::with_results([
+        with_usage(
+            GenerateResult::default().with_tool_calls(vec![ToolCall::new("c1", "t", "q")]),
+            10,
+            2,
+        ),
+        with_usage(
+            GenerateResult {
+                generation: "done".into(),
+                ..Default::default()
+            },
+            30,
+            5,
+        ),
+    ]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(RecordingTool::ok("t", "obs"))])
+        .build(llm)
+        .unwrap();
+    AgentExecutor::from_agent(agent)
+}
+
+#[tokio::test]
+async fn call_sums_token_usage_over_every_plan() {
+    let result = usage_tools_run()
+        .call(prompt_args! {"input" => "q"})
+        .await
+        .unwrap();
+    assert_eq!(result.generation, "done");
+    assert_eq!(result.tokens, Some(TokenUsage::new(40, 7)));
+}
+
+#[tokio::test]
+async fn run_span_records_total_tokens() {
+    let (spans, _guard) = capture();
+    usage_tools_run()
+        .invoke(prompt_args! {"input" => "q"})
+        .await
+        .unwrap();
+    assert_eq!(
+        spans.named("agent.run")[0].field("total_tokens"),
+        Some("47")
+    );
+}
+
+#[tokio::test]
+async fn streaming_run_span_records_total_tokens_too() {
+    let (spans, _guard) = capture();
+    let events = collect_events(&usage_tools_run(), "q").await;
+    assert!(events.iter().all(Result::is_ok), "{events:?}");
+    assert_eq!(
+        spans.named("agent.run")[0].field("total_tokens"),
+        Some("47")
+    );
+}
+
+#[tokio::test]
+async fn conversational_agent_reports_token_usage() {
+    let llm = FakeLLM::with_results([
+        with_usage(
+            GenerateResult {
+                generation: action("Calculator", "2+2"),
+                ..Default::default()
+            },
+            7,
+            1,
+        ),
+        with_usage(
+            GenerateResult {
+                generation: final_answer("4"),
+                ..Default::default()
+            },
+            9,
+            3,
+        ),
+    ]);
+    let agent = ConversationalAgentBuilder::new()
+        .tools(&[Arc::new(RecordingTool::ok("Calculator", "4"))])
+        .build(llm)
+        .unwrap();
+    let executor = AgentExecutor::from_agent(agent);
+    let result = executor
+        .call(prompt_args! {"input" => "2+2"})
+        .await
+        .unwrap();
+    assert_eq!(result.tokens, Some(TokenUsage::new(16, 4)));
+}
+
+#[tokio::test]
+async fn stream_events_reports_usage_per_plan_before_its_actions() {
+    let events: Vec<_> = collect_events(&usage_tools_run(), "q")
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        events,
+        vec![
+            AgentStreamEvent::Usage(TokenUsage::new(10, 2)),
+            AgentStreamEvent::ToolStart {
+                tool: "t".into(),
+                input: "q".into()
+            },
+            AgentStreamEvent::ToolEnd {
+                tool: "t".into(),
+                output: "obs".into()
+            },
+            text("done"),
+            AgentStreamEvent::Usage(TokenUsage::new(30, 5)),
+            AgentStreamEvent::Finish {
+                output: "done".into()
+            },
+        ]
+    );
+}
+
+#[tokio::test]
+async fn default_plan_stream_forwards_usage() {
+    // ConversationalAgent uses the trait's default plan_stream.
+    let llm = FakeLLM::with_results([with_usage(
+        GenerateResult {
+            generation: final_answer("hi"),
+            ..Default::default()
+        },
+        4,
+        2,
+    )]);
+    let agent = ConversationalAgentBuilder::new().build(llm).unwrap();
+    let events: Vec<_> = collect_events(&AgentExecutor::from_agent(agent), "q")
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        events,
+        vec![
+            text("hi"),
+            AgentStreamEvent::Usage(TokenUsage::new(4, 2)),
+            AgentStreamEvent::Finish {
+                output: "hi".into()
+            },
+        ]
+    );
+}
+
+#[tokio::test]
+async fn missing_usage_stays_none() {
+    // An LLM that reports no usage: no Usage events and `tokens` is None, not zero.
+    let make = || {
+        let llm = FakeLLM::with_results([GenerateResult {
+            generation: "plain".into(),
+            ..Default::default()
+        }]);
+        AgentExecutor::from_agent(OpenAiToolAgentBuilder::new().build(llm).unwrap())
+    };
+    let result = make().call(prompt_args! {"input" => "q"}).await.unwrap();
+    assert_eq!(result.tokens, None);
+    let events = collect_events(&make(), "q").await;
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, Ok(AgentStreamEvent::Usage(_)))),
+        "{events:?}"
+    );
+}
+
+#[tokio::test]
+async fn max_iterations_still_reports_usage() {
+    let llm = FakeLLM::with_results([
+        with_usage(
+            GenerateResult::default().with_tool_calls(vec![ToolCall::new("c1", "t", "1")]),
+            5,
+            1,
+        ),
+        with_usage(
+            GenerateResult::default().with_tool_calls(vec![ToolCall::new("c2", "t", "2")]),
+            6,
+            1,
+        ),
+    ]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(RecordingTool::ok("t", "again"))])
+        .build(llm)
+        .unwrap();
+    let result = AgentExecutor::from_agent(agent)
+        .with_max_iterations(2)
+        .call(prompt_args! {"input" => "q"})
+        .await
+        .unwrap();
+    assert_eq!(result.generation, "Max iterations reached");
+    assert_eq!(result.tokens, Some(TokenUsage::new(11, 2)));
+}
+
+/// Live: `OLLAMA_MODEL=qwen3:14b cargo test --lib agent_usage_live -- --ignored`
+#[tokio::test]
+#[ignore]
+async fn agent_usage_live_ollama() {
+    use crate::{
+        language_models::options::CallOptions,
+        llm::{ollama::openai::OllamaConfig, openai::OpenAI},
+    };
+    let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "qwen3:14b".into());
+    let make = || {
+        let llm = OpenAI::new(OllamaConfig::default())
+            .with_model(&model)
+            .with_options(CallOptions::new().with_stream_usage(true));
+        let agent = OpenAiToolAgentBuilder::new()
+            .tools(&[Arc::new(RecordingTool::ok("weather", "sunny, 24C"))])
+            .build(llm)
+            .unwrap();
+        AgentExecutor::from_agent(agent)
+    };
+    let input = "Use the weather tool to check Lima, then answer in one sentence.";
+
+    let result = make().call(prompt_args! {"input" => input}).await.unwrap();
+    let total = result.tokens.expect("usage from a non-streaming run");
+    println!("call: {:?} -> {}", total, result.generation);
+    assert!(total.prompt_tokens > 0 && total.completion_tokens > 0);
+
+    let events = collect_events(&make(), input).await;
+    let usages: Vec<_> = events
+        .iter()
+        .filter_map(|e| match e {
+            Ok(AgentStreamEvent::Usage(u)) => Some(u.clone()),
+            _ => None,
+        })
+        .collect();
+    println!("stream usages: {usages:?}");
+    assert!(!usages.is_empty(), "{events:?}");
 }
