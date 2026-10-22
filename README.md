@@ -52,6 +52,11 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Map-reduce / refine summarization + Retrieval QA](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/summarize_documents.rs)
   - [x] [SQL Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sql_chain.rs)
 
+- Memory
+
+  - [x] [Persistent memory (SQLite/Postgres) + token buffer](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/persistent_memory.rs)
+  - [x] [Redis chat history](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/redis_memory.rs)
+
 - Agents
 
   - [x] [Chat Agent with Tools](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/agent.rs)
@@ -285,6 +290,12 @@ cargo add langchain-rust --features qdrant
 
 ```bash
 cargo add langchain-rust --features chroma
+```
+
+#### With Redis (chat history)
+
+```bash
+cargo add langchain-rust --features redis
 ```
 
 Please remember to replace the feature flags `sqlite`, `postgres` or `surrealdb` based on your
