@@ -95,6 +95,19 @@ pub struct LLMChain {
     output_parser: Box<dyn OutputParser>,
 }
 
+impl LLMChain {
+    /// The prompt's text for `input_variables`, its messages joined by newlines.
+    pub(crate) fn prompt_text(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
+        let prompt = self.prompt.format_prompt(input_variables)?;
+        Ok(prompt
+            .to_chat_messages()
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
+}
+
 #[async_trait]
 impl Chain for LLMChain {
     fn get_input_keys(&self) -> Vec<String> {

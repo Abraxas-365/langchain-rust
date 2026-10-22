@@ -59,6 +59,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Map-reduce / refine / map-rerank + Retrieval QA](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/summarize_documents.rs)
   - [x] [SQL Chain](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/sql_chain.rs)
   - [x] [Router Chain (LLM picks the chain)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/router_chain.rs)
+  - [x] [Constitutional Chain (critique and revise against principles)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/constitutional_chain.rs)
 
 - Output parsers
 
