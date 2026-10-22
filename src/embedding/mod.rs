@@ -20,3 +20,6 @@ pub use fastembed::*;
 pub mod mistralai;
 #[cfg(feature = "mistralai")]
 pub use mistralai::*;
+
+#[cfg(feature = "bedrock")]
+pub mod bedrock;

@@ -37,4 +37,8 @@ pub enum EmbedderError {
     #[cfg(feature = "mistralai")]
     #[error("MistralAI API error: {0}")]
     MistralAIApiError(#[from] ApiError),
+
+    #[cfg(feature = "bedrock")]
+    #[error("Bedrock error: {0}")]
+    BedrockError(String),
 }
