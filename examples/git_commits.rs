@@ -41,7 +41,14 @@ async fn main() {
     // Initialize the tables in the database. This is required to be done only once.
     store.initialize().await.unwrap();
 
-    let git_commit_loader = GitCommitLoader::from_path(repo_path).unwrap();
+    // Skip merge commits. Set SINCE to a commit/tag to load only what came after it,
+    // e.g. the last commit indexed by a previous run.
+    let mut git_commit_loader = GitCommitLoader::from_path(repo_path)
+        .unwrap()
+        .with_filter(|commit| commit.parent_ids.len() < 2);
+    if let Ok(since) = std::env::var("SINCE") {
+        git_commit_loader = git_commit_loader.since(since);
+    }
 
     let mut stream = git_commit_loader.load().await.unwrap();
     while let Some(result) = stream.next().await {
