@@ -9,6 +9,7 @@ pub mod ollama;
 pub use ollama::*;
 
 pub mod openai;
+pub mod voyage;
 pub use error::*;
 
 #[cfg(feature = "fastembed")]
