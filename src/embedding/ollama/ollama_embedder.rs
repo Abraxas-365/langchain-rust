@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::embedding::{embedder_trait::Embedder, EmbedderError};
+use crate::observability::{traced_embed_documents, traced_embed_query};
 use async_trait::async_trait;
 use ollama_rs::{
     error::OllamaError,
@@ -18,6 +19,8 @@ pub struct OllamaEmbedder {
 
 /// [nomic-embed-text](https://ollama.com/library/nomic-embed-text) is a 137M parameters, 274MB model.
 const DEFAULT_MODEL: &str = "nomic-embed-text";
+/// `provider` field of the `embed.*` spans.
+const PROVIDER: &str = "ollama";
 
 impl OllamaEmbedder {
     pub fn new<S: Into<String>>(
@@ -53,40 +56,46 @@ impl Default for OllamaEmbedder {
 #[async_trait]
 impl Embedder for OllamaEmbedder {
     async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, EmbedderError> {
-        log::debug!("Embedding documents: {:?}", documents);
+        traced_embed_documents(PROVIDER, &self.model, documents.len(), async {
+            tracing::debug!("Embedding documents: {:?}", documents);
 
-        let response = self
-            .client
-            .generate_embeddings(self.request(EmbeddingsInput::Multiple(documents.to_vec())))
-            .await?;
+            let response = self
+                .client
+                .generate_embeddings(self.request(EmbeddingsInput::Multiple(documents.to_vec())))
+                .await?;
 
-        let embeddings = response
-            .embeddings
-            .into_iter()
-            .map(|embedding| embedding.into_iter().map(f64::from).collect())
-            .collect();
+            let embeddings = response
+                .embeddings
+                .into_iter()
+                .map(|embedding| embedding.into_iter().map(f64::from).collect())
+                .collect();
 
-        Ok(embeddings)
+            Ok(embeddings)
+        })
+        .await
     }
 
     async fn embed_query(&self, text: &str) -> Result<Vec<f64>, EmbedderError> {
-        log::debug!("Embedding query: {:?}", text);
+        traced_embed_query(PROVIDER, &self.model, async {
+            tracing::debug!("Embedding query: {:?}", text);
 
-        let response = self
-            .client
-            .generate_embeddings(self.request(EmbeddingsInput::Single(text.into())))
-            .await?;
+            let response = self
+                .client
+                .generate_embeddings(self.request(EmbeddingsInput::Single(text.into())))
+                .await?;
 
-        let embeddings = response
-            .embeddings
-            .into_iter()
-            .next()
-            .ok_or_else(|| OllamaError::Other("Ollama returned no embeddings".to_string()))?
-            .into_iter()
-            .map(f64::from)
-            .collect();
+            let embeddings = response
+                .embeddings
+                .into_iter()
+                .next()
+                .ok_or_else(|| OllamaError::Other("Ollama returned no embeddings".to_string()))?
+                .into_iter()
+                .map(f64::from)
+                .collect();
 
-        Ok(embeddings)
+            Ok(embeddings)
+        })
+        .await
     }
 }
 
@@ -158,9 +167,13 @@ mod tests {
             .create_async()
             .await;
 
+        let (spans, _guard) = crate::observability::testing::capture();
         let out = embedder_for(&server).embed_query("hi").await.unwrap();
         mock.assert_async().await;
         assert_eq!(out, vec![0.5]);
+        let span = &spans.named("embed.query")[0];
+        assert_eq!(span.field("provider"), Some("ollama"));
+        assert_eq!(span.field("model"), Some("emb"));
     }
 
     #[tokio::test]

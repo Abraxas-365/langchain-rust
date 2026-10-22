@@ -10,6 +10,7 @@ use std::pin::Pin;
 
 use super::models::{ApiResponse, ErrorResponse, Payload, QwenMessage};
 use crate::llm::sse::{sse_json_events, usage_from_chunk};
+use crate::observability::traced_generate;
 
 /// Parse error from JSON response and return appropriate QwenError
 fn parse_error_response(code: &str, message: &str) -> LLMError {
@@ -331,9 +332,9 @@ impl Qwen {
     }
 }
 
-#[async_trait]
-impl LLM for Qwen {
-    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+impl Qwen {
+    /// `generate` without the tracing span: honours `streaming_func`.
+    async fn generate_dispatch(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         match &self.options.streaming_func {
             Some(func) => {
                 let mut complete_response = String::new();
@@ -354,6 +355,13 @@ impl LLM for Qwen {
             }
             None => self.generate(messages).await,
         }
+    }
+}
+
+#[async_trait]
+impl LLM for Qwen {
+    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+        traced_generate("qwen", &self.model, self.generate_dispatch(messages)).await
     }
 
     async fn stream(

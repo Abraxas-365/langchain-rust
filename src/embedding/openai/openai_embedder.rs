@@ -1,12 +1,16 @@
 #![allow(dead_code)]
 
 use crate::embedding::{embedder_trait::Embedder, EmbedderError};
+use crate::observability::{traced_embed_documents, traced_embed_query};
 pub use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::{
     types::embeddings::{CreateEmbeddingRequestArgs, EmbeddingInput},
     Client,
 };
 use async_trait::async_trait;
+
+/// `provider` field of the `embed.*` spans.
+const PROVIDER: &str = "openai";
 
 #[derive(Debug)]
 pub struct OpenAiEmbedder<C: Config> {
@@ -48,51 +52,57 @@ impl Default for OpenAiEmbedder<OpenAIConfig> {
 #[async_trait]
 impl<C: Config + Clone + Send + Sync> Embedder for OpenAiEmbedder<C> {
     async fn embed_documents(&self, documents: &[String]) -> Result<Vec<Vec<f64>>, EmbedderError> {
-        let client = Client::with_config(self.config.clone());
+        traced_embed_documents(PROVIDER, &self.model, documents.len(), async {
+            let client = Client::with_config(self.config.clone());
 
-        let request = CreateEmbeddingRequestArgs::default()
-            .model(&self.model)
-            .input(EmbeddingInput::StringArray(documents.into()))
-            .build()?;
+            let request = CreateEmbeddingRequestArgs::default()
+                .model(&self.model)
+                .input(EmbeddingInput::StringArray(documents.into()))
+                .build()?;
 
-        let response = client.embeddings().create(request).await?;
+            let response = client.embeddings().create(request).await?;
 
-        let embeddings = response
-            .data
-            .into_iter()
-            .map(|item| item.embedding)
-            .map(|embedding| {
-                embedding
-                    .into_iter()
-                    .map(|x| x as f64)
-                    .collect::<Vec<f64>>()
-            })
-            .collect();
+            let embeddings = response
+                .data
+                .into_iter()
+                .map(|item| item.embedding)
+                .map(|embedding| {
+                    embedding
+                        .into_iter()
+                        .map(|x| x as f64)
+                        .collect::<Vec<f64>>()
+                })
+                .collect();
 
-        Ok(embeddings)
+            Ok(embeddings)
+        })
+        .await
     }
 
     async fn embed_query(&self, text: &str) -> Result<Vec<f64>, EmbedderError> {
-        let client = Client::with_config(self.config.clone());
+        traced_embed_query(PROVIDER, &self.model, async {
+            let client = Client::with_config(self.config.clone());
 
-        let request = CreateEmbeddingRequestArgs::default()
-            .model(&self.model)
-            .input(text)
-            .build()?;
+            let request = CreateEmbeddingRequestArgs::default()
+                .model(&self.model)
+                .input(text)
+                .build()?;
 
-        let response = client.embeddings().create(request).await?;
+            let response = client.embeddings().create(request).await?;
 
-        let item = response.data.into_iter().next().ok_or_else(|| {
-            async_openai::error::OpenAIError::InvalidArgument(
-                "OpenAI returned no embeddings".into(),
-            )
-        })?;
+            let item = response.data.into_iter().next().ok_or_else(|| {
+                async_openai::error::OpenAIError::InvalidArgument(
+                    "OpenAI returned no embeddings".into(),
+                )
+            })?;
 
-        Ok(item
-            .embedding
-            .into_iter()
-            .map(|x| x as f64)
-            .collect::<Vec<f64>>())
+            Ok(item
+                .embedding
+                .into_iter()
+                .map(|x| x as f64)
+                .collect::<Vec<f64>>())
+        })
+        .await
     }
 }
 
@@ -140,12 +150,17 @@ mod tests {
             .create_async()
             .await;
 
+        let (spans, _guard) = crate::observability::testing::capture();
         let out = embedder_for(&server)
             .embed_documents(&["a".to_string(), "b".to_string()])
             .await
             .unwrap();
         mock.assert_async().await;
         assert_eq!(out, vec![vec![0.5, 1.0], vec![0.25, 0.0]]);
+        let span = &spans.named("embed.documents")[0];
+        assert_eq!(span.field("provider"), Some("openai"));
+        assert_eq!(span.field("model"), Some("emb-model"));
+        assert_eq!(span.field("count"), Some("2"));
     }
 
     #[tokio::test]

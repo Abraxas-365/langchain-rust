@@ -16,6 +16,7 @@ use async_openai::{error::OpenAIError, Client};
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 
+use crate::observability::{traced_event_stream, traced_generate};
 use crate::schemas::convert::{LangchainIntoOpenAI, TryLangchainIntoOpenAI};
 use crate::{
     language_models::{
@@ -62,6 +63,9 @@ pub struct OpenAI<C: Config> {
     model: String,
 }
 
+/// `provider` field of the `llm.generate` span. OpenAI-compatible servers report as "openai".
+const PROVIDER: &str = "openai";
+
 impl<C: Config> OpenAI<C> {
     pub fn new(config: C) -> Self {
         Self {
@@ -93,9 +97,8 @@ impl Default for OpenAI<OpenAIConfig> {
     }
 }
 
-#[async_trait]
-impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
-    async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, LLMError> {
+impl<C: Config + Clone + Send + Sync + 'static> OpenAI<C> {
+    async fn generate_untraced(&self, prompt: &[Message]) -> Result<GenerateResult, LLMError> {
         let client = Client::with_config(self.config.clone());
         let request = self.generate_request(prompt, self.options.streaming_func.is_some())?;
         match &self.options.streaming_func {
@@ -127,7 +130,8 @@ impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
                             }
                         }
                         Err(err) => {
-                            eprintln!("Error from streaming response: {:?}", err);
+                            // Used to be printed and dropped, returning a truncated answer.
+                            return Err(err.into());
                         }
                     }
                 }
@@ -174,6 +178,13 @@ impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
                 Ok(generate_result)
             }
         }
+    }
+}
+
+#[async_trait]
+impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
+    async fn generate(&self, prompt: &[Message]) -> Result<GenerateResult, LLMError> {
+        traced_generate(PROVIDER, &self.model, self.generate_untraced(prompt)).await
     }
 
     async fn invoke(&self, prompt: &str) -> Result<String, LLMError> {
@@ -223,7 +234,7 @@ impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
     }
 
     fn generate_stream<'a>(&'a self, messages: &'a [Message]) -> LLMEventStream<'a> {
-        box_llm_events(async_stream::try_stream! {
+        let events = box_llm_events(async_stream::try_stream! {
             let client = Client::with_config(self.config.clone());
             let request = self.generate_request(messages, true)?;
             let mut stream = client.chat().create_stream(request).await?;
@@ -235,7 +246,8 @@ impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
                 }
             }
             yield LLMEvent::Done(acc.finish());
-        })
+        });
+        traced_event_stream(PROVIDER, &self.model, events)
     }
 
     fn add_options(&mut self, options: CallOptions) {

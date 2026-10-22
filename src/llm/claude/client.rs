@@ -4,6 +4,7 @@ use crate::{
         LLMEventStream, TokenUsage,
     },
     llm::AnthropicError,
+    observability::{traced_event_stream, traced_generate},
     schemas::{Message, MessageType, StreamData},
 };
 use async_trait::async_trait;
@@ -64,6 +65,8 @@ impl From<ClaudeModel> for String {
 
 const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 const DEFAULT_MODEL: ClaudeModel = ClaudeModel::ClaudeSonnet5_5;
+/// `provider` field of the `llm.generate` span.
+const PROVIDER: &str = "anthropic";
 
 #[derive(Clone)]
 pub struct Claude {
@@ -210,10 +213,13 @@ impl Claude {
 #[async_trait]
 impl LLM for Claude {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
-        match &self.options.streaming_func {
-            Some(_) => self.generate_streaming(messages).await,
-            None => self.generate_blocking(messages).await,
-        }
+        traced_generate(PROVIDER, &self.model, async {
+            match &self.options.streaming_func {
+                Some(_) => self.generate_streaming(messages).await,
+                None => self.generate_blocking(messages).await,
+            }
+        })
+        .await
     }
 
     async fn stream(
@@ -236,7 +242,7 @@ impl LLM for Claude {
     }
 
     fn generate_stream<'a>(&'a self, messages: &'a [Message]) -> LLMEventStream<'a> {
-        box_llm_events(async_stream::try_stream! {
+        let events = box_llm_events(async_stream::try_stream! {
             let payload = self.build_payload(messages, true);
             let res = self.send(&payload).await?;
             let events = sse_json_events(res.bytes_stream());
@@ -250,7 +256,8 @@ impl LLM for Claude {
                 }
             }
             yield LLMEvent::Done(acc.finish());
-        })
+        });
+        traced_event_stream(PROVIDER, &self.model, events)
     }
 
     fn add_options(&mut self, options: CallOptions) {

@@ -783,3 +783,137 @@ async fn stream_events_answer_starting_with_bracket_is_still_streamed() {
         })
     );
 }
+
+// ---- tracing spans ----
+
+use crate::observability::testing::capture;
+
+fn tools_agent_run() -> (RecordingTool, AgentExecutor<impl crate::agent::Agent>) {
+    let weather = RecordingTool::ok("weather", "sunny");
+    let llm = FakeLLM::with_results([
+        GenerateResult::default().with_tool_calls(vec![ToolCall::new(
+            "call_1",
+            "weather",
+            r#"{"input":"Lima"}"#,
+        )]),
+        GenerateResult {
+            generation: "Sunny".into(),
+            ..Default::default()
+        },
+    ]);
+    let tools: Vec<Arc<dyn Tool>> = vec![Arc::new(weather.clone())];
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&tools)
+        .build(llm)
+        .unwrap();
+    (weather, AgentExecutor::from_agent(agent))
+}
+
+#[tokio::test]
+async fn agent_run_emits_run_plan_and_tool_spans() {
+    let (spans, _guard) = capture();
+    let (_, executor) = tools_agent_run();
+    executor
+        .invoke(prompt_args! {"input" => "weather?"})
+        .await
+        .unwrap();
+
+    let run = spans.named("agent.run");
+    assert_eq!(run.len(), 1);
+    assert_eq!(run[0].field("max_iterations"), Some("10"));
+    assert_eq!(run[0].field("steps"), Some("1"));
+    assert_eq!(run[0].field("error"), None);
+
+    let plans = spans.named("agent.plan");
+    let steps: Vec<_> = plans.iter().map(|p| p.field("step").unwrap()).collect();
+    assert_eq!(steps, vec!["0", "1"], "one plan span per iteration");
+    assert!(plans.iter().all(|p| p.parent == Some("agent.run")));
+
+    let tool = &spans.named("tool.call")[0];
+    assert_eq!(tool.field("tool"), Some("weather"));
+    assert_eq!(tool.parent, Some("agent.run"));
+    assert_eq!(tool.field("error"), None);
+
+    // Each LLM call belongs to the step that made it (through the agent's LLMChain).
+    let llm = spans.named("llm.generate");
+    assert_eq!(llm.len(), 2);
+    assert!(
+        llm.iter().all(|s| s.parent == Some("chain.call")),
+        "{llm:?}"
+    );
+    let chains = spans.named("chain.call");
+    assert!(
+        chains.iter().all(|s| s.parent == Some("agent.plan")),
+        "{chains:?}"
+    );
+}
+
+#[tokio::test]
+async fn agent_spans_are_the_same_when_streaming() {
+    let (spans, _guard) = capture();
+    let (_, executor) = tools_agent_run();
+    let events = collect_events(&executor, "weather?").await;
+    assert!(events.iter().all(Result::is_ok));
+
+    assert_eq!(spans.named("agent.run")[0].field("steps"), Some("1"));
+    assert_eq!(spans.named("agent.plan").len(), 2);
+    assert_eq!(spans.named("tool.call")[0].parent, Some("agent.run"));
+    let llm = spans.named("llm.generate");
+    assert_eq!(llm.len(), 2);
+    assert!(llm.iter().all(|s| s.field("stream") == Some("true")));
+    assert!(
+        llm.iter().all(|s| s.parent == Some("agent.plan")),
+        "{llm:?}"
+    );
+}
+
+#[tokio::test]
+async fn failing_tool_records_error_on_tool_span() {
+    let (spans, _guard) = capture();
+    let llm = FakeLLM::new([action("Broken", "x"), final_answer("recovered")]);
+    let agent = ConversationalAgentBuilder::new()
+        .tools(&[Arc::new(RecordingTool::failing("Broken", "boom"))])
+        .build(llm)
+        .unwrap();
+    let out = AgentExecutor::from_agent(agent)
+        .invoke(prompt_args! {"input" => "q"})
+        .await
+        .unwrap();
+    assert_eq!(out, "recovered");
+
+    let tool = &spans.named("tool.call")[0];
+    assert_eq!(tool.field("tool"), Some("Broken"));
+    assert_eq!(tool.field("error"), Some("boom"));
+    // The tool error became an observation, so the run itself succeeded.
+    assert_eq!(spans.named("agent.run")[0].field("error"), None);
+}
+
+#[tokio::test]
+async fn failed_run_records_error_on_run_span() {
+    let (spans, _guard) = capture();
+    let llm = FakeLLM::new([action("Nope", "x")]);
+    let agent = ConversationalAgentBuilder::new().build(llm).unwrap();
+    AgentExecutor::from_agent(agent)
+        .invoke(prompt_args! {"input" => "q"})
+        .await
+        .unwrap_err();
+    let run = &spans.named("agent.run")[0];
+    assert!(run.field("error").unwrap().contains("Tool Nope not found"));
+}
+
+#[tokio::test]
+async fn max_iterations_records_steps() {
+    let (spans, _guard) = capture();
+    let llm = FakeLLM::new([action("Echo", "1"), action("Echo", "2")]);
+    let agent = ConversationalAgentBuilder::new()
+        .tools(&[Arc::new(RecordingTool::ok("Echo", "again"))])
+        .build(llm)
+        .unwrap();
+    AgentExecutor::from_agent(agent)
+        .with_max_iterations(2)
+        .invoke(prompt_args! {"input" => "q"})
+        .await
+        .unwrap();
+    assert_eq!(spans.named("agent.run")[0].field("steps"), Some("2"));
+    assert_eq!(spans.named("tool.call").len(), 2);
+}

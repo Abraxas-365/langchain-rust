@@ -6,6 +6,7 @@ use futures_util::TryStreamExt;
 
 use crate::{
     language_models::{llm::LLM, GenerateResult, LLMEvent},
+    observability::traced,
     output_parsers::{OutputParser, SimpleParser},
     prompt::{FormatPrompter, PromptArgs},
     schemas::StreamData,
@@ -105,17 +106,28 @@ impl Chain for LLMChain {
     }
 
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
-        let prompt = self.prompt.format_prompt(input_variables.clone())?;
-        log::debug!("Prompt: {:?}", prompt);
-        let mut output = self.llm.generate(&prompt.to_chat_messages()).await?;
-        output.generation = self.output_parser.parse(&output.generation).await?;
-
-        Ok(output)
+        let span = tracing::info_span!(
+            "chain.call",
+            chain = "llm_chain",
+            error = tracing::field::Empty
+        );
+        traced(
+            span,
+            async {
+                let prompt = self.prompt.format_prompt(input_variables.clone())?;
+                tracing::debug!("Prompt: {:?}", prompt);
+                let mut output = self.llm.generate(&prompt.to_chat_messages()).await?;
+                output.generation = self.output_parser.parse(&output.generation).await?;
+                Ok(output)
+            },
+            |_, _| {},
+        )
+        .await
     }
 
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
-        log::debug!("Prompt: {:?}", prompt);
+        tracing::debug!("Prompt: {:?}", prompt);
         let output = self
             .llm
             .generate(&prompt.to_chat_messages())
@@ -130,7 +142,7 @@ impl Chain for LLMChain {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
         let prompt = self.prompt.format_prompt(input_variables.clone())?;
-        log::debug!("Prompt: {:?}", prompt);
+        tracing::debug!("Prompt: {:?}", prompt);
         let llm_stream = self.llm.stream(&prompt.to_chat_messages()).await?;
 
         // Map the errors from LLMError to ChainError
