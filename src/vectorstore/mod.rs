@@ -18,6 +18,9 @@ pub mod surrealdb;
 #[cfg(feature = "weaviate")]
 pub mod weaviate;
 
+#[cfg(feature = "milvus")]
+pub mod milvus;
+
 #[cfg(feature = "opensearch")]
 pub mod opensearch;
 

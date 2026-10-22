@@ -46,6 +46,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Sqlite](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_sqlite_vss.rs)
   - [x] [SurrealDB](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_surrealdb/src/main.rs)
   - [x] [Weaviate](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_weaviate.rs)
+  - [x] [Milvus](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_milvus.rs)
 
 - Chain
 
@@ -292,6 +293,12 @@ cargo add langchain-rust --features surrealdb
 
 ```bash
 cargo add langchain-rust --features weaviate
+```
+
+#### With Milvus
+
+```bash
+cargo add langchain-rust --features milvus
 ```
 
 #### With Pinecone

@@ -127,6 +127,7 @@ sqlite-vss = ["sqlx"]
 sqlite-vec = ["sqlx"]
 surrealdb = ["dep:surrealdb"]
 weaviate = ["uuid"]
+milvus = ["uuid"]
 tree-sitter = [
     "cc",
     "dep:tree-sitter",
