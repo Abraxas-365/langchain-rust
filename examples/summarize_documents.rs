@@ -2,6 +2,7 @@
 //!
 //! - `MapReduceDocuments`: one LLM call per document (concurrently), then one call to combine.
 //! - `RefineDocuments`: builds the answer document by document, sequentially.
+//! - `MapRerankDocuments`: answers from each document separately, keeps the best-scored one.
 //! - `RetrievalQA`: retrieves relevant documents, then answers with any of the above.
 //!
 //! ```sh
@@ -12,7 +13,10 @@ use std::error::Error;
 use async_trait::async_trait;
 use futures::StreamExt;
 use langchain_rust::{
-    chain::{Chain, MapReduceDocuments, RefineDocuments, RetrievalQA},
+    chain::{
+        Chain, MapReduceDocuments, MapRerankDocuments, RefineDocuments, RetrievalQA,
+        MAP_RERANK_SCORE_KEY,
+    },
     language_models::LLMEvent,
     llm::openai::OpenAI,
     prompt_args,
@@ -62,10 +66,24 @@ async fn main() {
         }
     }
 
-    let qa = RetrievalQA::new(Chapters, MapReduceDocuments::load_qa(llm));
+    let qa = RetrievalQA::new(Chapters, MapReduceDocuments::load_qa(llm.clone()));
     let answer = qa
         .invoke(prompt_args! { "query" => "What made Ana's business profitable again?" })
         .await
         .unwrap();
     println!("answer: {answer}");
+
+    // Map-rerank answers from each chapter on its own and keeps the best-scored answer.
+    let rerank = MapRerankDocuments::load_qa(llm);
+    let out = rerank
+        .execute(prompt_args! {
+            "input_documents" => chapters(),
+            "question" => "Why did Ana's sales drop?",
+        })
+        .await
+        .unwrap();
+    println!(
+        "map-rerank: {} (score {})",
+        out["output"], out[MAP_RERANK_SCORE_KEY]
+    );
 }
