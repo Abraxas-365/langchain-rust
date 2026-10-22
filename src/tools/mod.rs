@@ -27,3 +27,6 @@ pub use text2speech::*;
 
 mod wikipedia;
 pub use wikipedia::*;
+
+mod calculator;
+pub use calculator::{evaluate_expression, format_number, Calculator, CalculatorError};
