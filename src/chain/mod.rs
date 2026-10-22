@@ -28,6 +28,12 @@ pub use conversational_retrieval_qa::*;
 mod router;
 pub use router::*;
 
+mod constitutional;
+pub use constitutional::{
+    ConstitutionalChain, ConstitutionalOutput, ConstitutionalPrinciple, CritiqueRevision,
+    CONSTITUTIONAL_INITIAL_OUTPUT_KEY, CONSTITUTIONAL_STEPS_KEY,
+};
+
 mod error;
 pub use error::*;
 
