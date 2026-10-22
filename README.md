@@ -55,6 +55,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Chat Agent with Tools](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/agent.rs)
   - [x] [Open AI Compatible Tools Agent](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/open_ai_tools_agent.rs)
   - [x] [Streaming agent events + cancellation](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/streaming_agent.rs)
+  - [x] [Tracing spans for LLM calls, tools and agent steps](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/tracing.rs)
 
 - Tools
 

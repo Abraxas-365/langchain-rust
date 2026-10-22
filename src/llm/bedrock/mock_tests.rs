@@ -420,3 +420,41 @@ async fn tools_agent_runs_a_tool_loop_with_bedrock() {
     first.assert_async().await;
     second.assert_async().await;
 }
+
+// ---- tracing ----
+
+#[tokio::test]
+async fn generate_and_generate_stream_run_in_llm_spans() {
+    use crate::observability::testing::capture;
+
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", CONVERSE)
+        .with_header("content-type", "application/json")
+        .with_body(converse_response(json!([{"text": "Hi"}])))
+        .create_async()
+        .await;
+    server
+        .mock("POST", CONVERSE_STREAM)
+        .with_header("content-type", "application/vnd.amazon.eventstream")
+        .with_body(text_stream_body())
+        .create_async()
+        .await;
+
+    let (spans, _guard) = capture();
+    let llm = bedrock_for(&server);
+    let messages = [Message::new_human_message("hi")];
+    llm.generate(&messages).await.unwrap();
+    let events: Vec<_> = llm.generate_stream(&messages).collect().await;
+    assert!(events.iter().all(Result::is_ok), "{events:?}");
+
+    let llm_spans = spans.named("llm.generate");
+    assert_eq!(llm_spans.len(), 2, "{llm_spans:?}");
+    for span in &llm_spans {
+        assert_eq!(span.field("provider"), Some("bedrock"));
+        assert_eq!(span.field("model"), Some("test-model"));
+        assert_eq!(span.field("total_tokens"), Some("5"));
+    }
+    assert_eq!(llm_spans[0].field("stream"), Some("false"));
+    assert_eq!(llm_spans[1].field("stream"), Some("true"));
+}

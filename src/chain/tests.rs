@@ -384,3 +384,21 @@ async fn default_call_stream_and_stream_on_chains_without_streaming() {
     // `stream` used to panic with unimplemented!(); now it is a plain error.
     assert!(chain.stream(prompt_args! {"name" => "luis"}).await.is_err());
 }
+
+// ---- tracing ----
+
+#[tokio::test]
+async fn llm_chain_call_runs_in_a_chain_span() {
+    let (spans, _guard) = crate::observability::testing::capture();
+    let chain = greet_chain(FakeLLM::new(["hi"]));
+    chain.call(prompt_args! {"name" => "a"}).await.unwrap();
+    let span = &spans.named("chain.call")[0];
+    assert_eq!(span.field("chain"), Some("llm_chain"));
+    assert_eq!(span.field("error"), None);
+
+    greet_chain(FakeLLM::default())
+        .call(prompt_args! {"name" => "a"})
+        .await
+        .unwrap_err();
+    assert!(spans.named("chain.call")[1].field("error").is_some());
+}

@@ -75,7 +75,7 @@ impl RouteLayerBuilder {
     pub fn top_k(mut self, top_k: usize) -> Self {
         let mut top_k = top_k;
         if top_k == 0 {
-            log::warn!("top_k cannot be 0, setting it to 1");
+            tracing::warn!("top_k cannot be 0, setting it to 1");
             top_k = 1;
         }
         self.top_k = top_k;

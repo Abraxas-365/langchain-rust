@@ -529,3 +529,77 @@ async fn agent_stream_events_with_openai_streams_answer_tokens() {
         ]
     );
 }
+
+// ---- tracing ----
+
+use crate::observability::testing::capture;
+
+#[tokio::test]
+async fn generate_runs_in_an_llm_span_with_usage() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/chat/completions")
+        .with_header("content-type", "application/json")
+        .with_body(completion_body(
+            json!({"role": "assistant", "content": "ok"}),
+        ))
+        .create_async()
+        .await;
+
+    let (spans, _guard) = capture();
+    llm_for(&server).invoke("hi").await.unwrap();
+
+    let span = &spans.named("llm.generate")[0];
+    assert_eq!(span.field("provider"), Some("openai"));
+    assert_eq!(span.field("model"), Some("gpt-4o-mini"));
+    assert_eq!(span.field("stream"), Some("false"));
+    assert_eq!(span.field("total_tokens"), Some("12"));
+}
+
+#[tokio::test]
+async fn generate_stream_runs_in_an_llm_span_with_usage() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/chat/completions")
+        .with_header("content-type", "text/event-stream")
+        .with_body(sse(&[
+            chunk(Some("a"), None),
+            chunk(
+                None,
+                Some(json!({"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3})),
+            ),
+        ]))
+        .create_async()
+        .await;
+
+    let (spans, _guard) = capture();
+    let events = stream_events_from(&server).await;
+    assert!(events.iter().all(Result::is_ok));
+
+    let span = &spans.named("llm.generate")[0];
+    assert_eq!(span.field("provider"), Some("openai"));
+    assert_eq!(span.field("stream"), Some("true"));
+    assert_eq!(span.field("total_tokens"), Some("3"));
+}
+
+#[tokio::test]
+async fn generate_with_streaming_func_returns_stream_errors() {
+    // A broken chunk used to be printed to stderr and skipped, returning a truncated answer.
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/chat/completions")
+        .with_header("content-type", "text/event-stream")
+        .with_body(format!(
+            "data: {}\n\ndata: {{not json\n\ndata: [DONE]\n\n",
+            chunk(Some("a"), None)
+        ))
+        .create_async()
+        .await;
+
+    let (spans, _guard) = capture();
+    let llm = llm_for(&server)
+        .with_options(CallOptions::new().with_streaming_func(|_: String| async { Ok(()) }));
+    let err = llm.invoke("hi").await.unwrap_err();
+    assert!(matches!(err, LLMError::OpenAIError(_)), "{err:?}");
+    assert!(spans.named("llm.generate")[0].field("error").is_some());
+}

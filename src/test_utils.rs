@@ -69,11 +69,15 @@ impl FakeLLM {
 
 #[async_trait]
 impl LLM for FakeLLM {
+    // Traced like a real provider, so agent/chain tests can assert span nesting.
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
-        match self.next(messages) {
-            Some(result) => result,
-            None => futures::future::pending().await,
-        }
+        crate::observability::traced_generate("fake", "fake", async {
+            match self.next(messages) {
+                Some(result) => result,
+                None => futures::future::pending().await,
+            }
+        })
+        .await
     }
 
     async fn stream(
@@ -105,7 +109,7 @@ impl LLM for FakeLLM {
             );
         }
         events.push(Ok(LLMEvent::Done(result)));
-        Box::pin(stream::iter(events))
+        crate::observability::traced_event_stream("fake", "fake", Box::pin(stream::iter(events)))
     }
 
     fn add_options(&mut self, options: CallOptions) {

@@ -100,7 +100,7 @@ impl Tool for CommandExecutor {
     }
 
     async fn parse_input(&self, input: &str) -> Value {
-        log::info!("Parsing input: {}", input);
+        tracing::info!("Parsing input: {}", input);
 
         // Attempt to parse input string into CommandsWrapper struct first
         let wrapper_result = serde_json::from_str::<CommandsWrapper>(input);
@@ -109,7 +109,7 @@ impl Tool for CommandExecutor {
             // If successful, serialize the `commands` back into a serde_json::Value
             // this is for llm like open ai tools
             serde_json::to_value(wrapper.commands).unwrap_or_else(|err| {
-                log::error!("Serialization error: {}", err);
+                tracing::error!("Serialization error: {}", err);
                 Value::Null
             })
         } else {
@@ -119,7 +119,7 @@ impl Tool for CommandExecutor {
 
             commands_result.map_or_else(
                 |err| {
-                    log::error!("Failed to parse input: {}", err);
+                    tracing::error!("Failed to parse input: {}", err);
                     Value::Null
                 },
                 |commands| serde_json::to_value(commands).unwrap_or(Value::Null),

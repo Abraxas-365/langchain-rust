@@ -25,7 +25,7 @@ impl Index for MemoryIndex {
                 return Err(IndexError::MissingEmbedding(router.name.clone()));
             }
             if self.routers.contains_key(&router.name) {
-                log::warn!("Router {} already exists in the index", router.name);
+                tracing::warn!("Router {} already exists in the index", router.name);
             }
             self.routers.insert(router.name.clone(), router.clone());
         }
@@ -35,7 +35,7 @@ impl Index for MemoryIndex {
 
     async fn delete(&mut self, router_name: &str) -> Result<(), IndexError> {
         if self.routers.remove(router_name).is_none() {
-            log::warn!("Router {} not found in the index", router_name);
+            tracing::warn!("Router {} not found in the index", router_name);
         }
         Ok(())
     }

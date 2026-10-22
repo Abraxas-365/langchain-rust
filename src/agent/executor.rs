@@ -10,6 +10,7 @@ use super::{
     agent::{Agent, PlanEvent},
     AgentError,
 };
+use crate::observability::traced;
 use crate::schemas::{LogTools, Message};
 use crate::{
     chain::{chain_trait::Chain, ChainError},
@@ -21,6 +22,7 @@ use crate::{
     },
     tools::Tool,
 };
+use tracing::Instrument;
 
 /// What an agent run is doing, streamed by [`AgentExecutor::stream_events`].
 #[derive(Debug, Clone, PartialEq)]
@@ -102,7 +104,7 @@ where
     fn get_name_to_tools(&self) -> HashMap<String, Arc<dyn Tool>> {
         let mut name_to_tool = HashMap::new();
         for tool in self.agent.get_tools().iter() {
-            log::debug!("Loading Tool:{}", tool.name());
+            tracing::debug!("Loading Tool:{}", tool.name());
             name_to_tool.insert(tool.name().trim().replace(" ", "_"), tool.clone());
         }
         name_to_tool
@@ -165,14 +167,23 @@ where
         input_variables: PromptArgs,
         emitter: Emitter,
     ) -> Result<String, ChainError> {
+        let span = tracing::info_span!(
+            "agent.run",
+            max_iterations = self.max_iterations,
+            steps = tracing::field::Empty,
+            error = tracing::field::Empty,
+        );
         let run = self.run_inner(input_variables, emitter);
-        match &self.cancellation {
-            Some(token) => token
-                .run_until_cancelled(run)
-                .await
-                .unwrap_or_else(|| Err(ChainError::AgentError(CANCELLED.into()))),
-            None => run.await,
-        }
+        let run = async {
+            match &self.cancellation {
+                Some(token) => token
+                    .run_until_cancelled(run)
+                    .await
+                    .unwrap_or_else(|| Err(ChainError::AgentError(CANCELLED.into()))),
+                None => run.await,
+            }
+        };
+        traced(span, run, |_, _| {}).await
     }
 
     async fn run_inner(
@@ -191,18 +202,23 @@ where
         }
 
         loop {
-            let agent_event = if emitter.is_streaming() {
-                self.plan_streaming(&steps, input_variables.clone(), &emitter)
-                    .await
-            } else {
-                self.agent.plan(&steps, input_variables.clone()).await
+            let plan_span = tracing::info_span!("agent.plan", step = steps.len());
+            let agent_event = async {
+                if emitter.is_streaming() {
+                    self.plan_streaming(&steps, input_variables.clone(), &emitter)
+                        .await
+                } else {
+                    self.agent.plan(&steps, input_variables.clone()).await
+                }
             }
+            .instrument(plan_span)
+            .await
             .map_err(|e| ChainError::AgentError(format!("Error in agent planning: {}", e)))?;
 
             match agent_event {
                 AgentEvent::Action(actions) => {
                     for action in actions {
-                        log::debug!("Action: {:?}", action.tool_input);
+                        tracing::debug!("Action: {:?}", action.tool_input);
                         let tool = name_to_tools
                             .get(&action.tool.trim().replace(" ", "_"))
                             .ok_or_else(|| {
@@ -216,22 +232,29 @@ where
                                 input: action.tool_input.clone(),
                             })
                             .await;
-                        let observation = match tool.call(&action.tool_input).await {
-                            Ok(result) => result,
-                            Err(err) => {
-                                log::info!(
-                                    "The tool return the following error: {}",
-                                    err.to_string()
-                                );
-                                if self.break_if_error {
-                                    return Err(ChainError::AgentError(
-                                        AgentError::ToolError(err.to_string()).to_string(),
-                                    ));
-                                } else {
-                                    format!("The tool return the following error: {}", err)
+                        let tool_span = tracing::info_span!(
+                            "tool.call",
+                            tool = %action.tool,
+                            error = tracing::field::Empty,
+                        );
+                        let observation =
+                            match traced(tool_span, tool.call(&action.tool_input), |_, _| {}).await
+                            {
+                                Ok(result) => result,
+                                Err(err) => {
+                                    tracing::info!(
+                                        "The tool return the following error: {}",
+                                        err.to_string()
+                                    );
+                                    if self.break_if_error {
+                                        return Err(ChainError::AgentError(
+                                            AgentError::ToolError(err.to_string()).to_string(),
+                                        ));
+                                    } else {
+                                        format!("The tool return the following error: {}", err)
+                                    }
                                 }
-                            }
-                        };
+                            };
                         emitter
                             .emit(AgentStreamEvent::ToolEnd {
                                 tool: action.tool.clone(),
@@ -243,6 +266,7 @@ where
                     }
                 }
                 AgentEvent::Finish(finish) => {
+                    tracing::Span::current().record("steps", steps.len());
                     if let Some(memory) = &self.memory {
                         let mut memory = memory.lock().await;
 
@@ -284,6 +308,8 @@ where
 
             if let Some(max_iterations) = self.max_iterations {
                 if steps.len() >= max_iterations as usize {
+                    tracing::Span::current().record("steps", steps.len());
+                    tracing::warn!(max_iterations, "agent stopped: max iterations reached");
                     return Ok(MAX_ITERATIONS_OUTPUT.to_string());
                 }
             }

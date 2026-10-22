@@ -10,6 +10,7 @@ use std::pin::Pin;
 
 use super::models::{ApiResponse, DeepseekMessage, Payload, ResponseFormat};
 use crate::llm::sse::{sse_json_events, usage_from_chunk};
+use crate::observability::traced_generate;
 
 pub enum DeepseekModel {
     DeepseekChat,
@@ -196,9 +197,9 @@ impl Deepseek {
     }
 }
 
-#[async_trait]
-impl LLM for Deepseek {
-    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+impl Deepseek {
+    /// `generate` without the tracing span: honours `streaming_func`.
+    async fn generate_dispatch(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
         match &self.options.streaming_func {
             Some(func) => {
                 let mut complete_response = String::new();
@@ -219,6 +220,13 @@ impl LLM for Deepseek {
             }
             None => self.generate(messages).await,
         }
+    }
+}
+
+#[async_trait]
+impl LLM for Deepseek {
+    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+        traced_generate("deepseek", &self.model, self.generate_dispatch(messages)).await
     }
 
     async fn stream(

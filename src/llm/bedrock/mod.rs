@@ -63,6 +63,10 @@ use crate::language_models::options::CallOptions;
 use crate::language_models::{
     box_llm_events, GenerateResult, LLMError, LLMEvent, LLMEventStream, TokenUsage,
 };
+use crate::observability::{traced_event_stream, traced_generate};
+
+/// `provider` field of the `llm.generate` span.
+const PROVIDER: &str = "bedrock";
 use crate::schemas::messages::MessageType;
 use crate::schemas::{FunctionCallBehavior, FunctionDefinition, Message, StreamData, ToolCall};
 
@@ -678,10 +682,13 @@ fn document_to_json(doc: &Document) -> Value {
 #[async_trait]
 impl LLM for Bedrock {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
-        match &self.options.streaming_func {
-            Some(_) => self.generate_streaming(messages).await,
-            None => self.generate_blocking(messages).await,
-        }
+        traced_generate(PROVIDER, self.config.model.model_id(), async {
+            match &self.options.streaming_func {
+                Some(_) => self.generate_streaming(messages).await,
+                None => self.generate_blocking(messages).await,
+            }
+        })
+        .await
     }
 
     async fn stream(
@@ -721,7 +728,7 @@ impl LLM for Bedrock {
     fn generate_stream<'a>(&'a self, messages: &'a [Message]) -> LLMEventStream<'a> {
         use futures::StreamExt;
 
-        box_llm_events(async_stream::try_stream! {
+        let events = box_llm_events(async_stream::try_stream! {
             let events = self.converse_stream(messages).await?;
             futures::pin_mut!(events);
 
@@ -736,7 +743,8 @@ impl LLM for Bedrock {
                 tokens,
                 ..result_from_blocks(acc.blocks.into_values())?
             });
-        })
+        });
+        traced_event_stream(PROVIDER, self.config.model.model_id(), events)
     }
 
     fn add_options(&mut self, options: CallOptions) {

@@ -65,7 +65,7 @@ pub trait Tool: Send + Sync {
     /// Implement this function to extract the parameters needed for your tool. If a simple
     /// string is sufficient, the default implementation can be used.
     async fn parse_input(&self, input: &str) -> Value {
-        log::info!("Using default implementation: {}", input);
+        tracing::info!("Using default implementation: {}", input);
         match serde_json::from_str::<Value>(input) {
             Ok(input) => {
                 if input["input"].is_string() {

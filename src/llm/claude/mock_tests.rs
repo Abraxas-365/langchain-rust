@@ -376,3 +376,46 @@ async fn claude_generate_stream_ends_with_error_event() {
         Err(LLMError::AnthropicError(AnthropicError::OverloadedError(m))) if m == "busy"
     ));
 }
+
+// ---- tracing ----
+
+#[tokio::test]
+async fn claude_generate_and_generate_stream_run_in_llm_spans() {
+    use crate::observability::testing::capture;
+
+    let mut server = mockito::Server::new_async().await;
+    // More specific mock first: streaming requests carry "stream": true.
+    server
+        .mock("POST", "/v1/messages")
+        .match_body(Matcher::PartialJson(json!({"stream": true})))
+        .with_header("content-type", "text/event-stream")
+        .with_body(tool_use_stream())
+        .create_async()
+        .await;
+    server
+        .mock("POST", "/v1/messages")
+        .with_body(message_body(
+            json!([{"type": "text", "text": "Hi"}]),
+            "end_turn",
+        ))
+        .create_async()
+        .await;
+
+    let (spans, _guard) = capture();
+    let llm = claude(&server);
+    let messages = [Message::new_human_message("hi")];
+    llm.generate(&messages).await.unwrap();
+    let events: Vec<_> = llm.generate_stream(&messages).collect().await;
+    assert!(events.iter().all(Result::is_ok), "{events:?}");
+
+    let llm_spans = spans.named("llm.generate");
+    assert_eq!(llm_spans.len(), 2);
+    for span in &llm_spans {
+        assert_eq!(span.field("provider"), Some("anthropic"));
+        assert_eq!(span.field("model"), Some("claude-test"));
+    }
+    assert_eq!(llm_spans[0].field("stream"), Some("false"));
+    assert_eq!(llm_spans[0].field("total_tokens"), Some("15"));
+    assert_eq!(llm_spans[1].field("stream"), Some("true"));
+    assert_eq!(llm_spans[1].field("tool_calls"), Some("1"));
+}

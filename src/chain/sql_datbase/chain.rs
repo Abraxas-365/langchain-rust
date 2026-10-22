@@ -131,7 +131,7 @@ impl SQLDatabaseChain {
         }
 
         let sql_query = output.generation.trim();
-        log::debug!("output: {:?}", sql_query);
+        tracing::debug!("output: {:?}", sql_query);
         let query_result = self
             .database
             .query(sql_query)

@@ -3,6 +3,7 @@ use crate::{
         box_llm_events, llm::LLM, options::CallOptions, GenerateResult, LLMError, LLMEvent,
         LLMEventStream, TokenUsage,
     },
+    observability::{traced_event_stream, traced_generate},
     schemas::{self, FunctionDefinition, Message, MessageType, StreamData},
 };
 use async_trait::async_trait;
@@ -35,6 +36,8 @@ pub struct Ollama {
 
 /// [llama3.2](https://ollama.com/library/llama3.2) is a 3B parameters, 2.0GB model.
 const DEFAULT_MODEL: &str = "llama3.2";
+/// `provider` field of the `llm.generate` span.
+const PROVIDER: &str = "ollama";
 
 impl Ollama {
     pub fn new<S: Into<String>>(
@@ -176,17 +179,20 @@ fn token_usage(final_data: &ChatMessageFinalResponseData) -> TokenUsage {
 #[async_trait]
 impl LLM for Ollama {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
-        let request = self.generate_request(messages)?;
-        let result = self.client.send_chat_messages(request).await?;
+        traced_generate(PROVIDER, &self.model, async {
+            let request = self.generate_request(messages)?;
+            let result = self.client.send_chat_messages(request).await?;
 
-        let tokens = result.final_data.as_ref().map(token_usage);
+            let tokens = result.final_data.as_ref().map(token_usage);
 
-        Ok(GenerateResult {
-            tokens,
-            generation: result.message.content,
-            ..Default::default()
-        }
-        .with_tool_calls(from_ollama_tool_calls(&result.message.tool_calls)))
+            Ok(GenerateResult {
+                tokens,
+                generation: result.message.content,
+                ..Default::default()
+            }
+            .with_tool_calls(from_ollama_tool_calls(&result.message.tool_calls)))
+        })
+        .await
     }
 
     async fn stream(
@@ -213,7 +219,7 @@ impl LLM for Ollama {
     }
 
     fn generate_stream<'a>(&'a self, messages: &'a [Message]) -> LLMEventStream<'a> {
-        box_llm_events(async_stream::try_stream! {
+        let events = box_llm_events(async_stream::try_stream! {
             let request = self.generate_request(messages)?;
             let mut stream = self.client.send_chat_messages_stream(request).await?;
 
@@ -233,7 +239,8 @@ impl LLM for Ollama {
                 }
             }
             yield LLMEvent::Done(result.with_tool_calls(calls));
-        })
+        });
+        traced_event_stream(PROVIDER, &self.model, events)
     }
 
     /// Only `functions` is used (it becomes the Ollama `tools` list); generation settings go
@@ -313,6 +320,7 @@ mod tests {
             .create_async()
             .await;
 
+        let (spans, _guard) = crate::observability::testing::capture();
         let result = ollama_for(&server)
             .with_options(GenerationOptions::default().temperature(0.5))
             .generate(&[
@@ -332,6 +340,10 @@ mod tests {
             ),
             (3, 2, 5)
         );
+        let span = &spans.named("llm.generate")[0];
+        assert_eq!(span.field("provider"), Some("ollama"));
+        assert_eq!(span.field("model"), Some("m"));
+        assert_eq!(span.field("total_tokens"), Some("5"));
     }
 
     #[tokio::test]
@@ -412,11 +424,16 @@ mod tests {
 
         let llm = ollama_for(&server);
         let messages = [Message::new_human_message("weather?")];
+        let (spans, _guard) = crate::observability::testing::capture();
         let events: Vec<_> = llm
             .generate_stream(&messages)
             .map(Result::unwrap)
             .collect()
             .await;
+        let span = &spans.named("llm.generate")[0];
+        assert_eq!(span.field("provider"), Some("ollama"));
+        assert_eq!(span.field("stream"), Some("true"));
+        assert_eq!(span.field("tool_calls"), Some("1"));
         assert_eq!(events.len(), 2, "{events:?}");
         assert!(matches!(&events[0], LLMEvent::Text(t) if t == "Checking"));
         let LLMEvent::Done(result) = &events[1] else {
