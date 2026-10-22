@@ -101,7 +101,7 @@ async fn conversational_agent_uses_tool_then_answers() {
     let last_max_tokens = llm.options.lock().unwrap().last().unwrap().max_tokens;
     assert_eq!(last_max_tokens, Some(1000));
 
-    let messages = memory.lock().await.messages();
+    let messages = memory.lock().await.messages().await.unwrap();
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[0].message_type, MessageType::HumanMessage);
     assert_eq!(messages[0].content, "what is 2+2?");
@@ -199,8 +199,8 @@ async fn memory_history_is_sent_as_chat_history() {
         .build(llm.clone())
         .unwrap();
     let mut mem = SimpleMemory::new();
-    mem.add_user_message(&"earlier question");
-    mem.add_ai_message(&"earlier answer");
+    mem.add_user_message(&"earlier question").await.unwrap();
+    mem.add_ai_message(&"earlier answer").await.unwrap();
     let memory = Arc::new(Mutex::new(mem));
 
     AgentExecutor::from_agent(agent)
@@ -216,7 +216,7 @@ async fn memory_history_is_sent_as_chat_history() {
     assert!(prompt
         .iter()
         .any(|m| m.content == "earlier answer" && m.message_type == MessageType::AIMessage));
-    assert_eq!(memory.lock().await.messages().len(), 4);
+    assert_eq!(memory.lock().await.messages().await.unwrap().len(), 4);
 }
 
 fn tool_calls_json(calls: &[(&str, &str, &str)]) -> String {
@@ -292,6 +292,8 @@ async fn openai_tools_agent_executes_parallel_tool_calls() {
         .lock()
         .await
         .messages()
+        .await
+        .unwrap()
         .into_iter()
         .map(|m| m.message_type)
         .collect();

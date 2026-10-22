@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::sync::Mutex;
 
-use crate::schemas::{memory::BaseMemory, messages::Message};
+use crate::schemas::{
+    memory::{BaseMemory, MemoryError},
+    messages::Message,
+};
 
 pub struct SimpleMemory {
     messages: Vec<Message>,
@@ -13,6 +17,12 @@ impl SimpleMemory {
         Self {
             messages: Vec::new(),
         }
+    }
+}
+
+impl Default for SimpleMemory {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -28,15 +38,20 @@ impl Into<Arc<Mutex<dyn BaseMemory>>> for SimpleMemory {
     }
 }
 
+#[async_trait]
 impl BaseMemory for SimpleMemory {
-    fn messages(&self) -> Vec<Message> {
-        self.messages.clone()
+    async fn messages(&self) -> Result<Vec<Message>, MemoryError> {
+        Ok(self.messages.clone())
     }
-    fn add_message(&mut self, message: Message) {
+
+    async fn add_message(&mut self, message: Message) -> Result<(), MemoryError> {
         self.messages.push(message);
+        Ok(())
     }
-    fn clear(&mut self) {
+
+    async fn clear(&mut self) -> Result<(), MemoryError> {
         self.messages.clear();
+        Ok(())
     }
 }
 
@@ -45,14 +60,17 @@ mod tests {
     use super::*;
     use crate::schemas::MessageType;
 
-    #[test]
-    fn stores_all_messages_in_order() {
+    #[tokio::test]
+    async fn stores_all_messages_in_order() {
         let mut memory = SimpleMemory::new();
-        memory.add_user_message(&"question");
-        memory.add_ai_message(&"answer");
-        memory.add_message(Message::new_system_message("sys"));
+        memory.add_user_message(&"question").await.unwrap();
+        memory.add_ai_message(&"answer").await.unwrap();
+        memory
+            .add_message(Message::new_system_message("sys"))
+            .await
+            .unwrap();
 
-        let messages = memory.messages();
+        let messages = memory.messages().await.unwrap();
         let types: Vec<_> = messages.iter().map(|m| m.message_type.clone()).collect();
         assert_eq!(
             types,
@@ -63,23 +81,28 @@ mod tests {
             ]
         );
         assert_eq!(
-            memory.to_string(),
+            memory.to_string().await.unwrap(),
             "human: question\nai: answer\nsystem: sys"
         );
     }
 
-    #[test]
-    fn clear_empties_memory() {
+    #[tokio::test]
+    async fn clear_empties_memory() {
         let mut memory = SimpleMemory::new();
-        memory.add_user_message(&"x");
-        memory.clear();
-        assert!(memory.messages().is_empty());
+        memory.add_user_message(&"x").await.unwrap();
+        memory.clear().await.unwrap();
+        assert!(memory.messages().await.unwrap().is_empty());
     }
 
     #[tokio::test]
     async fn converts_into_shared_mutex() {
         let memory: Arc<Mutex<dyn BaseMemory>> = SimpleMemory::new().into();
-        memory.lock().await.add_user_message(&"shared");
-        assert_eq!(memory.lock().await.messages().len(), 1);
+        memory
+            .lock()
+            .await
+            .add_user_message(&"shared")
+            .await
+            .unwrap();
+        assert_eq!(memory.lock().await.messages().await.unwrap().len(), 1);
     }
 }
