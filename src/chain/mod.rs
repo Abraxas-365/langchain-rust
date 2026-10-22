@@ -16,6 +16,9 @@ pub use sql_datbase::*;
 mod stuff_documents;
 pub use stuff_documents::*;
 
+mod combine_documents;
+pub use combine_documents::*;
+
 mod question_answering;
 pub use question_answering::*;
 
