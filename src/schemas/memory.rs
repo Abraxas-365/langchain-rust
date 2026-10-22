@@ -30,6 +30,13 @@ impl From<redis::RedisError> for MemoryError {
     }
 }
 
+#[cfg(feature = "mongodb")]
+impl From<mongodb::error::Error> for MemoryError {
+    fn from(e: mongodb::error::Error) -> Self {
+        MemoryError::Storage(e.to_string())
+    }
+}
+
 /// Conversation memory used by chains and agents.
 ///
 /// All methods are async and fallible so that memories can be backed by a database

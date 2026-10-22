@@ -63,6 +63,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 
   - [x] [Persistent memory (SQLite/Postgres) + token buffer](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/persistent_memory.rs)
   - [x] [Redis chat history](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/redis_memory.rs)
+  - [x] [MongoDB chat history](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/mongodb_memory.rs)
 
 - Agents
 
@@ -311,7 +312,7 @@ cargo add langchain-rust --features qdrant
 cargo add langchain-rust --features chroma
 ```
 
-#### With MongoDB Atlas
+#### With MongoDB (Atlas vector store, chat history on any MongoDB)
 
 ```bash
 cargo add langchain-rust --features mongodb
