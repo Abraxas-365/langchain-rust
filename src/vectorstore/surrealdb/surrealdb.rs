@@ -214,6 +214,7 @@ impl<C: Connection> VectorStore for Store<C> {
                 page_content: row.text,
                 metadata: row.metadata,
                 score: row.similarity,
+                id: None,
             })
             .collect();
 

@@ -191,6 +191,13 @@ impl VectorStore for Store {
                 "score_threshold, filters, and name_space are not supported in pgvector",
             )));
         }
+        // The uuid column is TEXT. Reject empty ids before any write or embedding.
+        for doc in docs {
+            if doc.id.as_ref().is_some_and(|id| id.is_empty()) {
+                return Err("document id must not be empty".into());
+            }
+        }
+
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
 
         let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
@@ -209,16 +216,26 @@ impl VectorStore for Store {
         let mut ids = Vec::with_capacity(docs.len());
 
         for (doc, vector) in docs.iter().zip(vectors.iter()) {
-            let id = Uuid::new_v4().to_string();
+            // Caller ids are stored as text. A missing id gets a fresh UUID.
+            // Repeated ids in this transaction apply in order, so the last row wins.
+            let id = doc.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
             ids.push(id.clone());
 
             let vector_value =
                 Vector::from(vector.into_iter().map(|x| *x as f32).collect::<Vec<f32>>());
 
-            sqlx::query(AssertSqlSafe(format!(
-                r#"INSERT INTO {} 
-(uuid, document, embedding, cmetadata, collection_id) VALUES ($1, $2, $3, $4, $5)"#,
-                self.embedder_table_name
+            // Replace document, embedding, and metadata only when the existing row
+            // already belongs to this collection. A zero-row update means the id is
+            // owned elsewhere; roll the whole batch back and do not change ownership.
+            let result = sqlx::query(AssertSqlSafe(format!(
+                r#"INSERT INTO {}
+(uuid, document, embedding, cmetadata, collection_id) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (uuid) DO UPDATE
+SET document = EXCLUDED.document,
+    embedding = EXCLUDED.embedding,
+    cmetadata = EXCLUDED.cmetadata
+WHERE {}.collection_id = EXCLUDED.collection_id"#,
+                self.embedder_table_name, self.embedder_table_name
             )))
             .bind(&id)
             .bind(&doc.page_content)
@@ -227,6 +244,13 @@ impl VectorStore for Store {
             .bind(&self.collection_uuid)
             .execute(&mut *tx)
             .await?;
+
+            if result.rows_affected() != 1 {
+                tx.rollback().await?;
+                return Err(
+                    format!("document id `{id}` already belongs to another collection").into(),
+                );
+            }
         }
 
         tx.commit().await?;
@@ -255,7 +279,8 @@ impl VectorStore for Store {
             SELECT
                 data.document,
                 data.cmetadata,
-                data.distance
+                data.distance,
+                data.uuid
             FROM (
                 SELECT
                     filtered_embedding_dims.*,
@@ -299,6 +324,7 @@ impl VectorStore for Store {
                 let page_content: String = row.try_get(0)?;
                 let metadata_json: Value = row.try_get(1)?;
                 let score: f64 = row.try_get(2)?;
+                let id: String = row.try_get(3)?;
 
                 let metadata = if let Value::Object(obj) = metadata_json {
                     obj.into_iter().collect()
@@ -310,6 +336,7 @@ impl VectorStore for Store {
                     page_content,
                     metadata,
                     score,
+                    id: Some(id),
                 })
             })
             .collect::<Result<Vec<Document>, sqlx::Error>>()?;

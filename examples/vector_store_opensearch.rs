@@ -93,21 +93,26 @@ async fn main() {
         return;
     } else {
         results.iter().for_each(|r| {
-            println!("Document: {}", r.page_content);
+            println!("Document: {} (id: {:?})", r.page_content, r.id);
         });
     }
 }
 
 #[cfg(feature = "opensearch")]
 async fn add_documents_to_index(store: &Store) -> Result<Vec<String>, Box<dyn Error>> {
+    // Explicit ids are indexed as OpenSearch `_id`s. Re-adding the same id replaces
+    // that one record instead of inserting a duplicate. Documents without an id still
+    // receive a server-generated id.
     let doc1 = Document::new(
         "langchain-rust is a port of the langchain python library to rust and was written in 2024.",
     )
+    .with_id("doc-langchain-rust")
     .with_metadata(HashMap::from([("source".to_string(), json!("cli"))]));
 
     let doc2 = Document::new(
         "langchaingo is a port of the langchain python library to go language and was written in 2023."
-    );
+    )
+    .with_id("doc-langchaingo");
 
     let doc3 = Document::new(
         "Capital of United States of America (USA) is Washington D.C. and the capital of France is Paris."
@@ -122,9 +127,19 @@ async fn add_documents_to_index(store: &Store) -> Result<Vec<String>, Box<dyn Er
         embedder: Some(store.embedder.clone()),
     };
 
-    let result = store
+    let mut result = store
         .add_documents(&vec![doc1, doc2, doc3, doc4], &opts)
         .await?;
+
+    let updated = Document::new("langchain-rust is a Rust port of the langchain python library.")
+        .with_id("doc-langchain-rust")
+        .with_metadata(HashMap::from([("source".to_string(), json!("readme"))]));
+    let replaced = store.add_documents(&[updated], &opts).await?;
+    println!(
+        "replaced document {} (one record, new content and metadata)",
+        replaced[0]
+    );
+    result.extend(replaced);
 
     Ok(result)
 }
