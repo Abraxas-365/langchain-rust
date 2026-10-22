@@ -66,17 +66,16 @@ impl Chain for ConversationalChain {
         let human_message =
             Message::new_human_message(crate::schemas::messages::value_to_text(input_variable));
 
-        let history = {
-            let memory = self.memory.lock().await;
-            memory.to_string()
-        };
+        let history = self.memory.lock().await.to_string().await?;
         let mut input_variables = input_variables;
         input_variables.insert("history".to_string(), history.into());
         let result = self.llm.call(input_variables.clone()).await?;
 
         let mut memory = self.memory.lock().await;
-        memory.add_message(human_message);
-        memory.add_message(Message::new_ai_message(&result.generation));
+        memory.add_message(human_message).await?;
+        memory
+            .add_message(Message::new_ai_message(&result.generation))
+            .await?;
         Ok(result)
     }
 
@@ -91,10 +90,7 @@ impl Chain for ConversationalChain {
         let human_message =
             Message::new_human_message(crate::schemas::messages::value_to_text(input_variable));
 
-        let history = {
-            let memory = self.memory.lock().await;
-            memory.to_string()
-        };
+        let history = self.memory.lock().await.to_string().await?;
 
         let mut input_variables = input_variables;
         input_variables.insert("history".to_string(), history.into());
@@ -123,8 +119,13 @@ impl Chain for ConversationalChain {
             }
 
             let mut memory = memory.lock().await;
-            memory.add_message(human_message);
-            memory.add_message(Message::new_ai_message(&complete_ai_message.lock().await));
+            let ai_message = Message::new_ai_message(&complete_ai_message.lock().await);
+            for message in [human_message, ai_message] {
+                if let Err(e) = memory.add_message(message).await {
+                    yield Err(e.into());
+                    break;
+                }
+            }
         };
 
         Ok(Box::pin(output_stream))

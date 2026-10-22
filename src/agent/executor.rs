@@ -9,7 +9,6 @@ use crate::schemas::{LogTools, Message};
 use crate::{
     chain::{chain_trait::Chain, ChainError},
     language_models::GenerateResult,
-    memory::SimpleMemory,
     prompt::PromptArgs,
     schemas::{
         agent::{AgentAction, AgentEvent},
@@ -77,13 +76,10 @@ where
         let mut steps: Vec<(AgentAction, String)> = Vec::new();
         log::debug!("steps: {:?}", steps);
         if let Some(memory) = &self.memory {
-            let memory = memory.lock().await;
-            input_variables.insert("chat_history".to_string(), json!(memory.messages()));
+            let messages = memory.lock().await.messages().await?;
+            input_variables.insert("chat_history".to_string(), json!(messages));
         } else {
-            input_variables.insert(
-                "chat_history".to_string(),
-                json!(SimpleMemory::new().messages()),
-            );
+            input_variables.insert("chat_history".to_string(), json!(Vec::<Message>::new()));
         }
 
         loop {
@@ -129,11 +125,13 @@ where
                     if let Some(memory) = &self.memory {
                         let mut memory = memory.lock().await;
 
-                        memory.add_user_message(match &input_variables["input"] {
-                            // This avoids adding extra quotes to the user input in the history.
-                            serde_json::Value::String(s) => s,
-                            x => x, // this the json encoded value.
-                        });
+                        memory
+                            .add_user_message(match &input_variables["input"] {
+                                // This avoids adding extra quotes to the user input in the history.
+                                serde_json::Value::String(s) => s,
+                                x => x, // this the json encoded value.
+                            })
+                            .await?;
 
                         let mut tools_ai_message_seen: HashMap<String, ()> = HashMap::default();
                         for (action, observation) in steps {
@@ -146,14 +144,18 @@ where
                             };
                             let tools_value: serde_json::Value = serde_json::from_str(&tools)?;
                             if tools_ai_message_seen.insert(tools, ()).is_none() {
-                                memory.add_message(
-                                    Message::new_ai_message("").with_tool_calls(tools_value),
-                                );
+                                memory
+                                    .add_message(
+                                        Message::new_ai_message("").with_tool_calls(tools_value),
+                                    )
+                                    .await?;
                             }
-                            memory.add_message(Message::new_tool_message(observation, tool_id));
+                            memory
+                                .add_message(Message::new_tool_message(observation, tool_id))
+                                .await?;
                         }
 
-                        memory.add_ai_message(&finish.output);
+                        memory.add_ai_message(&finish.output).await?;
                     }
                     return Ok(GenerateResult {
                         generation: finish.output,

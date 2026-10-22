@@ -1,30 +1,64 @@
+use async_trait::async_trait;
+use thiserror::Error;
+
 use super::messages::Message;
 
+/// Errors returned by [`BaseMemory`] implementations (mostly persistent backends).
+#[derive(Error, Debug)]
+pub enum MemoryError {
+    #[error("Memory storage error: {0}")]
+    Storage(String),
+
+    #[error("Memory serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+
+    #[error("Memory error: {0}")]
+    Other(String),
+}
+
+#[cfg(feature = "sqlx")]
+impl From<sqlx::Error> for MemoryError {
+    fn from(e: sqlx::Error) -> Self {
+        MemoryError::Storage(e.to_string())
+    }
+}
+
+/// Conversation memory used by chains and agents.
+///
+/// All methods are async and fallible so that memories can be backed by a database
+/// or a remote service (see `SqliteMessageHistory` / `PostgresMessageHistory`).
+#[async_trait]
 pub trait BaseMemory: Send + Sync {
-    fn messages(&self) -> Vec<Message>;
+    async fn messages(&self) -> Result<Vec<Message>, MemoryError>;
 
-    // Use a trait object for Display instead of a generic type
-    fn add_user_message(&mut self, message: &dyn std::fmt::Display) {
-        // Convert the Display trait object to a String and pass it to the constructor
-        self.add_message(Message::new_human_message(message.to_string()));
+    async fn add_user_message(
+        &mut self,
+        message: &(dyn std::fmt::Display + Sync),
+    ) -> Result<(), MemoryError> {
+        self.add_message(Message::new_human_message(message.to_string()))
+            .await
     }
 
-    // Use a trait object for Display instead of a generic type
-    fn add_ai_message(&mut self, message: &dyn std::fmt::Display) {
-        // Convert the Display trait object to a String and pass it to the constructor
-        self.add_message(Message::new_ai_message(message.to_string()));
+    async fn add_ai_message(
+        &mut self,
+        message: &(dyn std::fmt::Display + Sync),
+    ) -> Result<(), MemoryError> {
+        self.add_message(Message::new_ai_message(message.to_string()))
+            .await
     }
 
-    fn add_message(&mut self, message: Message);
+    async fn add_message(&mut self, message: Message) -> Result<(), MemoryError>;
 
-    fn clear(&mut self);
+    async fn clear(&mut self) -> Result<(), MemoryError>;
 
-    fn to_string(&self) -> String {
-        self.messages()
+    async fn to_string(&self) -> Result<String, MemoryError> {
+        Ok(self
+            .messages()
+            .await?
             .iter()
             .map(|msg| format!("{}: {}", msg.message_type.to_string(), msg.content))
             .collect::<Vec<String>>()
-            .join("\n")
+            .join("\n"))
     }
 }
 

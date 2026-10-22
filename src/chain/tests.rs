@@ -142,7 +142,7 @@ async fn conversational_chain_keeps_history() {
     assert!(second_prompt.contains("human: I'm from Peru"));
     assert!(second_prompt.contains("ai: Nice to meet you"));
     assert!(second_prompt.contains("Human: Where am I from?"));
-    assert_eq!(memory.lock().await.messages().len(), 4);
+    assert_eq!(memory.lock().await.messages().await.unwrap().len(), 4);
 
     let err = chain
         .invoke(prompt_args! {"wrong" => "x"})
@@ -163,7 +163,7 @@ async fn conversational_chain_stream_updates_memory() {
         .collect()
         .await;
     assert_eq!(text, "streamed answer");
-    let messages = chain.memory.lock().await.messages();
+    let messages = chain.memory.lock().await.messages().await.unwrap();
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[1].content, "streamed answer");
 }
@@ -293,7 +293,7 @@ async fn conversational_retriever_chain_rephrases_with_history() {
         .content
         .contains("Follow Up Input: And his brother?"));
     // user input is stored unquoted in memory
-    let messages = chain.memory.lock().await.messages();
+    let messages = chain.memory.lock().await.messages().await.unwrap();
     assert_eq!(messages[0].content, "How old is Luis?");
     assert_eq!(messages.len(), 4);
 }

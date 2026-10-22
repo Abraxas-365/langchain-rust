@@ -85,10 +85,7 @@ impl Chain for ConversationalRetrieverChain {
 
         let human_message =
             Message::new_human_message(crate::schemas::messages::value_to_text(input_variable));
-        let history = {
-            let memory = self.memory.lock().await;
-            memory.messages()
-        };
+        let history = self.memory.lock().await.messages().await?;
 
         let (question, token) = self.get_question(&history, &human_message.content).await?;
         if let Some(token) = token {
@@ -123,8 +120,10 @@ impl Chain for ConversationalRetrieverChain {
 
         {
             let mut memory = self.memory.lock().await;
-            memory.add_message(human_message);
-            memory.add_message(Message::new_ai_message(&output.generation));
+            memory.add_message(human_message).await?;
+            memory
+                .add_message(Message::new_ai_message(&output.generation))
+                .await?;
         }
 
         let mut result = HashMap::new();
@@ -160,10 +159,7 @@ impl Chain for ConversationalRetrieverChain {
 
         let human_message =
             Message::new_human_message(crate::schemas::messages::value_to_text(input_variable));
-        let history = {
-            let memory = self.memory.lock().await;
-            memory.messages()
-        };
+        let history = self.memory.lock().await.messages().await?;
 
         let (question, _) = self.get_question(&history, &human_message.content).await?;
 
@@ -204,8 +200,13 @@ impl Chain for ConversationalRetrieverChain {
             }
 
             let mut memory = memory.lock().await;
-            memory.add_message(human_message);
-            memory.add_message(Message::new_ai_message(&complete_ai_message.lock().await));
+            let ai_message = Message::new_ai_message(&complete_ai_message.lock().await);
+            for message in [human_message, ai_message] {
+                if let Err(e) = memory.add_message(message).await {
+                    yield Err(e.into());
+                    break;
+                }
+            }
         };
 
         Ok(Box::pin(output_stream))
