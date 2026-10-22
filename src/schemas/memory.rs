@@ -5,6 +5,7 @@ use super::messages::Message;
 
 /// Errors returned by [`BaseMemory`] implementations (mostly persistent backends).
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum MemoryError {
     #[error("Memory storage error: {0}")]
     Storage(String),

@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum DeepseekError {
     #[error("Deepseek API error: Invalid Format - {0}")]
     InvalidFormatError(String),

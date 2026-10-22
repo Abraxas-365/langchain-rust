@@ -72,6 +72,7 @@ use crate::schemas::{FunctionCallBehavior, FunctionDefinition, Message, StreamDa
 
 /// Errors specific to the Bedrock integration.
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum BedrockError {
     /// The request could not be built (e.g. a message builder rejected its input).
     #[error("Bedrock request error: {0}")]

@@ -2,6 +2,7 @@ use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum PromptError {
     #[error("Variable {0} is missing from input variables")]
     MissingVariable(String),

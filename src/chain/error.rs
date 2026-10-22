@@ -6,6 +6,7 @@ use crate::{
 };
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum ChainError {
     #[error("LLM error: {0}")]
     LLMError(#[from] LLMError),

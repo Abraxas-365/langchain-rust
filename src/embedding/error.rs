@@ -7,6 +7,7 @@ use reqwest::{Error as ReqwestError, StatusCode};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum EmbedderError {
     #[error("Network request failed: {0}")]
     RequestError(#[from] ReqwestError),
