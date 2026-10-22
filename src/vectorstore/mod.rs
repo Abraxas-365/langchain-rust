@@ -3,6 +3,9 @@ mod options;
 #[cfg(feature = "postgres")]
 pub mod pgvector;
 
+#[cfg(feature = "redis")]
+pub mod redis;
+
 #[cfg(feature = "sqlite-vss")]
 pub mod sqlite_vss;
 

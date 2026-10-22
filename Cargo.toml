@@ -108,7 +108,7 @@ redis = { version = "1.7", optional = true, default-features = false, features =
 
 [features]
 default = []
-redis = ["dep:redis"]
+redis = ["dep:redis", "uuid"]
 fastembed = ["dep:fastembed", "dep:ort"]
 git = ["gix", "flume"]
 html-to-markdown = ["dep:htmd"]

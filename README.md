@@ -38,6 +38,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [OpenSearch](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_opensearch.rs)
   - [x] [Postgres](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_postgres.rs)
   - [x] [Qdrant](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_qdrant.rs)
+  - [x] [Redis](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_redis.rs)
   - [x] [Chroma](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_chroma.rs)
   - [x] [Sqlite](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_sqlite_vss.rs)
   - [x] [SurrealDB](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_surrealdb/src/main.rs)
@@ -300,7 +301,7 @@ cargo add langchain-rust --features qdrant
 cargo add langchain-rust --features chroma
 ```
 
-#### With Redis (chat history)
+#### With Redis (chat history and vector store)
 
 ```bash
 cargo add langchain-rust --features redis
