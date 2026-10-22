@@ -1,6 +1,9 @@
 mod tool;
 pub use tool::*;
 
+mod function_tool;
+pub use function_tool::FunctionTool;
+
 pub use wolfram::*;
 mod wolfram;
 
