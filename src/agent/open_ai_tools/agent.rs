@@ -12,7 +12,7 @@ use crate::{
     },
     chain::Chain,
     fmt_message, fmt_placeholder, fmt_template,
-    language_models::{GenerateResult, LLMEvent},
+    language_models::{GenerateResult, LLMEvent, TokenUsage},
     message_formatter,
     prompt::{HumanMessagePromptTemplate, MessageFormatterStruct, PromptArgs},
     schemas::{
@@ -80,9 +80,18 @@ impl Agent for OpenAiToolAgent {
         intermediate_steps: &[(AgentAction, String)],
         inputs: PromptArgs,
     ) -> Result<AgentEvent, AgentError> {
+        Ok(self.plan_with_usage(intermediate_steps, inputs).await?.0)
+    }
+
+    async fn plan_with_usage(
+        &self,
+        intermediate_steps: &[(AgentAction, String)],
+        inputs: PromptArgs,
+    ) -> Result<(AgentEvent, Option<TokenUsage>), AgentError> {
         let inputs = self.plan_inputs(intermediate_steps, inputs)?;
-        let result = self.chain.call(inputs).await?;
-        Self::event_from_result(result)
+        let mut result = self.chain.call(inputs).await?;
+        let usage = result.tokens.take();
+        Ok((Self::event_from_result(result)?, usage))
     }
 
     /// Streams the model's text as it arrives (with native tool calling that is the
@@ -115,10 +124,14 @@ impl Agent for OpenAiToolAgent {
                             }
                         }
                     }
-                    LLMEvent::Done(result) => {
+                    LLMEvent::Done(mut result) => {
+                        let usage = result.tokens.take();
                         let event = Self::event_from_result(result)?;
                         if matches!(event, AgentEvent::Finish(_)) && !held.is_empty() {
                             yield PlanEvent::Text(held);
+                        }
+                        if let Some(usage) = usage {
+                            yield PlanEvent::Usage(usage);
                         }
                         yield PlanEvent::Done(event);
                         return;

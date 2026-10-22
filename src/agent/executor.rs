@@ -14,7 +14,7 @@ use crate::observability::traced;
 use crate::schemas::{LogTools, Message};
 use crate::{
     chain::{chain_trait::Chain, ChainError},
-    language_models::GenerateResult,
+    language_models::{GenerateResult, TokenUsage},
     prompt::PromptArgs,
     schemas::{
         agent::{AgentAction, AgentEvent},
@@ -36,6 +36,9 @@ pub enum AgentStreamEvent {
     /// A tool finished. `output` is what the agent sees; a failed tool shows up here as
     /// its error message unless the executor uses `with_break_if_error(true)`.
     ToolEnd { tool: String, output: String },
+    /// Tokens used by one model call of the run, when the LLM reports them. The run's
+    /// total is in [`Chain::call`]'s `GenerateResult::tokens`.
+    Usage(TokenUsage),
     /// The run is over. Always the last event of a successful run.
     Finish { output: String },
 }
@@ -116,7 +119,8 @@ where
     A: Agent + Send + Sync,
 {
     /// Runs the agent and streams what it does: model text as it is generated, each tool
-    /// call and its result, and finally the answer.
+    /// call and its result, the tokens of each model call (`Usage`, when the LLM reports
+    /// them), and finally the answer.
     ///
     /// Memory is updated the same way as [`Chain::call`], once the run finishes. Stop early
     /// by dropping the stream or with [`with_cancellation`](Self::with_cancellation).
@@ -154,23 +158,24 @@ where
                 yield Ok(event);
             }
             match result {
-                Ok(output) => yield Ok(AgentStreamEvent::Finish { output }),
+                Ok(run) => yield Ok(AgentStreamEvent::Finish { output: run.output }),
                 Err(e) => yield Err(e),
             }
         };
         Box::pin(run)
     }
 
-    /// The agent loop shared by `call` and `stream_events`. Returns the final output.
+    /// The agent loop shared by `call` and `stream_events`.
     async fn run(
         &self,
         input_variables: PromptArgs,
         emitter: Emitter,
-    ) -> Result<String, ChainError> {
+    ) -> Result<RunOutput, ChainError> {
         let span = tracing::info_span!(
             "agent.run",
             max_iterations = self.max_iterations,
             steps = tracing::field::Empty,
+            total_tokens = tracing::field::Empty,
             error = tracing::field::Empty,
         );
         let run = self.run_inner(input_variables, emitter);
@@ -183,17 +188,23 @@ where
                 None => run.await,
             }
         };
-        traced(span, run, |_, _| {}).await
+        traced(span, run, |span, run: &RunOutput| {
+            if let Some(tokens) = &run.tokens {
+                span.record("total_tokens", tokens.total_tokens);
+            }
+        })
+        .await
     }
 
     async fn run_inner(
         &self,
         input_variables: PromptArgs,
         emitter: Emitter,
-    ) -> Result<String, ChainError> {
+    ) -> Result<RunOutput, ChainError> {
         let mut input_variables = input_variables.clone();
         let name_to_tools = self.get_name_to_tools();
         let mut steps: Vec<(AgentAction, String)> = Vec::new();
+        let mut tokens: Option<TokenUsage> = None;
         if let Some(memory) = &self.memory {
             let messages = memory.lock().await.messages().await?;
             input_variables.insert("chat_history".to_string(), json!(messages));
@@ -203,17 +214,22 @@ where
 
         loop {
             let plan_span = tracing::info_span!("agent.plan", step = steps.len());
-            let agent_event = async {
+            let (agent_event, usage) = async {
                 if emitter.is_streaming() {
                     self.plan_streaming(&steps, input_variables.clone(), &emitter)
                         .await
                 } else {
-                    self.agent.plan(&steps, input_variables.clone()).await
+                    self.agent
+                        .plan_with_usage(&steps, input_variables.clone())
+                        .await
                 }
             }
             .instrument(plan_span)
             .await
             .map_err(|e| ChainError::AgentError(format!("Error in agent planning: {}", e)))?;
+            if let Some(usage) = usage {
+                tokens.get_or_insert_with(TokenUsage::default).add(&usage);
+            }
 
             match agent_event {
                 AgentEvent::Action(actions) => {
@@ -302,7 +318,10 @@ where
 
                         memory.add_ai_message(&finish.output).await?;
                     }
-                    return Ok(finish.output);
+                    return Ok(RunOutput {
+                        output: finish.output,
+                        tokens,
+                    });
                 }
             }
 
@@ -310,30 +329,45 @@ where
                 if steps.len() >= max_iterations as usize {
                     tracing::Span::current().record("steps", steps.len());
                     tracing::warn!(max_iterations, "agent stopped: max iterations reached");
-                    return Ok(MAX_ITERATIONS_OUTPUT.to_string());
+                    return Ok(RunOutput {
+                        output: MAX_ITERATIONS_OUTPUT.to_string(),
+                        tokens,
+                    });
                 }
             }
         }
     }
 
-    /// Runs `plan_stream`, forwarding its text chunks, and returns the plan.
+    /// Runs `plan_stream`, forwarding its text chunks and usage, and returns the plan.
     async fn plan_streaming(
         &self,
         steps: &[(AgentAction, String)],
         inputs: PromptArgs,
         emitter: &Emitter,
-    ) -> Result<AgentEvent, AgentError> {
+    ) -> Result<(AgentEvent, Option<TokenUsage>), AgentError> {
         let mut plan = self.agent.plan_stream(steps, inputs);
+        let mut tokens: Option<TokenUsage> = None;
         while let Some(event) = plan.next().await {
             match event? {
                 PlanEvent::Text(text) => emitter.emit(AgentStreamEvent::Text(text)).await,
-                PlanEvent::Done(event) => return Ok(event),
+                PlanEvent::Usage(usage) => {
+                    tokens.get_or_insert_with(TokenUsage::default).add(&usage);
+                    emitter.emit(AgentStreamEvent::Usage(usage)).await;
+                }
+                PlanEvent::Done(event) => return Ok((event, tokens)),
             }
         }
         Err(AgentError::OtherError(
             "agent plan stream ended without a plan".into(),
         ))
     }
+}
+
+/// What a run produced: the answer and, when the LLM reported them, the tokens used by
+/// all its model calls.
+struct RunOutput {
+    output: String,
+    tokens: Option<TokenUsage>,
 }
 
 /// Where the agent loop sends its events: nowhere for `call`, a channel for `stream_events`.
@@ -357,10 +391,13 @@ impl<A> Chain for AgentExecutor<A>
 where
     A: Agent + Send + Sync,
 {
+    /// Runs the agent. `tokens` is the sum over every model call of the run (`None` when
+    /// the LLM doesn't report usage).
     async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
-        let output = self.run(input_variables, Emitter(None)).await?;
+        let run = self.run(input_variables, Emitter(None)).await?;
         Ok(GenerateResult {
-            generation: output,
+            generation: run.output,
+            tokens: run.tokens,
             ..Default::default()
         })
     }

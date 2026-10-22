@@ -6,6 +6,7 @@ use serde_json::json;
 use crate::{
     agent::{agent::Agent, chat::prompt::FORMAT_INSTRUCTIONS, AgentError},
     chain::chain_trait::Chain,
+    language_models::TokenUsage,
     message_formatter,
     prompt::{
         HumanMessagePromptTemplate, MessageFormatterStruct, MessageOrTemplate, PromptArgs,
@@ -91,12 +92,20 @@ impl Agent for ConversationalAgent {
         intermediate_steps: &[(AgentAction, String)],
         inputs: PromptArgs,
     ) -> Result<AgentEvent, AgentError> {
+        Ok(self.plan_with_usage(intermediate_steps, inputs).await?.0)
+    }
+
+    async fn plan_with_usage(
+        &self,
+        intermediate_steps: &[(AgentAction, String)],
+        inputs: PromptArgs,
+    ) -> Result<(AgentEvent, Option<TokenUsage>), AgentError> {
         let scratchpad = self.construct_scratchpad(intermediate_steps)?;
         let mut inputs = inputs.clone();
         inputs.insert("agent_scratchpad".to_string(), json!(scratchpad));
-        let output = self.chain.call(inputs.clone()).await?.generation;
-        let parsed_output = self.output_parser.parse(&output)?;
-        Ok(parsed_output)
+        let result = self.chain.call(inputs.clone()).await?;
+        let parsed_output = self.output_parser.parse(&result.generation)?;
+        Ok((parsed_output, result.tokens))
     }
 
     fn get_tools(&self) -> Vec<Arc<dyn Tool>> {
