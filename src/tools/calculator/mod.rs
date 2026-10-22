@@ -9,6 +9,7 @@ use super::Tool;
 
 /// Why an expression couldn't be evaluated.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[non_exhaustive]
 pub enum CalculatorError {
     #[error("unexpected {found} at position {position} in `{expression}`")]
     Syntax {

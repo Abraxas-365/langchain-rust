@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum QwenError {
     #[error("Qwen API error: Invalid parameter - {0}")]
     InvalidParameterError(String),

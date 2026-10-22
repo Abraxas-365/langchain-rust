@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum AnthropicError {
     #[error("Anthropic API error: Invalid request - {0}")]
     InvalidRequestError(String),

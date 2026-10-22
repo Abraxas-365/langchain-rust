@@ -2,6 +2,7 @@ use text_splitter::ChunkConfigError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum TextSplitterError {
     #[error("Empty input text")]
     EmptyInputText,
