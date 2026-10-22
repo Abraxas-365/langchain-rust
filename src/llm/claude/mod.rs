@@ -5,3 +5,6 @@ pub use client::*;
 
 mod error;
 pub use error::*;
+
+#[cfg(test)]
+mod mock_tests;
