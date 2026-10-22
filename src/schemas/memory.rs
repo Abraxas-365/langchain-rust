@@ -23,6 +23,13 @@ impl From<sqlx::Error> for MemoryError {
     }
 }
 
+#[cfg(feature = "redis")]
+impl From<redis::RedisError> for MemoryError {
+    fn from(e: redis::RedisError) -> Self {
+        MemoryError::Storage(e.to_string())
+    }
+}
+
 /// Conversation memory used by chains and agents.
 ///
 /// All methods are async and fallible so that memories can be backed by a database
