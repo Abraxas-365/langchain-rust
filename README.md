@@ -30,6 +30,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Azure OpenAi](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_azure_open_ai.rs)
   - [x] [Ollama](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_ollama.rs)
   - [x] [Local FastEmbed](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_fastembed.rs)
+  - [x] [Voyage AI](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_voyage.rs)
   - [x] [MistralAI](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_mistralai.rs)
   - [x] [AWS Bedrock (Titan, Cohere)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/embedding_bedrock.rs)
 
