@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, pin::Pin};
 
+use futures::Stream;
 use serde::{Deserialize, Serialize};
 
 use crate::schemas::ToolCall;
@@ -59,6 +60,42 @@ impl GenerateResult {
 
         map
     }
+}
+
+/// An event from [`llm::LLM::generate_stream`] (and `Chain::call_stream`).
+///
+/// Zero or more `Text` events arrive as the model writes, then exactly one `Done` with
+/// the complete result: full text, typed `tool_calls` and token usage when the
+/// provider reports it.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub enum LLMEvent {
+    /// A chunk of text, as the model produces it.
+    Text(String),
+    /// The complete response. Always the last event.
+    Done(GenerateResult),
+}
+
+/// Stream returned by [`llm::LLM::generate_stream`].
+pub type LLMEventStream<'a> = Pin<Box<dyn Stream<Item = Result<LLMEvent, LLMError>> + Send + 'a>>;
+
+/// Boxes a stream of LLM events; also pins down the error type for `try_stream!` blocks.
+pub(crate) fn box_llm_events<'a, S>(stream: S) -> LLMEventStream<'a>
+where
+    S: Stream<Item = Result<LLMEvent, LLMError>> + Send + 'a,
+{
+    Box::pin(stream)
+}
+
+/// The events for a result that was not streamed: its text in one piece (unless the
+/// model asked for tools, in which case `generation` is just the JSON mirror), then `Done`.
+pub(crate) fn result_events(result: GenerateResult) -> Vec<LLMEvent> {
+    let mut events = Vec::with_capacity(2);
+    if !result.has_tool_calls() && !result.generation.is_empty() {
+        events.push(LLMEvent::Text(result.generation.clone()));
+    }
+    events.push(LLMEvent::Done(result));
+    events
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -172,5 +209,86 @@ mod tests {
         assert_eq!(v["tool_calls"][0]["function"]["name"], "f");
         let back: GenerateResult = serde_json::from_value(v).unwrap();
         assert_eq!(back.tool_calls, with.tool_calls);
+    }
+
+    #[test]
+    fn result_events_skip_text_for_tool_calls_and_empty_output() {
+        let text = |events: &[LLMEvent]| {
+            events
+                .iter()
+                .filter_map(|e| match e {
+                    LLMEvent::Text(t) => Some(t.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let plain = result_events(GenerateResult {
+            generation: "hi".into(),
+            ..Default::default()
+        });
+        assert_eq!(text(&plain), vec!["hi"]);
+        assert!(matches!(plain.last(), Some(LLMEvent::Done(r)) if r.generation == "hi"));
+
+        let tools = result_events(
+            GenerateResult::default().with_tool_calls(vec![ToolCall::new("a", "f", "{}")]),
+        );
+        assert!(text(&tools).is_empty(), "tool-call JSON is not answer text");
+        assert!(matches!(tools.as_slice(), [LLMEvent::Done(r)] if r.has_tool_calls()));
+
+        assert!(matches!(
+            result_events(GenerateResult::default()).as_slice(),
+            [LLMEvent::Done(_)]
+        ));
+    }
+
+    /// An LLM that only implements `generate` still streams through the default method.
+    #[derive(Clone)]
+    struct OnlyGenerate(Result<&'static str, &'static str>);
+
+    #[async_trait::async_trait]
+    impl llm::LLM for OnlyGenerate {
+        async fn generate(
+            &self,
+            _: &[crate::schemas::Message],
+        ) -> Result<GenerateResult, LLMError> {
+            match self.0 {
+                Ok(s) => Ok(GenerateResult {
+                    generation: s.into(),
+                    ..Default::default()
+                }),
+                Err(e) => Err(LLMError::OtherError(e.into())),
+            }
+        }
+        async fn stream(
+            &self,
+            _: &[crate::schemas::Message],
+        ) -> Result<
+            Pin<Box<dyn Stream<Item = Result<crate::schemas::StreamData, LLMError>> + Send>>,
+            LLMError,
+        > {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn default_generate_stream_wraps_generate() {
+        use futures::StreamExt;
+        use llm::LLM;
+
+        let events: Vec<_> = OnlyGenerate(Ok("hello"))
+            .generate_stream(&[])
+            .map(Result::unwrap)
+            .collect()
+            .await;
+        assert!(matches!(&events[0], LLMEvent::Text(t) if t == "hello"));
+        assert!(matches!(&events[1], LLMEvent::Done(r) if r.generation == "hello"));
+        assert_eq!(events.len(), 2);
+
+        let events: Vec<_> = OnlyGenerate(Err("down"))
+            .generate_stream(&[])
+            .collect()
+            .await;
+        assert_eq!(events.len(), 1);
+        assert!(events[0].as_ref().unwrap_err().to_string().contains("down"));
     }
 }

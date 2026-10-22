@@ -1,10 +1,15 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
+use futures::{Stream, StreamExt};
 use serde_json::json;
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
-use super::{agent::Agent, AgentError};
+use super::{
+    agent::{Agent, PlanEvent},
+    AgentError,
+};
 use crate::schemas::{LogTools, Message};
 use crate::{
     chain::{chain_trait::Chain, ChainError},
@@ -17,6 +22,31 @@ use crate::{
     tools::Tool,
 };
 
+/// What an agent run is doing, streamed by [`AgentExecutor::stream_events`].
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum AgentStreamEvent {
+    /// A chunk of text from the model, as it is generated. With tool-calling agents this
+    /// is the answer itself (or a short preamble before tool calls).
+    Text(String),
+    /// The agent is about to run a tool.
+    ToolStart { tool: String, input: String },
+    /// A tool finished. `output` is what the agent sees; a failed tool shows up here as
+    /// its error message unless the executor uses `with_break_if_error(true)`.
+    ToolEnd { tool: String, output: String },
+    /// The run is over. Always the last event of a successful run.
+    Finish { output: String },
+}
+
+/// Stream returned by [`AgentExecutor::stream_events`].
+pub type AgentEventStream<'a> =
+    Pin<Box<dyn Stream<Item = Result<AgentStreamEvent, ChainError>> + Send + 'a>>;
+
+/// Output of a run that hit `max_iterations`.
+const MAX_ITERATIONS_OUTPUT: &str = "Max iterations reached";
+/// Error message of a run stopped through `with_cancellation`.
+const CANCELLED: &str = "agent run cancelled";
+
 pub struct AgentExecutor<A>
 where
     A: Agent,
@@ -25,6 +55,7 @@ where
     max_iterations: Option<i32>,
     break_if_error: bool,
     pub memory: Option<Arc<Mutex<dyn BaseMemory>>>,
+    cancellation: Option<CancellationToken>,
 }
 
 impl<A> AgentExecutor<A>
@@ -37,6 +68,7 @@ where
             max_iterations: Some(10),
             break_if_error: false,
             memory: None,
+            cancellation: None,
         }
     }
 
@@ -55,6 +87,18 @@ where
         self
     }
 
+    /// Stops runs when `token` is cancelled: the in-flight LLM or tool call is dropped and
+    /// the run returns a `ChainError::AgentError` ("agent run cancelled"); check
+    /// `token.is_cancelled()` to tell it apart from other failures. Nothing is written to
+    /// memory for a cancelled run.
+    ///
+    /// Applies to every run of this executor. Dropping the future (or the stream from
+    /// [`stream_events`](Self::stream_events)) also cancels a run.
+    pub fn with_cancellation(mut self, token: CancellationToken) -> Self {
+        self.cancellation = Some(token);
+        self
+    }
+
     fn get_name_to_tools(&self) -> HashMap<String, Arc<dyn Tool>> {
         let mut name_to_tool = HashMap::new();
         for tool in self.agent.get_tools().iter() {
@@ -65,16 +109,80 @@ where
     }
 }
 
-#[async_trait]
-impl<A> Chain for AgentExecutor<A>
+impl<A> AgentExecutor<A>
 where
     A: Agent + Send + Sync,
 {
-    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
+    /// Runs the agent and streams what it does: model text as it is generated, each tool
+    /// call and its result, and finally the answer.
+    ///
+    /// Memory is updated the same way as [`Chain::call`], once the run finishes. Stop early
+    /// by dropping the stream or with [`with_cancellation`](Self::with_cancellation).
+    ///
+    /// ```rust,ignore
+    /// use futures::StreamExt;
+    /// use langchain_rust::agent::AgentStreamEvent;
+    ///
+    /// let mut events = executor.stream_events(prompt_args! { "input" => "weather in Lima?" });
+    /// while let Some(event) = events.next().await {
+    ///     match event? {
+    ///         AgentStreamEvent::Text(chunk) => print!("{chunk}"),
+    ///         AgentStreamEvent::ToolStart { tool, input } => println!("\n-> {tool}({input})"),
+    ///         AgentStreamEvent::ToolEnd { tool, output } => println!("<- {tool}: {output}"),
+    ///         AgentStreamEvent::Finish { .. } => println!(),
+    ///         _ => {}
+    ///     }
+    /// }
+    /// ```
+    pub fn stream_events(&self, input_variables: PromptArgs) -> AgentEventStream<'_> {
+        let run = async_stream::stream! {
+            // Capacity 1: the run is at most one event ahead of the consumer, so a slow
+            // consumer slows the run down and dropping the stream stops it.
+            let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+            let run = self.run(input_variables, Emitter(Some(tx)));
+            tokio::pin!(run);
+            let result = loop {
+                tokio::select! {
+                    biased;
+                    Some(event) = rx.recv() => yield Ok(event),
+                    result = &mut run => break result,
+                }
+            };
+            while let Ok(event) = rx.try_recv() {
+                yield Ok(event);
+            }
+            match result {
+                Ok(output) => yield Ok(AgentStreamEvent::Finish { output }),
+                Err(e) => yield Err(e),
+            }
+        };
+        Box::pin(run)
+    }
+
+    /// The agent loop shared by `call` and `stream_events`. Returns the final output.
+    async fn run(
+        &self,
+        input_variables: PromptArgs,
+        emitter: Emitter,
+    ) -> Result<String, ChainError> {
+        let run = self.run_inner(input_variables, emitter);
+        match &self.cancellation {
+            Some(token) => token
+                .run_until_cancelled(run)
+                .await
+                .unwrap_or_else(|| Err(ChainError::AgentError(CANCELLED.into()))),
+            None => run.await,
+        }
+    }
+
+    async fn run_inner(
+        &self,
+        input_variables: PromptArgs,
+        emitter: Emitter,
+    ) -> Result<String, ChainError> {
         let mut input_variables = input_variables.clone();
         let name_to_tools = self.get_name_to_tools();
         let mut steps: Vec<(AgentAction, String)> = Vec::new();
-        log::debug!("steps: {:?}", steps);
         if let Some(memory) = &self.memory {
             let messages = memory.lock().await.messages().await?;
             input_variables.insert("chat_history".to_string(), json!(messages));
@@ -83,11 +191,14 @@ where
         }
 
         loop {
-            let agent_event = self
-                .agent
-                .plan(&steps, input_variables.clone())
-                .await
-                .map_err(|e| ChainError::AgentError(format!("Error in agent planning: {}", e)))?;
+            let agent_event = if emitter.is_streaming() {
+                self.plan_streaming(&steps, input_variables.clone(), &emitter)
+                    .await
+            } else {
+                self.agent.plan(&steps, input_variables.clone()).await
+            }
+            .map_err(|e| ChainError::AgentError(format!("Error in agent planning: {}", e)))?;
+
             match agent_event {
                 AgentEvent::Action(actions) => {
                     for action in actions {
@@ -99,9 +210,13 @@ where
                             })
                             .map_err(|e| ChainError::AgentError(e.to_string()))?;
 
-                        let observation_result = tool.call(&action.tool_input).await;
-
-                        let observation = match observation_result {
+                        emitter
+                            .emit(AgentStreamEvent::ToolStart {
+                                tool: action.tool.clone(),
+                                input: action.tool_input.clone(),
+                            })
+                            .await;
+                        let observation = match tool.call(&action.tool_input).await {
                             Ok(result) => result,
                             Err(err) => {
                                 log::info!(
@@ -117,6 +232,12 @@ where
                                 }
                             }
                         };
+                        emitter
+                            .emit(AgentStreamEvent::ToolEnd {
+                                tool: action.tool.clone(),
+                                output: observation.clone(),
+                            })
+                            .await;
 
                         steps.push((action, observation));
                     }
@@ -157,22 +278,65 @@ where
 
                         memory.add_ai_message(&finish.output).await?;
                     }
-                    return Ok(GenerateResult {
-                        generation: finish.output,
-                        ..Default::default()
-                    });
+                    return Ok(finish.output);
                 }
             }
 
             if let Some(max_iterations) = self.max_iterations {
                 if steps.len() >= max_iterations as usize {
-                    return Ok(GenerateResult {
-                        generation: "Max iterations reached".to_string(),
-                        ..Default::default()
-                    });
+                    return Ok(MAX_ITERATIONS_OUTPUT.to_string());
                 }
             }
         }
+    }
+
+    /// Runs `plan_stream`, forwarding its text chunks, and returns the plan.
+    async fn plan_streaming(
+        &self,
+        steps: &[(AgentAction, String)],
+        inputs: PromptArgs,
+        emitter: &Emitter,
+    ) -> Result<AgentEvent, AgentError> {
+        let mut plan = self.agent.plan_stream(steps, inputs);
+        while let Some(event) = plan.next().await {
+            match event? {
+                PlanEvent::Text(text) => emitter.emit(AgentStreamEvent::Text(text)).await,
+                PlanEvent::Done(event) => return Ok(event),
+            }
+        }
+        Err(AgentError::OtherError(
+            "agent plan stream ended without a plan".into(),
+        ))
+    }
+}
+
+/// Where the agent loop sends its events: nowhere for `call`, a channel for `stream_events`.
+struct Emitter(Option<tokio::sync::mpsc::Sender<AgentStreamEvent>>);
+
+impl Emitter {
+    fn is_streaming(&self) -> bool {
+        self.0.is_some()
+    }
+
+    async fn emit(&self, event: AgentStreamEvent) {
+        if let Some(tx) = &self.0 {
+            // Fails only when the receiver is gone, i.e. the run is being dropped.
+            let _ = tx.send(event).await;
+        }
+    }
+}
+
+#[async_trait]
+impl<A> Chain for AgentExecutor<A>
+where
+    A: Agent + Send + Sync,
+{
+    async fn call(&self, input_variables: PromptArgs) -> Result<GenerateResult, ChainError> {
+        let output = self.run(input_variables, Emitter(None)).await?;
+        Ok(GenerateResult {
+            generation: output,
+            ..Default::default()
+        })
     }
 
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {

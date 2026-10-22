@@ -60,6 +60,7 @@ thiserror = "2.0.17"
 futures-util = "0.3.31"
 async-stream = "0.3.6"
 tokio-stream = "0.1.17"
+tokio-util = "0.7.18"
 secrecy = { version = "0.10.3", features = ["serde"] }
 readability = "0.3.0"
 htmd = { version = "0.5", optional = true }

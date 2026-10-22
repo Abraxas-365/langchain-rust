@@ -4,9 +4,25 @@ use async_trait::async_trait;
 use futures::Stream;
 use serde_json::{json, Value};
 
-use crate::{language_models::GenerateResult, prompt::PromptArgs, schemas::StreamData};
+use crate::{
+    language_models::{result_events, GenerateResult, LLMEvent},
+    prompt::PromptArgs,
+    schemas::StreamData,
+};
 
 use super::ChainError;
+
+/// Stream returned by [`Chain::call_stream`].
+pub type ChainEventStream<'a> =
+    Pin<Box<dyn Stream<Item = Result<LLMEvent, ChainError>> + Send + 'a>>;
+
+/// Boxes a chain event stream; also pins down the error type for `try_stream!` blocks.
+pub(crate) fn box_chain_events<'a, S>(stream: S) -> ChainEventStream<'a>
+where
+    S: Stream<Item = Result<LLMEvent, ChainError>> + Send + 'a,
+{
+    Box::pin(stream)
+}
 
 pub(crate) const DEFAULT_OUTPUT_KEY: &str = "output";
 pub(crate) const DEFAULT_RESULT_KEY: &str = "generate_result";
@@ -176,8 +192,24 @@ pub trait Chain: Sync + Send {
         _input_variables: PromptArgs,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, ChainError>> + Send>>, ChainError>
     {
-        log::warn!("stream not implemented for this chain");
-        unimplemented!()
+        Err(ChainError::OtherError(
+            "stream is not implemented for this chain".into(),
+        ))
+    }
+
+    /// Like [`call`](Chain::call), but streams the LLM output as [`LLMEvent`]s: `Text`
+    /// chunks, then one `Done` with the complete result.
+    ///
+    /// The default implementation runs `call` and emits the result in one chunk, so every
+    /// chain supports it. [`LLMChain`](crate::chain::LLMChain) streams for real, which is
+    /// what agents use to stream their answers.
+    fn call_stream<'a>(&'a self, input_variables: PromptArgs) -> ChainEventStream<'a> {
+        box_chain_events(async_stream::try_stream! {
+            let result = self.call(input_variables).await?;
+            for event in result_events(result) {
+                yield event;
+            }
+        })
     }
 
     // Get the input keys of the prompt

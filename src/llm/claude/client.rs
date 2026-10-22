@@ -1,5 +1,8 @@
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
+    language_models::{
+        box_llm_events, llm::LLM, options::CallOptions, GenerateResult, LLMError, LLMEvent,
+        LLMEventStream, TokenUsage,
+    },
     llm::AnthropicError,
     schemas::{Message, MessageType, StreamData},
 };
@@ -230,6 +233,24 @@ impl LLM for Claude {
             Ok(StreamData::new(event, tokens, text))
         });
         Ok(Box::pin(stream))
+    }
+
+    fn generate_stream<'a>(&'a self, messages: &'a [Message]) -> LLMEventStream<'a> {
+        box_llm_events(async_stream::try_stream! {
+            let payload = self.build_payload(messages, true);
+            let res = self.send(&payload).await?;
+            let events = sse_json_events(res.bytes_stream());
+            futures::pin_mut!(events);
+
+            let mut acc = StreamAccumulator::default();
+            while let Some(event) = events.next().await {
+                let event = check_event(event?)?;
+                if let Some(text) = acc.push(&event)? {
+                    yield LLMEvent::Text(text);
+                }
+            }
+            yield LLMEvent::Done(acc.finish());
+        })
     }
 
     fn add_options(&mut self, options: CallOptions) {

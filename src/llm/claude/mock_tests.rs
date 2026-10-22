@@ -302,3 +302,77 @@ async fn tools_agent_runs_a_tool_loop_with_claude() {
     first.assert_async().await;
     second.assert_async().await;
 }
+
+#[tokio::test]
+async fn claude_generate_stream_yields_text_and_tool_calls() {
+    use crate::language_models::LLMEvent;
+
+    let mut server = mockito::Server::new_async().await;
+    let stream = server
+        .mock("POST", "/v1/messages")
+        .match_body(Matcher::PartialJson(json!({"stream": true})))
+        .with_header("content-type", "text/event-stream")
+        .with_body(sse(&[
+            json!({"type": "message_start", "message": {"usage": {"input_tokens": 7, "output_tokens": 1}}}),
+            json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+            json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Let me "}}),
+            json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "check."}}),
+            json!({"type": "content_block_stop", "index": 0}),
+            json!({"type": "content_block_start", "index": 1, "content_block": {"type": "tool_use", "id": "toolu_1", "name": "weather", "input": {}}}),
+            json!({"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": "{\"city\":"}}),
+            json!({"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": "\"Lima\"}"}}),
+            json!({"type": "content_block_stop", "index": 1}),
+            json!({"type": "message_delta", "delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 9}}),
+            json!({"type": "message_stop"}),
+        ]))
+        .create_async()
+        .await;
+
+    let llm = claude(&server);
+    let messages = [Message::new_human_message("weather?")];
+    let events: Vec<_> = llm
+        .generate_stream(&messages)
+        .map(Result::unwrap)
+        .collect()
+        .await;
+    assert!(matches!(&events[0], LLMEvent::Text(t) if t == "Let me "));
+    assert!(matches!(&events[1], LLMEvent::Text(t) if t == "check."));
+    let LLMEvent::Done(result) = &events[2] else {
+        panic!("{events:?}")
+    };
+    assert_eq!(events.len(), 3);
+    assert_eq!(result.tool_calls.len(), 1);
+    assert_eq!(result.tool_calls[0].id, "toolu_1");
+    assert_eq!(
+        result.tool_calls[0].arguments_value(),
+        json!({"city": "Lima"})
+    );
+    let tokens = result.tokens.as_ref().unwrap();
+    assert_eq!((tokens.prompt_tokens, tokens.completion_tokens), (7, 9));
+    stream.assert_async().await;
+}
+
+#[tokio::test]
+async fn claude_generate_stream_ends_with_error_event() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/v1/messages")
+        .with_header("content-type", "text/event-stream")
+        .with_body(sse(&[
+            json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+            json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hel"}}),
+            json!({"type": "error", "error": {"type": "overloaded_error", "message": "busy"}}),
+        ]))
+        .create_async()
+        .await;
+
+    let llm = claude(&server);
+    let messages = [Message::new_human_message("hi")];
+    let events: Vec<_> = llm.generate_stream(&messages).collect().await;
+    assert_eq!(events.len(), 2, "{events:?}");
+    assert!(events[0].is_ok());
+    assert!(matches!(
+        &events[1],
+        Err(LLMError::AnthropicError(AnthropicError::OverloadedError(m))) if m == "busy"
+    ));
+}

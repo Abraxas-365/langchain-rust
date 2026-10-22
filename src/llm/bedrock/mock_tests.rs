@@ -204,6 +204,78 @@ async fn stream_yields_text_deltas_and_usage() {
 }
 
 #[tokio::test]
+async fn generate_stream_yields_text_then_done_with_tool_calls() {
+    use crate::language_models::LLMEvent;
+
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", CONVERSE_STREAM)
+        .with_header("content-type", "application/vnd.amazon.eventstream")
+        .with_body(event_stream(&[
+            ("messageStart", json!({"role": "assistant"})),
+            (
+                "contentBlockDelta",
+                json!({"contentBlockIndex": 0, "delta": {"text": "Checking."}}),
+            ),
+            ("contentBlockStop", json!({"contentBlockIndex": 0})),
+            (
+                "contentBlockStart",
+                json!({"contentBlockIndex": 1,
+                       "start": {"toolUse": {"toolUseId": "tu_9", "name": "weather"}}}),
+            ),
+            (
+                "contentBlockDelta",
+                json!({"contentBlockIndex": 1, "delta": {"toolUse": {"input": "{\"city\":\"Lima\"}"}}}),
+            ),
+            ("contentBlockStop", json!({"contentBlockIndex": 1})),
+            ("messageStop", json!({"stopReason": "tool_use"})),
+            (
+                "metadata",
+                json!({"usage": {"inputTokens": 4, "outputTokens": 6, "totalTokens": 10},
+                       "metrics": {"latencyMs": 1}}),
+            ),
+        ]))
+        .create_async()
+        .await;
+
+    let llm = bedrock_for(&server);
+    let messages = [Message::new_human_message("weather?")];
+    let events: Vec<_> = llm
+        .generate_stream(&messages)
+        .map(Result::unwrap)
+        .collect()
+        .await;
+    assert_eq!(events.len(), 2, "{events:?}");
+    assert!(matches!(&events[0], LLMEvent::Text(t) if t == "Checking."));
+    let LLMEvent::Done(result) = &events[1] else {
+        panic!("{events:?}")
+    };
+    assert_eq!(
+        result.tool_calls,
+        vec![ToolCall::new("tu_9", "weather", r#"{"city":"Lima"}"#)]
+    );
+    assert_eq!(result.tokens.as_ref().unwrap().total_tokens, 10);
+}
+
+#[tokio::test]
+async fn generate_stream_surfaces_api_errors() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", CONVERSE_STREAM)
+        .with_status(400)
+        .with_header("x-amzn-errortype", "ValidationException")
+        .with_body(r#"{"message":"The model ID is invalid"}"#)
+        .create_async()
+        .await;
+    let llm = bedrock_for(&server);
+    let messages = [Message::new_human_message("hi")];
+    let events: Vec<_> = llm.generate_stream(&messages).collect().await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    let msg = events[0].as_ref().unwrap_err().to_string();
+    assert!(msg.contains("The model ID is invalid"), "{msg}");
+}
+
+#[tokio::test]
 async fn generate_with_streaming_func_rebuilds_tool_calls() {
     let mut server = mockito::Server::new_async().await;
     server
