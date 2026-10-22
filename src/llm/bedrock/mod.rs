@@ -60,7 +60,9 @@ use tokio::sync::OnceCell;
 
 use crate::language_models::llm::LLM;
 use crate::language_models::options::CallOptions;
-use crate::language_models::{GenerateResult, LLMError, TokenUsage};
+use crate::language_models::{
+    box_llm_events, GenerateResult, LLMError, LLMEvent, LLMEventStream, TokenUsage,
+};
 use crate::schemas::messages::MessageType;
 use crate::schemas::{FunctionCallBehavior, FunctionDefinition, Message, StreamData, ToolCall};
 
@@ -714,6 +716,27 @@ impl LLM for Bedrock {
             futures::future::ready(item)
         });
         Ok(Box::pin(stream))
+    }
+
+    fn generate_stream<'a>(&'a self, messages: &'a [Message]) -> LLMEventStream<'a> {
+        use futures::StreamExt;
+
+        box_llm_events(async_stream::try_stream! {
+            let events = self.converse_stream(messages).await?;
+            futures::pin_mut!(events);
+
+            let mut acc = StreamAccumulator::default();
+            while let Some(event) = events.next().await {
+                if let Some(text) = acc.push(&event?) {
+                    yield LLMEvent::Text(text);
+                }
+            }
+            let tokens = acc.usage;
+            yield LLMEvent::Done(GenerateResult {
+                tokens,
+                ..result_from_blocks(acc.blocks.into_values())?
+            });
+        })
     }
 
     fn add_options(&mut self, options: CallOptions) {

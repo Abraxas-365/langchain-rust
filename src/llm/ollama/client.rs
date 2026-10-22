@@ -1,5 +1,8 @@
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
+    language_models::{
+        box_llm_events, llm::LLM, options::CallOptions, GenerateResult, LLMError, LLMEvent,
+        LLMEventStream, TokenUsage,
+    },
     schemas::{self, FunctionDefinition, Message, MessageType, StreamData},
 };
 use async_trait::async_trait;
@@ -209,6 +212,30 @@ impl LLM for Ollama {
         Ok(Box::pin(stream))
     }
 
+    fn generate_stream<'a>(&'a self, messages: &'a [Message]) -> LLMEventStream<'a> {
+        box_llm_events(async_stream::try_stream! {
+            let request = self.generate_request(messages)?;
+            let mut stream = self.client.send_chat_messages_stream(request).await?;
+
+            let mut result = GenerateResult::default();
+            let mut calls = Vec::new();
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk
+                    .map_err(|_| LLMError::from(OllamaError::Other("Stream error".to_string())))?;
+                // Ollama sends each tool call whole, in the chunk where the model emits it.
+                calls.extend(from_ollama_tool_calls(&chunk.message.tool_calls));
+                if let Some(final_data) = &chunk.final_data {
+                    result.tokens = Some(token_usage(final_data));
+                }
+                if !chunk.message.content.is_empty() {
+                    result.generation.push_str(&chunk.message.content);
+                    yield LLMEvent::Text(chunk.message.content);
+                }
+            }
+            yield LLMEvent::Done(result.with_tool_calls(calls));
+        })
+    }
+
     /// Only `functions` is used (it becomes the Ollama `tools` list); generation settings go
     /// through [`GenerationOptions`].
     fn add_options(&mut self, options: CallOptions) {
@@ -354,6 +381,69 @@ mod tests {
         }
         assert_eq!(text, "Hello");
         assert_eq!(usage.unwrap().total_tokens, 5);
+    }
+
+    #[tokio::test]
+    async fn generate_stream_yields_text_tool_calls_and_usage() {
+        use crate::language_models::LLMEvent;
+
+        let mut server = mockito::Server::new_async().await;
+        let mut last = serde_json::json!({
+            "model": "m", "created_at": "2024-01-01T00:00:00Z",
+            "message": {"role": "assistant", "content": "",
+                        "tool_calls": [{"function": {"name": "weather", "arguments": {"city": "Lima"}}}]},
+            "done": true, "total_duration": 1, "load_duration": 1, "prompt_eval_count": 3,
+            "prompt_eval_duration": 1, "eval_count": 2, "eval_duration": 1
+        });
+        let first = serde_json::json!({
+            "model": "m", "created_at": "2024-01-01T00:00:00Z",
+            "message": {"role": "assistant", "content": "Checking"}, "done": false
+        });
+        last["done_reason"] = "stop".into();
+        server
+            .mock("POST", "/api/chat")
+            .match_body(mockito::Matcher::PartialJson(
+                serde_json::json!({"stream": true}),
+            ))
+            .with_header("content-type", "application/x-ndjson")
+            .with_body(format!("{first}\n{last}\n"))
+            .create_async()
+            .await;
+
+        let llm = ollama_for(&server);
+        let messages = [Message::new_human_message("weather?")];
+        let events: Vec<_> = llm
+            .generate_stream(&messages)
+            .map(Result::unwrap)
+            .collect()
+            .await;
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert!(matches!(&events[0], LLMEvent::Text(t) if t == "Checking"));
+        let LLMEvent::Done(result) = &events[1] else {
+            panic!("{events:?}")
+        };
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].name, "weather");
+        assert_eq!(result.tool_calls[0].arguments, r#"{"city":"Lima"}"#);
+        assert_eq!(result.tokens.as_ref().unwrap().total_tokens, 5);
+    }
+
+    #[tokio::test]
+    async fn generate_stream_yields_http_error() {
+        let mut server = mockito::Server::new_async().await;
+        server
+            .mock("POST", "/api/chat")
+            .with_status(500)
+            .with_body("boom")
+            .create_async()
+            .await;
+        let llm = ollama_for(&server);
+        let messages = [Message::new_human_message("hi")];
+        let events: Vec<_> = llm.generate_stream(&messages).collect().await;
+        assert!(
+            matches!(events.last(), Some(Err(_))),
+            "an HTTP error must surface: {events:?}"
+        );
     }
 
     fn chat_response(message: serde_json::Value) -> String {

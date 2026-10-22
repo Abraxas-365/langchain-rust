@@ -375,3 +375,157 @@ async fn generate_with_streaming_func_collects_chunks() {
     assert_eq!(result, "ab");
     assert_eq!(seen.lock().await.len(), 2);
 }
+
+// ---- generate_stream ----
+
+use crate::language_models::LLMEvent;
+
+fn tool_delta(index: u32, id: Option<&str>, name: Option<&str>, args: &str) -> Value {
+    let mut call = json!({"index": index, "function": {"arguments": args}});
+    if let Some(id) = id {
+        call["id"] = json!(id);
+        call["type"] = json!("function");
+    }
+    if let Some(name) = name {
+        call["function"]["name"] = json!(name);
+    }
+    json!({
+        "id": "chatcmpl-1", "object": "chat.completion.chunk", "created": 1, "model": "gpt-4o-mini",
+        "choices": [{"index": 0, "delta": {"tool_calls": [call]}, "finish_reason": null}]
+    })
+}
+
+async fn stream_events_from(server: &mockito::ServerGuard) -> Vec<Result<LLMEvent, LLMError>> {
+    let llm = llm_for(server);
+    let messages = [Message::new_human_message("hi")];
+    llm.generate_stream(&messages).collect().await
+}
+
+#[tokio::test]
+async fn generate_stream_yields_text_then_done_with_usage() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/chat/completions")
+        .match_body(mockito::Matcher::PartialJson(json!({"stream": true})))
+        .with_header("content-type", "text/event-stream")
+        .with_body(sse(&[
+            chunk(Some("Hel"), None),
+            chunk(Some(""), None),
+            chunk(Some("lo"), None),
+            chunk(
+                None,
+                Some(json!({"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3})),
+            ),
+        ]))
+        .create_async()
+        .await;
+
+    let events: Vec<_> = stream_events_from(&server)
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(events.len(), 3, "{events:?}");
+    assert!(matches!(&events[0], LLMEvent::Text(t) if t == "Hel"));
+    assert!(matches!(&events[1], LLMEvent::Text(t) if t == "lo"));
+    let LLMEvent::Done(result) = &events[2] else {
+        panic!("{events:?}")
+    };
+    assert_eq!(result.generation, "Hello");
+    assert!(result.tool_calls.is_empty());
+    assert_eq!(result.tokens.as_ref().unwrap().total_tokens, 3);
+}
+
+#[tokio::test]
+async fn generate_stream_rebuilds_tool_calls_from_deltas() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/chat/completions")
+        .with_header("content-type", "text/event-stream")
+        .with_body(sse(&[
+            tool_delta(0, Some("call_a"), Some("weather"), ""),
+            tool_delta(1, Some("call_b"), Some("time"), "{\"tz\":"),
+            tool_delta(0, None, None, "{\"city\":"),
+            tool_delta(0, None, None, "\"Lima\"}"),
+            tool_delta(1, None, None, "\"UTC\"}"),
+        ]))
+        .create_async()
+        .await;
+
+    let events: Vec<_> = stream_events_from(&server)
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    // No text at all: tool-call JSON is never streamed as answer text.
+    assert_eq!(events.len(), 1, "{events:?}");
+    let LLMEvent::Done(result) = &events[0] else {
+        panic!("{events:?}")
+    };
+    let calls: Vec<_> = result
+        .tool_calls
+        .iter()
+        .map(|c| (c.id.as_str(), c.name.as_str(), c.arguments.as_str()))
+        .collect();
+    assert_eq!(
+        calls,
+        vec![
+            ("call_a", "weather", "{\"city\":\"Lima\"}"),
+            ("call_b", "time", "{\"tz\":\"UTC\"}"),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn generate_stream_yields_http_errors_as_items() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/chat/completions")
+        .with_status(401)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"error":{"message":"bad key","type":"invalid_request_error","param":null,"code":null}}"#)
+        .create_async()
+        .await;
+
+    let events = stream_events_from(&server).await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert!(events[0].is_err(), "{events:?}");
+}
+
+#[tokio::test]
+async fn agent_stream_events_with_openai_streams_answer_tokens() {
+    use crate::{
+        agent::{AgentExecutor, AgentStreamEvent, OpenAiToolAgentBuilder},
+        prompt_args,
+    };
+
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/chat/completions")
+        .match_body(mockito::Matcher::PartialJson(json!({"stream": true})))
+        .with_header("content-type", "text/event-stream")
+        .with_body(sse(&[chunk(Some("Hi "), None), chunk(Some("there"), None)]))
+        .expect(1)
+        .create_async()
+        .await;
+
+    let agent = OpenAiToolAgentBuilder::new()
+        .build(llm_for(&server))
+        .unwrap();
+    let executor = AgentExecutor::from_agent(agent);
+    let events: Vec<_> = executor
+        .stream_events(prompt_args! {"input" => "hi"})
+        .map(Result::unwrap)
+        .collect()
+        .await;
+    assert_eq!(
+        events,
+        vec![
+            AgentStreamEvent::Text("Hi ".into()),
+            AgentStreamEvent::Text("there".into()),
+            AgentStreamEvent::Finish {
+                output: "Hi there".into()
+            },
+        ]
+    );
+}

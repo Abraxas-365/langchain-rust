@@ -10,7 +10,10 @@ use futures::{stream, Stream};
 
 use crate::{
     embedding::{Embedder, EmbedderError},
-    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
+    language_models::{
+        llm::LLM, options::CallOptions, GenerateResult, LLMError, LLMEvent, LLMEventStream,
+        TokenUsage,
+    },
     schemas::{Message, StreamData},
 };
 
@@ -20,6 +23,8 @@ pub struct FakeLLM {
     responses: Arc<Mutex<VecDeque<GenerateResult>>>,
     pub calls: Arc<Mutex<Vec<Vec<Message>>>>,
     pub options: Arc<Mutex<Vec<CallOptions>>>,
+    /// When the script runs out, never answer (instead of failing). For cancellation tests.
+    hang_when_exhausted: bool,
 }
 
 impl FakeLLM {
@@ -39,36 +44,68 @@ impl FakeLLM {
         }
     }
 
+    /// Once the script is used up, calls hang forever instead of returning an error.
+    pub fn hang_when_exhausted(mut self) -> Self {
+        self.hang_when_exhausted = true;
+        self
+    }
+
     pub fn calls(&self) -> Vec<Vec<Message>> {
         self.calls.lock().unwrap().clone()
     }
 
-    fn next(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+    /// `None` means "hang" (script exhausted and `hang_when_exhausted` set).
+    fn next(&self, messages: &[Message]) -> Option<Result<GenerateResult, LLMError>> {
         self.calls.lock().unwrap().push(messages.to_vec());
-        self.responses
-            .lock()
-            .unwrap()
-            .pop_front()
-            .ok_or_else(|| LLMError::OtherError("FakeLLM: no scripted response left".into()))
+        match self.responses.lock().unwrap().pop_front() {
+            Some(result) => Some(Ok(result)),
+            None if self.hang_when_exhausted => None,
+            None => Some(Err(LLMError::OtherError(
+                "FakeLLM: no scripted response left".into(),
+            ))),
+        }
     }
 }
 
 #[async_trait]
 impl LLM for FakeLLM {
     async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
-        self.next(messages)
+        match self.next(messages) {
+            Some(result) => result,
+            None => futures::future::pending().await,
+        }
     }
 
     async fn stream(
         &self,
         messages: &[Message],
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
-        let text = self.next(messages)?.generation;
+        let text = self.generate(messages).await?.generation;
         let chunks: Vec<Result<StreamData, LLMError>> = text
             .split_inclusive(' ')
             .map(|c| Ok(StreamData::new(serde_json::json!(c), None, c)))
             .collect();
         Ok(Box::pin(stream::iter(chunks)))
+    }
+
+    /// Streams the scripted text word by word, like a real provider, then `Done`.
+    fn generate_stream<'a>(&'a self, messages: &'a [Message]) -> LLMEventStream<'a> {
+        let result = match self.next(messages) {
+            None => return Box::pin(stream::pending()),
+            Some(Err(e)) => return Box::pin(stream::iter([Err(e)])),
+            Some(Ok(result)) => result,
+        };
+        let mut events: Vec<Result<LLMEvent, LLMError>> = Vec::new();
+        if !result.has_tool_calls() {
+            events.extend(
+                result
+                    .generation
+                    .split_inclusive(' ')
+                    .map(|c| Ok(LLMEvent::Text(c.to_string()))),
+            );
+        }
+        events.push(Ok(LLMEvent::Done(result)));
+        Box::pin(stream::iter(events))
     }
 
     fn add_options(&mut self, options: CallOptions) {

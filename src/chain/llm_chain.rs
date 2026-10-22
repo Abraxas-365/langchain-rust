@@ -1,17 +1,21 @@
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use futures_util::TryStreamExt;
 
 use crate::{
-    language_models::{llm::LLM, GenerateResult},
+    language_models::{llm::LLM, GenerateResult, LLMEvent},
     output_parsers::{OutputParser, SimpleParser},
     prompt::{FormatPrompter, PromptArgs},
     schemas::StreamData,
 };
 
-use super::{chain_trait::Chain, options::ChainCallOptions, ChainError};
+use super::{
+    chain_trait::{box_chain_events, Chain, ChainEventStream},
+    options::ChainCallOptions,
+    ChainError,
+};
 
 pub struct LLMChainBuilder {
     prompt: Option<Box<dyn FormatPrompter>>,
@@ -133,6 +137,24 @@ impl Chain for LLMChain {
         let mapped_stream = llm_stream.map_err(ChainError::from);
 
         Ok(Box::pin(mapped_stream))
+    }
+
+    /// Streams the LLM's output. `Text` chunks are raw model output; the `Done` result has
+    /// already been through the chain's output parser, as with [`call`](Chain::call).
+    fn call_stream<'a>(&'a self, input_variables: PromptArgs) -> ChainEventStream<'a> {
+        box_chain_events(async_stream::try_stream! {
+            let messages = self.prompt.format_prompt(input_variables)?.to_chat_messages();
+            let mut events = self.llm.generate_stream(&messages);
+            while let Some(event) = events.next().await {
+                match event? {
+                    LLMEvent::Done(mut result) => {
+                        result.generation = self.output_parser.parse(&result.generation).await?;
+                        yield LLMEvent::Done(result);
+                    }
+                    other => yield other,
+                }
+            }
+        })
     }
 }
 

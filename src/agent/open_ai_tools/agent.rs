@@ -2,12 +2,18 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures::StreamExt;
 use serde_json::json;
 
 use crate::{
-    agent::{Agent, AgentError},
+    agent::{
+        agent::{box_plan_events, PlanEvent, PlanEventStream},
+        Agent, AgentError,
+    },
     chain::Chain,
-    fmt_message, fmt_placeholder, fmt_template, message_formatter,
+    fmt_message, fmt_placeholder, fmt_template,
+    language_models::{GenerateResult, LLMEvent},
+    message_formatter,
     prompt::{HumanMessagePromptTemplate, MessageFormatterStruct, PromptArgs},
     schemas::{
         agent::{AgentAction, AgentEvent, AgentFinish, LogTools},
@@ -74,10 +80,72 @@ impl Agent for OpenAiToolAgent {
         intermediate_steps: &[(AgentAction, String)],
         inputs: PromptArgs,
     ) -> Result<AgentEvent, AgentError> {
-        let mut inputs = inputs.clone();
+        let inputs = self.plan_inputs(intermediate_steps, inputs)?;
+        let result = self.chain.call(inputs).await?;
+        Self::event_from_result(result)
+    }
+
+    /// Streams the model's text as it arrives (with native tool calling that is the
+    /// answer, or a short preamble like "Let me check" before tool calls).
+    fn plan_stream<'a>(
+        &'a self,
+        intermediate_steps: &'a [(AgentAction, String)],
+        inputs: PromptArgs,
+    ) -> PlanEventStream<'a> {
+        box_plan_events(async_stream::try_stream! {
+            let inputs = self.plan_inputs(intermediate_steps, inputs)?;
+            let mut events = self.chain.call_stream(inputs);
+            // LLMs without native tool calling write the calls as a JSON array in the text.
+            // Output starting with `[` is held back until the plan is known, so that JSON
+            // never reaches the caller as answer text.
+            let mut held = String::new();
+            let mut hold: Option<bool> = None;
+            while let Some(event) = events.next().await {
+                match event? {
+                    LLMEvent::Text(text) => {
+                        if hold == Some(false) {
+                            yield PlanEvent::Text(text);
+                            continue;
+                        }
+                        held.push_str(&text);
+                        if let Some(first) = held.trim_start().chars().next() {
+                            hold = Some(first == '[');
+                            if first != '[' {
+                                yield PlanEvent::Text(std::mem::take(&mut held));
+                            }
+                        }
+                    }
+                    LLMEvent::Done(result) => {
+                        let event = Self::event_from_result(result)?;
+                        if matches!(event, AgentEvent::Finish(_)) && !held.is_empty() {
+                            yield PlanEvent::Text(held);
+                        }
+                        yield PlanEvent::Done(event);
+                        return;
+                    }
+                }
+            }
+            Err(AgentError::OtherError("LLM stream ended without a result".into()))?;
+        })
+    }
+
+    fn get_tools(&self) -> Vec<Arc<dyn Tool>> {
+        self.tools.clone()
+    }
+}
+
+impl OpenAiToolAgent {
+    fn plan_inputs(
+        &self,
+        intermediate_steps: &[(AgentAction, String)],
+        mut inputs: PromptArgs,
+    ) -> Result<PromptArgs, AgentError> {
         let scratchpad = self.construct_scratchpad(intermediate_steps)?;
         inputs.insert("agent_scratchpad".to_string(), json!(scratchpad));
-        let result = self.chain.call(inputs).await?;
+        Ok(inputs)
+    }
+
+    fn event_from_result(result: GenerateResult) -> Result<AgentEvent, AgentError> {
         // Providers fill `tool_calls`; LLMs that only encode calls as JSON text in
         // `generation` (custom impls, older code) still work through the fallback.
         let calls = if result.has_tool_calls() {
@@ -106,9 +174,5 @@ impl Agent for OpenAiToolAgent {
             });
         }
         Ok(AgentEvent::Action(actions))
-    }
-
-    fn get_tools(&self) -> Vec<Arc<dyn Tool>> {
-        self.tools.clone()
     }
 }

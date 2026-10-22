@@ -317,3 +317,70 @@ async fn conversational_retriever_chain_requires_retriever_and_llm() {
         Err(ChainError::MissingObject(_))
     ));
 }
+
+// ---- call_stream ----
+
+use crate::language_models::LLMEvent;
+
+fn texts_and_done(events: Vec<LLMEvent>) -> (Vec<String>, GenerateResult) {
+    let mut texts = Vec::new();
+    let mut done = None;
+    for event in events {
+        match event {
+            LLMEvent::Text(t) => texts.push(t),
+            LLMEvent::Done(r) => done = Some(r),
+        }
+    }
+    (texts, done.expect("Done event"))
+}
+
+#[tokio::test]
+async fn llm_chain_call_stream_streams_and_parses_the_final_result() {
+    let llm = FakeLLM::new(["  hi there luis  "]);
+    let chain = LLMChainBuilder::new()
+        .prompt(HumanMessagePromptTemplate::new(template_fstring!(
+            "Hello {name}!",
+            "name"
+        )))
+        .llm(llm.clone())
+        .output_parser(SimpleParser::new().with_trim(true))
+        .build()
+        .unwrap();
+
+    let events: Vec<_> = chain
+        .call_stream(prompt_args! {"name" => "luis"})
+        .map(Result::unwrap)
+        .collect()
+        .await;
+    let (texts, done) = texts_and_done(events);
+    assert!(texts.len() > 1, "streamed in chunks: {texts:?}");
+    assert_eq!(texts.concat(), "  hi there luis  ");
+    // Done goes through the output parser, like `call`.
+    assert_eq!(done.generation, "hi there luis");
+    assert_eq!(llm.calls()[0][0].content, "Hello luis!");
+}
+
+#[tokio::test]
+async fn llm_chain_call_stream_reports_prompt_errors() {
+    let chain = greet_chain(FakeLLM::new(["x"]));
+    let events: Vec<_> = chain.call_stream(prompt_args! {}).collect().await;
+    assert_eq!(events.len(), 1);
+    assert!(events[0].is_err(), "{events:?}");
+}
+
+#[tokio::test]
+async fn default_call_stream_and_stream_on_chains_without_streaming() {
+    // SequentialChain has no streaming support of its own.
+    let chain = sequential_chain!(greet_chain(FakeLLM::new(["hi luis"])));
+    let events: Vec<_> = chain
+        .call_stream(prompt_args! {"name" => "luis"})
+        .map(Result::unwrap)
+        .collect()
+        .await;
+    let (texts, done) = texts_and_done(events);
+    assert_eq!(texts, vec!["hi luis".to_string()]);
+    assert_eq!(done.generation, "hi luis");
+
+    // `stream` used to panic with unimplemented!(); now it is a plain error.
+    assert!(chain.stream(prompt_args! {"name" => "luis"}).await.is_err());
+}

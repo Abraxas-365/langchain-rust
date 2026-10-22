@@ -388,3 +388,398 @@ async fn openai_tools_agent_empty_or_invalid_json_list_is_final() {
         .unwrap();
     assert_eq!(out, "[]");
 }
+
+// ---- streaming + cancellation ----
+
+use crate::{agent::AgentStreamEvent, language_models::GenerateResult, schemas::ToolCall};
+use futures::StreamExt;
+use tokio_util::sync::CancellationToken;
+
+async fn collect_events(
+    executor: &AgentExecutor<impl crate::agent::Agent>,
+    input: &str,
+) -> Vec<Result<AgentStreamEvent, ChainError>> {
+    executor
+        .stream_events(prompt_args! {"input" => input})
+        .collect()
+        .await
+}
+
+fn text(s: &str) -> AgentStreamEvent {
+    AgentStreamEvent::Text(s.into())
+}
+
+#[tokio::test]
+async fn stream_events_tools_agent_streams_tools_then_answer_tokens() {
+    let weather = RecordingTool::ok("weather", "sunny");
+    let llm = FakeLLM::with_results([
+        GenerateResult::default().with_tool_calls(vec![ToolCall::new(
+            "call_1",
+            "weather",
+            r#"{"input":"Lima"}"#,
+        )]),
+        GenerateResult {
+            generation: "Sunny in Lima".into(),
+            ..Default::default()
+        },
+    ]);
+    let tools: Vec<Arc<dyn Tool>> = vec![Arc::new(weather.clone())];
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&tools)
+        .build(llm.clone())
+        .unwrap();
+    let memory = Arc::new(Mutex::new(SimpleMemory::new()));
+    let executor = AgentExecutor::from_agent(agent).with_memory(memory.clone());
+
+    let events: Vec<_> = collect_events(&executor, "weather?")
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        events,
+        vec![
+            AgentStreamEvent::ToolStart {
+                tool: "weather".into(),
+                input: r#"{"input":"Lima"}"#.into()
+            },
+            AgentStreamEvent::ToolEnd {
+                tool: "weather".into(),
+                output: "sunny".into()
+            },
+            // The final answer arrives token by token, not as one chunk.
+            text("Sunny "),
+            text("in "),
+            text("Lima"),
+            AgentStreamEvent::Finish {
+                output: "Sunny in Lima".into()
+            },
+        ]
+    );
+    assert_eq!(weather.inputs(), vec![json!("Lima")]);
+
+    // Memory is saved exactly like `call` does: human, ai(tool_calls), tool, ai(final).
+    let types: Vec<_> = memory
+        .lock()
+        .await
+        .messages()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|m| m.message_type)
+        .collect();
+    assert_eq!(
+        types,
+        vec![
+            MessageType::HumanMessage,
+            MessageType::AIMessage,
+            MessageType::ToolMessage,
+            MessageType::AIMessage
+        ]
+    );
+}
+
+#[tokio::test]
+async fn stream_events_default_plan_stream_works_for_any_agent() {
+    // ConversationalAgent has no plan_stream override: the answer comes as one chunk.
+    let calc = RecordingTool::ok("Calculator", "4");
+    let llm = FakeLLM::new([action("Calculator", "2+2"), final_answer("It is 4")]);
+    let agent = ConversationalAgentBuilder::new()
+        .tools(&[Arc::new(calc.clone())])
+        .build(llm)
+        .unwrap();
+    let events: Vec<_> = collect_events(&AgentExecutor::from_agent(agent), "2+2?")
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        events,
+        vec![
+            AgentStreamEvent::ToolStart {
+                tool: "Calculator".into(),
+                input: "2+2".into()
+            },
+            AgentStreamEvent::ToolEnd {
+                tool: "Calculator".into(),
+                output: "4".into()
+            },
+            text("It is 4"),
+            AgentStreamEvent::Finish {
+                output: "It is 4".into()
+            },
+        ]
+    );
+}
+
+#[tokio::test]
+async fn stream_events_tool_error_is_an_observation_event() {
+    let broken = RecordingTool::failing("broken", "boom");
+    let llm = FakeLLM::new([tool_calls_json(&[("c1", "broken", "x")]), "ok".into()]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(broken)])
+        .build(llm)
+        .unwrap();
+    let events: Vec<_> = collect_events(&AgentExecutor::from_agent(agent), "go")
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    assert!(
+        events.contains(&AgentStreamEvent::ToolEnd {
+            tool: "broken".into(),
+            output: "The tool return the following error: boom".into()
+        }),
+        "{events:?}"
+    );
+    assert_eq!(
+        events.last(),
+        Some(&AgentStreamEvent::Finish {
+            output: "ok".into()
+        })
+    );
+}
+
+#[tokio::test]
+async fn stream_events_errors_end_the_stream_with_err() {
+    // Unknown tool: ToolStart is never emitted, the stream ends with the error.
+    let llm = FakeLLM::new([tool_calls_json(&[("c1", "nope", "x")])]);
+    let agent = OpenAiToolAgentBuilder::new().build(llm).unwrap();
+    let events = collect_events(&AgentExecutor::from_agent(agent), "go").await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    let err = events[0].as_ref().unwrap_err().to_string();
+    assert!(err.contains("Tool nope not found"), "{err}");
+
+    // LLM failure (script exhausted) surfaces as an Err item too, not an empty stream.
+    let agent = OpenAiToolAgentBuilder::new()
+        .build(FakeLLM::new(Vec::<String>::new()))
+        .unwrap();
+    let events = collect_events(&AgentExecutor::from_agent(agent), "go").await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    let err = events[0].as_ref().unwrap_err().to_string();
+    assert!(err.contains("no scripted response left"), "{err}");
+}
+
+#[tokio::test]
+async fn stream_events_max_iterations_finishes() {
+    let tool = RecordingTool::ok("t", "again");
+    let llm = FakeLLM::new([
+        tool_calls_json(&[("c1", "t", "1")]),
+        tool_calls_json(&[("c2", "t", "2")]),
+    ]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(tool)])
+        .build(llm)
+        .unwrap();
+    let executor = AgentExecutor::from_agent(agent).with_max_iterations(2);
+    let events: Vec<_> = collect_events(&executor, "loop")
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    let starts = events
+        .iter()
+        .filter(|e| matches!(e, AgentStreamEvent::ToolStart { .. }))
+        .count();
+    assert_eq!(starts, 2);
+    assert_eq!(
+        events.last(),
+        Some(&AgentStreamEvent::Finish {
+            output: "Max iterations reached".into()
+        })
+    );
+}
+
+#[tokio::test]
+async fn cancellation_stops_a_running_agent_and_skips_memory() {
+    // The 2nd LLM call never answers; cancelling must still end the run.
+    let weather = RecordingTool::ok("weather", "sunny");
+    let llm = FakeLLM::new([tool_calls_json(&[("c1", "weather", "Lima")])]).hang_when_exhausted();
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(weather.clone())])
+        .build(llm.clone())
+        .unwrap();
+    let token = CancellationToken::new();
+    let memory = Arc::new(Mutex::new(SimpleMemory::new()));
+    let executor = AgentExecutor::from_agent(agent)
+        .with_memory(memory.clone())
+        .with_cancellation(token.clone());
+
+    let mut events = executor.stream_events(prompt_args! {"input" => "weather?"});
+    let mut seen = Vec::new();
+    let drain = async {
+        while let Some(event) = events.next().await {
+            let done_with_tool = matches!(event, Ok(AgentStreamEvent::ToolEnd { .. }));
+            seen.push(event);
+            if done_with_tool {
+                token.cancel();
+            }
+        }
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(5), drain)
+        .await
+        .expect("cancel must end the stream");
+    let err = seen.pop().unwrap().unwrap_err().to_string();
+    assert!(err.contains("agent run cancelled"), "{err}");
+    assert!(matches!(
+        seen.as_slice(),
+        [
+            Ok(AgentStreamEvent::ToolStart { .. }),
+            Ok(AgentStreamEvent::ToolEnd { .. })
+        ]
+    ));
+    assert_eq!(
+        llm.calls().len(),
+        2,
+        "second plan was in flight when cancelled"
+    );
+    assert!(memory.lock().await.messages().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn cancellation_applies_to_call_too() {
+    let llm = FakeLLM::new(Vec::<String>::new()).hang_when_exhausted();
+    let agent = OpenAiToolAgentBuilder::new().build(llm).unwrap();
+    let token = CancellationToken::new();
+    let executor = AgentExecutor::from_agent(agent).with_cancellation(token.clone());
+
+    let canceller = {
+        let token = token.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            token.cancel();
+        })
+    };
+    let err = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        executor.invoke(prompt_args! {"input" => "hi"}),
+    )
+    .await
+    .expect("cancel must end the run")
+    .unwrap_err();
+    assert!(err.to_string().contains("agent run cancelled"), "{err}");
+    canceller.await.unwrap();
+
+    // An already-cancelled token stops the run before the LLM is called.
+    let llm = FakeLLM::new(["never"]);
+    let agent = OpenAiToolAgentBuilder::new().build(llm.clone()).unwrap();
+    let executor = AgentExecutor::from_agent(agent).with_cancellation(token);
+    assert!(executor
+        .invoke(prompt_args! {"input" => "hi"})
+        .await
+        .is_err());
+    assert!(llm.calls().is_empty());
+}
+
+#[tokio::test]
+async fn dropping_the_stream_stops_the_run() {
+    let tool = RecordingTool::ok("t", "x");
+    let llm = FakeLLM::new([
+        tool_calls_json(&[("c1", "t", "1")]),
+        tool_calls_json(&[("c2", "t", "2")]),
+        "done".into(),
+    ]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(tool.clone())])
+        .build(llm.clone())
+        .unwrap();
+    let executor = AgentExecutor::from_agent(agent);
+    {
+        let mut events = executor.stream_events(prompt_args! {"input" => "go"});
+        // Take the first tool start and walk away.
+        let first = events.next().await.unwrap().unwrap();
+        assert!(matches!(first, AgentStreamEvent::ToolStart { .. }));
+    }
+    // Lazily polled: once dropped, the run made no further LLM calls.
+    assert_eq!(llm.calls().len(), 1);
+    assert!(tool.inputs().len() <= 1);
+}
+
+#[tokio::test]
+async fn call_and_stream_events_agree_on_the_answer() {
+    let make = || {
+        let llm = FakeLLM::new([tool_calls_json(&[("c1", "t", "q")]), "final answer".into()]);
+        let agent = OpenAiToolAgentBuilder::new()
+            .tools(&[Arc::new(RecordingTool::ok("t", "obs"))])
+            .build(llm)
+            .unwrap();
+        AgentExecutor::from_agent(agent)
+    };
+    let via_call = make().invoke(prompt_args! {"input" => "q"}).await.unwrap();
+    let streamed = collect_events(&make(), "q").await;
+    let Some(Ok(AgentStreamEvent::Finish { output })) = streamed.last() else {
+        panic!("{streamed:?}");
+    };
+    assert_eq!(&via_call, output);
+    // Concatenated text chunks equal the final output.
+    let joined: String = streamed
+        .iter()
+        .filter_map(|e| match e {
+            Ok(AgentStreamEvent::Text(t)) => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(joined, "final answer");
+}
+
+#[tokio::test]
+async fn stream_events_never_leaks_text_tool_call_json_split_across_chunks() {
+    // LLMs without native tool calling write the calls as JSON text; FakeLLM streams it
+    // word by word, so the JSON arrives in many chunks and must still be held back.
+    let spaced =
+        r#"[{"id": "c1", "type": "function", "function": {"name": "t", "arguments": "q"}}]"#;
+    let llm = FakeLLM::new([spaced, "the answer"]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(RecordingTool::ok("t", "obs"))])
+        .build(llm)
+        .unwrap();
+    let events: Vec<_> = collect_events(&AgentExecutor::from_agent(agent), "q")
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        events,
+        vec![
+            AgentStreamEvent::ToolStart {
+                tool: "t".into(),
+                input: "q".into()
+            },
+            AgentStreamEvent::ToolEnd {
+                tool: "t".into(),
+                output: "obs".into()
+            },
+            text("the "),
+            text("answer"),
+            AgentStreamEvent::Finish {
+                output: "the answer".into()
+            },
+        ]
+    );
+}
+
+#[tokio::test]
+async fn stream_events_answer_starting_with_bracket_is_still_streamed() {
+    // Held back as a possible tool call, but it is not one: the text must not be lost.
+    let llm = FakeLLM::new(["[1, 2, 3] are the numbers"]);
+    let agent = OpenAiToolAgentBuilder::new().build(llm).unwrap();
+    let events: Vec<_> = collect_events(&AgentExecutor::from_agent(agent), "q")
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    let joined: String = events
+        .iter()
+        .filter_map(|e| match e {
+            AgentStreamEvent::Text(t) => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(joined, "[1, 2, 3] are the numbers");
+    assert_eq!(
+        events.last(),
+        Some(&AgentStreamEvent::Finish {
+            output: "[1, 2, 3] are the numbers".into()
+        })
+    );
+}

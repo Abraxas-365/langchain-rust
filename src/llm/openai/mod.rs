@@ -9,7 +9,8 @@ use async_openai::types::chat::{
     ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
     ChatCompletionRequestUserMessageContentPart, ChatCompletionStreamOptions,
     ChatCompletionToolChoiceOption, ChatCompletionTools, CreateChatCompletionRequest,
-    CreateChatCompletionRequestArgs, ResponseFormat, StopConfiguration,
+    CreateChatCompletionRequestArgs, CreateChatCompletionStreamResponse, ResponseFormat,
+    StopConfiguration,
 };
 use async_openai::{error::OpenAIError, Client};
 use async_trait::async_trait;
@@ -17,7 +18,10 @@ use futures::{Stream, StreamExt};
 
 use crate::schemas::convert::{LangchainIntoOpenAI, TryLangchainIntoOpenAI};
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
+    language_models::{
+        box_llm_events, llm::LLM, options::CallOptions, GenerateResult, LLMError, LLMEvent,
+        LLMEventStream, TokenUsage,
+    },
     schemas::{
         messages::{Message, MessageType},
         StreamData, ToolCall,
@@ -218,8 +222,72 @@ impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
         Ok(Box::pin(new_stream))
     }
 
+    fn generate_stream<'a>(&'a self, messages: &'a [Message]) -> LLMEventStream<'a> {
+        box_llm_events(async_stream::try_stream! {
+            let client = Client::with_config(self.config.clone());
+            let request = self.generate_request(messages, true)?;
+            let mut stream = client.chat().create_stream(request).await?;
+
+            let mut acc = StreamAccumulator::default();
+            while let Some(chunk) = stream.next().await {
+                if let Some(text) = acc.push(chunk?) {
+                    yield LLMEvent::Text(text);
+                }
+            }
+            yield LLMEvent::Done(acc.finish());
+        })
+    }
+
     fn add_options(&mut self, options: CallOptions) {
         self.options.merge_options(options)
+    }
+}
+
+/// Rebuilds a [`GenerateResult`] from OpenAI stream chunks. Tool calls arrive as
+/// fragments keyed by `index`: the first carries `id` and `name`, the rest append to
+/// `arguments`.
+#[derive(Default)]
+struct StreamAccumulator {
+    text: String,
+    calls: std::collections::BTreeMap<u32, ToolCall>,
+    tokens: Option<TokenUsage>,
+}
+
+impl StreamAccumulator {
+    /// Applies one chunk; returns its text delta, if any. Only the first choice is used.
+    fn push(&mut self, chunk: CreateChatCompletionStreamResponse) -> Option<String> {
+        if let Some(usage) = chunk.usage {
+            self.tokens = Some(TokenUsage {
+                prompt_tokens: usage.prompt_tokens,
+                completion_tokens: usage.completion_tokens,
+                total_tokens: usage.total_tokens,
+            });
+        }
+        let delta = chunk.choices.into_iter().find(|c| c.index == 0)?.delta;
+        for part in delta.tool_calls.unwrap_or_default() {
+            let call = self.calls.entry(part.index).or_default();
+            if let Some(id) = part.id {
+                call.id.push_str(&id);
+            }
+            if let Some(function) = part.function {
+                call.name
+                    .push_str(function.name.as_deref().unwrap_or_default());
+                call.arguments
+                    .push_str(function.arguments.as_deref().unwrap_or_default());
+            }
+        }
+        let text = delta.content.filter(|t| !t.is_empty())?;
+        self.text.push_str(&text);
+        Some(text)
+    }
+
+    fn finish(self) -> GenerateResult {
+        GenerateResult {
+            tokens: self.tokens,
+            generation: self.text,
+            ..Default::default()
+        }
+        .with_tool_calls(self.calls.into_values().collect())
     }
 }
 
