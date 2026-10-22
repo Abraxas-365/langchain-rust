@@ -100,7 +100,7 @@ fn constants_and_functions() {
     assert_eq!(eval("ceil(2.1)"), 3.0);
     assert_eq!(eval("round(2.5)"), 3.0);
     assert_eq!(eval("round(-2.5)"), -3.0);
-    assert_eq!(eval("round(3.14159, 2)"), 3.14);
+    assert_eq!(eval("round(1.23456, 3)"), 1.235);
     assert_eq!(eval("trunc(-2.7)"), -2.0);
     assert_eq!(eval("pow(2, 10)"), 1024.0);
     assert_eq!(eval("hypot(3, 4)"), 5.0);
@@ -211,11 +211,11 @@ fn deep_nesting_is_rejected_not_a_stack_overflow() {
     let ok = format!("{}1", "-".repeat(190));
     assert_eq!(eval(&ok), 1.0);
     // Depth is per nesting level, not per operation.
-    let long = vec!["1"; 1000].join(" + ");
+    let long = ["1"; 1000].join(" + ");
     assert_eq!(eval(&long), 1000.0);
-    let groups = vec!["(1)"; 500].join(" + ");
+    let groups = ["(1)"; 500].join(" + ");
     assert_eq!(eval(&groups), 500.0);
-    let args = format!("max({})", vec!["-(1)"; 500].join(", "));
+    let args = format!("max({})", ["-(1)"; 500].join(", "));
     assert_eq!(eval(&args), -1.0);
 }
 

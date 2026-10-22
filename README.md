@@ -76,6 +76,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
 - Tools
 
   - [x] [Custom tools from async functions (`FunctionTool`)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/function_tool.rs)
+  - [x] [Calculator](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/calculator_tool.rs)
   - [x] Serpapi/Google
   - [x] DuckDuckGo Search
   - [x] [Wolfram/Math](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/wolfram_tool.rs)
