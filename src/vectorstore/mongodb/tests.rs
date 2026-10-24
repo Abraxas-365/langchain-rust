@@ -314,6 +314,57 @@ async fn results_become_documents() {
         .to_document(doc! { "text": 3, "__vector_score": 0.5 })
         .unwrap_err();
     assert!(err.to_string().contains("not a string"), "{err}");
+
+    let stored = store
+        .stored_document(doc! { "_id": "doc-1", "text": "beta", "embedding": [1.0] })
+        .unwrap();
+    assert_eq!(stored.id.as_deref(), Some("doc-1"));
+    assert_eq!(stored.page_content, "beta");
+    assert_eq!(stored.score, 0.0);
+    assert!(stored.metadata.is_empty());
+}
+
+#[tokio::test]
+async fn id_filters_match_string_and_object_ids_within_the_scope() {
+    let store = store(StoreBuilder::new());
+    let oid = ObjectId::new();
+    let ids = vec!["doc-1".to_string(), oid.to_hex()];
+    assert_eq!(
+        store.id_filter(&ids, None, None).unwrap(),
+        doc! { "_id": { "$in": ["doc-1", oid.to_hex(), oid] } }
+    );
+    assert_eq!(
+        store
+            .id_filter(
+                &ids[..1],
+                Some("t-a"),
+                Some(&json!({ "metadata.year": 2024 }))
+            )
+            .unwrap(),
+        doc! { "$and": [
+            { "_id": { "$in": ["doc-1"] } },
+            { "$and": [
+                { "namespace": { "$eq": "t-a" } },
+                { "metadata.year": 2024 },
+            ] },
+        ] }
+    );
+    assert_eq!(
+        store.id_filter(&ids[..1], Some("t-a"), None).unwrap(),
+        doc! { "$and": [
+            { "_id": { "$in": ["doc-1"] } },
+            { "namespace": { "$eq": "t-a" } },
+        ] }
+    );
+    assert!(store.id_filter(&ids, None, Some(&json!("nope"))).is_err());
+
+    // Empty ids and bad filters never reach the (unreachable) server.
+    let opt = VecStoreOptions::default();
+    store.delete(&[], &opt).await.unwrap();
+    assert!(store.get_by_ids(&[], &opt).await.unwrap().is_empty());
+    let bad = VecStoreOptions::default().with_filters(json!(1));
+    assert!(store.delete(&ids, &bad).await.is_err());
+    assert!(store.get_by_ids(&ids, &bad).await.is_err());
 }
 
 #[tokio::test]
@@ -645,6 +696,45 @@ async fn mongodb_vector_live_round_trip() {
         found.iter().any(|d| d.id.as_deref() == Some("doc-1")),
         "{found:?}"
     );
+
+    // get_by_ids / delete: caller ids, generated ObjectId hex, namespace scope.
+    let generated = found
+        .iter()
+        .find_map(|d| d.id.clone().filter(|id| id != "doc-1"))
+        .unwrap();
+    let ask = vec![generated.clone(), "nope".to_string(), "doc-1".to_string()];
+    let got = store.get_by_ids(&ask, &tenant("tenant-e")).await.unwrap();
+    let got_ids: Vec<_> = got.iter().map(|d| d.id.clone().unwrap()).collect();
+    assert_eq!(got_ids, [generated.clone(), "doc-1".to_string()]);
+    assert_eq!(got[1].page_content, "beta");
+    assert_eq!(got[1].score, 0.0);
+    // Hex ids match case-insensitively and come back lowercase.
+    let upper = store
+        .get_by_ids(&[generated.to_uppercase()], &tenant("tenant-e"))
+        .await
+        .unwrap();
+    assert_eq!(upper.len(), 1, "{upper:?}");
+    assert_eq!(upper[0].id.as_deref(), Some(generated.as_str()));
+    assert!(store
+        .get_by_ids(&ask, &tenant("tenant-a"))
+        .await
+        .unwrap()
+        .is_empty());
+    store.delete(&ask, &tenant("tenant-a")).await.unwrap();
+    assert_eq!(
+        store
+            .get_by_ids(&ask, &VecStoreOptions::default())
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+    store.delete(&ask, &tenant("tenant-e")).await.unwrap();
+    assert!(store
+        .get_by_ids(&ask, &VecStoreOptions::default())
+        .await
+        .unwrap()
+        .is_empty());
 
     // Two stores racing to create differently-defined indexes on a fresh collection:
     // the loser gets "duplicate index names" and uses the winner's index.

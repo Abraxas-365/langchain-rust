@@ -8,7 +8,7 @@ use serde_json::{json, Map, Value};
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{document_ids, VecStoreOptions, VectorStore},
+    vectorstore::{document_ids, vectorstore::in_id_order, VecStoreOptions, VectorStore},
 };
 
 /// Vectors per upsert request (Pinecone's recommended batch size; the hard limit is 1000).
@@ -54,6 +54,19 @@ struct ScoredVector {
     metadata: Option<Map<String, Value>>,
 }
 
+/// `/vectors/fetch`: found vectors keyed by id; missing ids are absent.
+#[derive(Deserialize)]
+struct FetchResponse {
+    #[serde(default)]
+    vectors: std::collections::HashMap<String, FetchedVector>,
+}
+
+#[derive(Deserialize)]
+struct FetchedVector {
+    #[serde(default)]
+    metadata: Option<Map<String, Value>>,
+}
+
 /// Pinecone accepts strings, numbers, booleans and lists of strings as metadata values.
 fn pinecone_metadata_value(value: &Value) -> Option<Value> {
     match value {
@@ -66,12 +79,14 @@ fn pinecone_metadata_value(value: &Value) -> Option<Value> {
 
 impl Store {
     async fn post(&self, path: &str, body: &Value) -> Result<Value, Box<dyn Error>> {
-        let response = self
-            .client
-            .post(format!("{}{path}", self.host))
+        let request = self.client.post(format!("{}{path}", self.host)).json(body);
+        self.send(request).await
+    }
+
+    async fn send(&self, request: reqwest::RequestBuilder) -> Result<Value, Box<dyn Error>> {
+        let response = request
             .header("Api-Key", &self.api_key)
             .header("X-Pinecone-Api-Version", &self.api_version)
-            .json(body)
             .send()
             .await?;
         let status = response.status();
@@ -98,6 +113,27 @@ impl Store {
             .collect();
         metadata.insert(self.text_key.clone(), json!(doc.page_content));
         metadata
+    }
+
+    /// A stored vector as a document: the text comes out of `text_key`.
+    fn to_document(
+        &self,
+        id: String,
+        metadata: Option<Map<String, Value>>,
+        score: f64,
+    ) -> Document {
+        let mut metadata = metadata.unwrap_or_default();
+        let page_content = match metadata.remove(&self.text_key) {
+            Some(Value::String(text)) => text,
+            Some(other) => other.to_string(),
+            None => String::new(),
+        };
+        Document {
+            page_content,
+            metadata: metadata.into_iter().collect(),
+            score,
+            id: Some(id).filter(|id| !id.is_empty()),
+        }
     }
 }
 
@@ -178,22 +214,63 @@ impl VectorStore for Store {
                 opt.score_threshold
                     .is_none_or(|threshold| m.score >= f64::from(threshold))
             })
-            .map(|m| {
-                let mut metadata = m.metadata.unwrap_or_default();
-                let page_content = match metadata.remove(&self.text_key) {
-                    Some(Value::String(text)) => text,
-                    Some(other) => other.to_string(),
-                    None => String::new(),
-                };
-                Document {
-                    page_content,
-                    metadata: metadata.into_iter().collect(),
-                    score: m.score,
-                    id: Some(m.id).filter(|id| !id.is_empty()),
-                }
-            })
+            .map(|m| self.to_document(m.id, m.metadata, m.score))
             .collect())
     }
+
+    /// Deletes the ids from the namespace (option or store default), in batches.
+    /// `filters` is rejected: Pinecone deletes either by ids or by filter, not both.
+    async fn delete(&self, ids: &[String], opt: &PineconeOptions) -> Result<(), Box<dyn Error>> {
+        reject_filters(opt)?;
+        let namespace = self.namespace(opt);
+        for batch in ids.chunks(ID_BATCH_SIZE) {
+            self.post(
+                "/vectors/delete",
+                &json!({ "ids": batch, "namespace": namespace }),
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Fetches the ids from the namespace (option or store default), in request order
+    /// (score 0). `filters` is rejected.
+    async fn get_by_ids(
+        &self,
+        ids: &[String],
+        opt: &PineconeOptions,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        reject_filters(opt)?;
+        let namespace = self.namespace(opt);
+        let mut docs = Vec::with_capacity(ids.len());
+        for batch in ids.chunks(ID_BATCH_SIZE) {
+            let mut query: Vec<(&str, &str)> =
+                batch.iter().map(|id| ("ids", id.as_str())).collect();
+            query.push(("namespace", namespace));
+            let request = self
+                .client
+                .get(format!("{}/vectors/fetch", self.host))
+                .query(&query);
+            let response: FetchResponse = serde_json::from_value(self.send(request).await?)?;
+            docs.extend(
+                response
+                    .vectors
+                    .into_iter()
+                    .map(|(id, vector)| self.to_document(id, vector.metadata, 0.0)),
+            );
+        }
+        Ok(in_id_order(ids, docs))
+    }
+}
+
+/// Ids per fetch/delete request; fetch ids go in the URL.
+pub(super) const ID_BATCH_SIZE: usize = 100;
+
+fn reject_filters(opt: &PineconeOptions) -> Result<(), Box<dyn Error>> {
+    if opt.filters.is_some() {
+        return Err("Pinecone delete/get_by_ids by id don't take filters".into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]

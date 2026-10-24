@@ -1,7 +1,7 @@
 use mockito::{Matcher, Server, ServerGuard};
 use serde_json::json;
 
-use super::*;
+use super::{store::ID_BATCH_SIZE, *};
 use crate::{
     schemas::Document,
     test_utils::FakeEmbedder,
@@ -494,4 +494,165 @@ async fn pinecone_live_round_trip() {
     assert_eq!(found[0].id.as_deref(), Some("doc-1"));
     assert_eq!(found[0].page_content, "beta");
     assert!(!found[0].metadata.contains_key("old"), "{found:?}");
+
+    // get_by_ids / delete, scoped by namespace. Fetch is by id, so it is consistent.
+    let ask = vec!["nope".to_string(), "doc-1".to_string()];
+    let got = store.get_by_ids(&ask, &ids_ns).await.unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].id.as_deref(), Some("doc-1"));
+    assert_eq!(got[0].page_content, "beta");
+    assert!(!got[0].metadata.contains_key("text"));
+    assert!(store
+        .get_by_ids(&ask, &VecStoreOptions::default())
+        .await
+        .unwrap()
+        .is_empty());
+    store
+        .delete(&ask, &VecStoreOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(store.get_by_ids(&ask, &ids_ns).await.unwrap().len(), 1);
+    store.delete(&ask, &ids_ns).await.unwrap();
+    let mut left = vec![Document::new("")];
+    for _ in 0..20 {
+        left = store.get_by_ids(&ask, &ids_ns).await.unwrap();
+        if left.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    assert!(left.is_empty(), "{left:?}");
+}
+
+#[tokio::test]
+async fn get_by_ids_fetches_in_batches_and_keeps_request_order() {
+    let mut server = Server::new_async().await;
+    let store = store(&server, StoreBuilder::new().namespace("ns"));
+    let first = server
+        .mock("GET", "/vectors/fetch")
+        .match_header("Api-Key", "pc-key")
+        .match_query(Matcher::Exact("ids=b&ids=missing&ids=a&namespace=ns".into()))
+        .with_body(
+            json!({
+                "namespace": "ns",
+                "vectors": {
+                    "a": { "id": "a", "values": [1.0, 0.0], "metadata": { "text": "alpha", "k": 1 } },
+                    "b": { "id": "b", "values": [0.0, 1.0] },
+                },
+            })
+            .to_string(),
+        )
+        .expect(1)
+        .create_async()
+        .await;
+    let docs = store
+        .get_by_ids(
+            &["b", "missing", "a"].map(String::from),
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap();
+    first.assert_async().await;
+    let ids: Vec<_> = docs.iter().map(|d| d.id.as_deref().unwrap()).collect();
+    assert_eq!(ids, ["b", "a"]);
+    assert_eq!(docs[0].page_content, "");
+    assert_eq!(docs[1].page_content, "alpha");
+    assert_eq!(docs[1].metadata["k"], json!(1));
+    assert!(!docs[1].metadata.contains_key("text"));
+    assert_eq!(docs[1].score, 0.0);
+    first.remove_async().await;
+
+    // More than one batch of ids: one request each, the per-call namespace wins.
+    assert_eq!(
+        ID_BATCH_SIZE, 100,
+        "fetch ids go in the URL; keep batches small"
+    );
+    let many: Vec<String> = (0..ID_BATCH_SIZE + 1).map(|i| format!("id-{i}")).collect();
+    let fetch = server
+        .mock("GET", "/vectors/fetch")
+        .match_query(Matcher::UrlEncoded("namespace".into(), "other".into()))
+        .with_body(json!({ "vectors": {} }).to_string())
+        .expect(2)
+        .create_async()
+        .await;
+    assert!(store
+        .get_by_ids(&many, &VecStoreOptions::default().with_name_space("other"))
+        .await
+        .unwrap()
+        .is_empty());
+    fetch.assert_async().await;
+
+    // Empty input and filters send nothing.
+    assert!(store
+        .get_by_ids(&[], &VecStoreOptions::default())
+        .await
+        .unwrap()
+        .is_empty());
+    let err = store
+        .get_by_ids(
+            &many,
+            &VecStoreOptions::default().with_filters(json!({ "k": 1 })),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("filters"), "{err}");
+}
+
+#[tokio::test]
+async fn delete_posts_ids_in_batches_with_the_namespace() {
+    let mut server = Server::new_async().await;
+    let store = store(&server, StoreBuilder::new().namespace("ns"));
+    let many: Vec<String> = (0..ID_BATCH_SIZE + 1).map(|i| format!("id-{i}")).collect();
+    let first = server
+        .mock("POST", "/vectors/delete")
+        .match_header("Api-Key", "pc-key")
+        .match_body(Matcher::Json(
+            json!({ "ids": many[..ID_BATCH_SIZE], "namespace": "ns" }),
+        ))
+        .with_body("{}")
+        .expect(1)
+        .create_async()
+        .await;
+    let rest = server
+        .mock("POST", "/vectors/delete")
+        .match_body(Matcher::Json(
+            json!({ "ids": [many[ID_BATCH_SIZE]], "namespace": "ns" }),
+        ))
+        .with_body("{}")
+        .expect(1)
+        .create_async()
+        .await;
+    store
+        .delete(&many, &VecStoreOptions::default())
+        .await
+        .unwrap();
+    first.assert_async().await;
+    rest.assert_async().await;
+
+    store
+        .delete(&[], &VecStoreOptions::default())
+        .await
+        .unwrap();
+    assert!(store
+        .delete(
+            &many,
+            &VecStoreOptions::default().with_filters(json!({ "k": 1 }))
+        )
+        .await
+        .is_err());
+
+    server
+        .mock("POST", "/vectors/delete")
+        .with_status(403)
+        .with_body(json!({ "message": "forbidden" }).to_string())
+        .create_async()
+        .await;
+    let err = store
+        .delete(
+            &["x".to_string()],
+            &VecStoreOptions::default().with_name_space("other"),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("forbidden"), "{err}");
 }

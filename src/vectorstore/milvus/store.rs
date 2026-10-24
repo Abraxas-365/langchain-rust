@@ -8,13 +8,15 @@ use tokio::sync::OnceCell;
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{document_ids, VecStoreOptions, VectorStore},
+    vectorstore::{document_ids, vectorstore::in_id_order, VecStoreOptions, VectorStore},
 };
 
 /// Rows per insert request.
 pub(super) const BATCH_SIZE: usize = 100;
 /// Name of the filter template parameter holding the namespace.
 pub(super) const NAMESPACE_PARAM: &str = "__lc_namespace";
+/// Name of the filter template parameter holding the ids of `delete`/`get_by_ids`.
+pub(super) const IDS_PARAM: &str = "__lc_ids";
 /// Milvus "collection not found" codes (search answers 100, describe/load-state too).
 const COLLECTION_NOT_FOUND: i64 = 100;
 const LOAD_POLL_INTERVAL: Duration = Duration::from_millis(200);
@@ -374,6 +376,50 @@ impl Store {
         Ok((expr, params))
     }
 
+    /// The `filter` (and `exprParams`) of a request for rows with these primary keys,
+    /// within the namespace and `filters`. `None` when no id can match (an `Int64` key
+    /// and only non-numeric ids).
+    pub(super) fn ids_filter(
+        &self,
+        ids: &[String],
+        opt: &MilvusOptions,
+        schema: &Schema,
+    ) -> Result<Option<Map<String, Value>>, Box<dyn Error>> {
+        let (scope, mut params) = self.filter(opt, schema)?;
+        let by_id = if schema.auto_id {
+            // Inlined: Milvus reads numeric template params as floats, which can't hold
+            // 64-bit ids. They are parsed integers, so nothing can be injected.
+            let keys: Vec<String> = ids
+                .iter()
+                .filter_map(|id| id.parse::<i64>().ok())
+                .map(|id| id.to_string())
+                .collect();
+            if keys.is_empty() {
+                return Ok(None);
+            }
+            format!("{} in [{}]", schema.primary, keys.join(", "))
+        } else {
+            if ids.is_empty() {
+                return Ok(None);
+            }
+            if params.contains_key(IDS_PARAM) {
+                return Err(format!("{IDS_PARAM} is a reserved filter parameter").into());
+            }
+            params.insert(IDS_PARAM.to_string(), json!(ids));
+            format!("{} in {{{IDS_PARAM}}}", schema.primary)
+        };
+        let filter = match scope {
+            Some(scope) => format!("{by_id} and ({scope})"),
+            None => by_id,
+        };
+        let mut body = Map::new();
+        body.insert("filter".into(), json!(filter));
+        if !params.is_empty() {
+            body.insert("exprParams".into(), Value::Object(params));
+        }
+        Ok(Some(body))
+    }
+
     pub(super) fn row(
         &self,
         doc: &Document,
@@ -418,7 +464,13 @@ impl Store {
             .remove("distance")
             .and_then(|d| d.as_f64())
             .unwrap_or_default();
-        let id = match hit.remove(&schema.primary) {
+        // Milvus 2.5 search hits name the primary key `id` whatever the field is called.
+        let primary = hit.remove(&schema.primary).or_else(|| {
+            (!schema.output_fields.iter().any(|f| f == "id"))
+                .then(|| hit.remove("id"))
+                .flatten()
+        });
+        let id = match primary {
             Some(Value::String(id)) => Some(id),
             Some(Value::Number(id)) => Some(id.to_string()),
             _ => None,
@@ -592,5 +644,73 @@ impl VectorStore for Store {
                     .is_none_or(|threshold| doc.score >= f64::from(threshold))
             })
             .collect())
+    }
+
+    /// Deletes the rows with these ids within the namespace and `filters`, 100 ids per
+    /// request. With an `autoId` (`Int64`) key, non-numeric ids are skipped.
+    async fn delete(&self, ids: &[String], opt: &MilvusOptions) -> Result<(), Box<dyn Error>> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let Some(schema) = self.schema(None).await? else {
+            return Ok(()); // Nothing was ever added.
+        };
+        for batch in ids.chunks(BATCH_SIZE) {
+            let Some(body) = self.ids_filter(batch, opt, schema)? else {
+                continue;
+            };
+            self.post("entities/delete", Value::Object(body)).await?;
+        }
+        Ok(())
+    }
+
+    /// The rows with these ids within the namespace and `filters`, in request order
+    /// (score 0).
+    async fn get_by_ids(
+        &self,
+        ids: &[String],
+        opt: &MilvusOptions,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let Some(schema) = self.schema(None).await? else {
+            return Ok(vec![]); // Nothing was ever added.
+        };
+        let mut docs = Vec::with_capacity(ids.len());
+        for batch in ids.chunks(BATCH_SIZE) {
+            let Some(mut body) = self.ids_filter(batch, opt, schema)? else {
+                continue;
+            };
+            let mut output_fields = schema.output_fields.clone();
+            output_fields.push(schema.primary.clone());
+            body.insert("outputFields".into(), json!(output_fields));
+            body.insert("limit".into(), json!(batch.len()));
+            let answer = self.post("entities/query", Value::Object(body)).await?;
+            docs.extend(
+                answer["data"]
+                    .as_array()
+                    .map(Vec::as_slice)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|row| match row {
+                        // Query rows have no distance, so the score is 0.
+                        Value::Object(row) => Some(self.to_document(row.clone(), schema)),
+                        _ => None,
+                    }),
+            );
+        }
+        if schema.auto_id {
+            // Int64 ids come back canonical ("7" for "007").
+            let wanted: Vec<String> = ids
+                .iter()
+                .map(|id| {
+                    id.parse::<i64>()
+                        .map_or_else(|_| id.clone(), |n| n.to_string())
+                })
+                .collect();
+            return Ok(in_id_order(&wanted, docs));
+        }
+        Ok(in_id_order(ids, docs))
     }
 }
