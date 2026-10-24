@@ -4,7 +4,7 @@
 //!
 //! | span | fields |
 //! |---|---|
-//! | `llm.generate` | `provider`, `model`, `stream`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `tool_calls`, `error` |
+//! | `llm.generate` | `provider`, `model`, `stream`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `tool_calls`, `error` |
 //! | `embed.documents` / `embed.query` | `provider`, `model`, `count`, `error` |
 //! | `chain.call` | `chain`, `error` |
 //! | `agent.run` | `max_iterations`, `steps`, `total_tokens`, `error` |
@@ -34,6 +34,8 @@ pub(crate) fn llm_span(provider: &'static str, model: &str, stream: bool) -> Spa
         prompt_tokens = Empty,
         completion_tokens = Empty,
         total_tokens = Empty,
+        cache_read_tokens = Empty,
+        cache_creation_tokens = Empty,
         tool_calls = Empty,
         error = Empty,
     )
@@ -44,11 +46,18 @@ fn record_result(span: &Span, result: &GenerateResult) {
         prompt_tokens,
         completion_tokens,
         total_tokens,
+        cache_read_tokens,
+        cache_creation_tokens,
     }) = &result.tokens
     {
         span.record("prompt_tokens", prompt_tokens);
         span.record("completion_tokens", completion_tokens);
         span.record("total_tokens", total_tokens);
+        // Only when the provider reports cache activity, to keep spans small.
+        if *cache_read_tokens > 0 || *cache_creation_tokens > 0 {
+            span.record("cache_read_tokens", cache_read_tokens);
+            span.record("cache_creation_tokens", cache_creation_tokens);
+        }
     }
     if result.has_tool_calls() {
         span.record("tool_calls", result.tool_calls.len());
@@ -309,6 +318,25 @@ mod tests {
         assert_eq!(span.field("total_tokens"), Some("10"));
         assert_eq!(span.field("tool_calls"), Some("2"));
         assert_eq!(span.field("error"), None);
+        // No cache activity: the cache fields stay empty.
+        assert_eq!(span.field("cache_read_tokens"), None);
+        assert_eq!(span.field("cache_creation_tokens"), None);
+    }
+
+    #[tokio::test]
+    async fn traced_generate_records_cache_tokens() {
+        let (spans, _guard) = capture();
+        traced_generate("anthropic", "claude-x", async {
+            Ok(GenerateResult {
+                tokens: Some(TokenUsage::new(100, 1).with_cache_tokens(80, 0)),
+                ..Default::default()
+            })
+        })
+        .await
+        .unwrap();
+        let span = &spans.named("llm.generate")[0];
+        assert_eq!(span.field("cache_read_tokens"), Some("80"));
+        assert_eq!(span.field("cache_creation_tokens"), Some("0"));
     }
 
     #[tokio::test]

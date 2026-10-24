@@ -1,5 +1,5 @@
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
+    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError},
     llm::QwenError,
     schemas::{Message, StreamData},
 };
@@ -268,11 +268,7 @@ impl Qwen {
                     }
                 };
 
-                let tokens = Some(TokenUsage {
-                    prompt_tokens: api_response.usage.prompt_tokens,
-                    completion_tokens: api_response.usage.completion_tokens,
-                    total_tokens: api_response.usage.total_tokens,
-                });
+                let tokens = Some(api_response.usage.token_usage());
 
                 Ok(GenerateResult {
                     tokens,

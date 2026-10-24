@@ -523,6 +523,45 @@ async fn generate_stream_yields_text_then_done_with_usage() {
 }
 
 #[tokio::test]
+async fn cached_prompt_tokens_are_reported() {
+    let usage = json!({"prompt_tokens": 2006, "completion_tokens": 3, "total_tokens": 2009,
+                       "prompt_tokens_details": {"cached_tokens": 1920}});
+    let expected = TokenUsage::new(2006, 3).with_cache_tokens(1920, 0);
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/chat/completions")
+        .match_body(mockito::Matcher::PartialJson(json!({"stream": true})))
+        .with_header("content-type", "text/event-stream")
+        .with_body(sse(&[
+            chunk(Some("ok"), None),
+            chunk(None, Some(usage.clone())),
+        ]))
+        .create_async()
+        .await;
+    let mut body: Value = serde_json::from_str(&completion_body(
+        json!({"role": "assistant", "content": "ok"}),
+    ))
+    .unwrap();
+    body["usage"] = usage;
+    server
+        .mock("POST", "/chat/completions")
+        .with_header("content-type", "application/json")
+        .with_body(body.to_string())
+        .create_async()
+        .await;
+
+    let llm = llm_for(&server);
+    let messages = [Message::new_human_message("hi")];
+    let blocking = llm.generate(&messages).await.unwrap();
+    assert_eq!(blocking.tokens, Some(expected.clone()));
+    let events: Vec<_> = llm.generate_stream(&messages).collect().await;
+    let Some(Ok(LLMEvent::Done(streamed))) = events.last() else {
+        panic!("{events:?}")
+    };
+    assert_eq!(streamed.tokens, Some(expected));
+}
+
+#[tokio::test]
 async fn generate_stream_rebuilds_tool_calls_from_deltas() {
     let mut server = mockito::Server::new_async().await;
     server

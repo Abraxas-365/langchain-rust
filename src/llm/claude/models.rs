@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 
 use crate::language_models::{GenerateResult, ThinkingBlock, ThinkingConfig, TokenUsage};
 use crate::schemas::messages::ImageSource;
-use crate::schemas::{FunctionCallBehavior, FunctionDefinition, Message, ToolCall};
+use crate::schemas::{CacheControl, FunctionCallBehavior, FunctionDefinition, Message, ToolCall};
 
 /// A message in the Anthropic Messages API. `content` is either a plain string or a list of
 /// content blocks (`text`, `tool_use`, `tool_result`, ...).
@@ -107,11 +107,14 @@ pub(crate) fn to_claude_messages(messages: &[&Message]) -> Vec<ClaudeMessage> {
 
     let mut out: Vec<ClaudeMessage> = Vec::new();
     for message in messages {
-        let next = match message.message_type {
+        let mut next = match message.message_type {
             MessageType::AIMessage => ClaudeMessage::assistant(message),
             MessageType::HumanMessage | MessageType::SystemMessage => ClaudeMessage::user(message),
             MessageType::ToolMessage => ClaudeMessage::tool_result(message),
         };
+        if let Some(cache_control) = message.cache_control {
+            next.content = with_cache_breakpoint(std::mem::take(&mut next.content), cache_control);
+        }
         match out.last_mut() {
             Some(prev) if prev.is_tool_result() && next.is_tool_result() => {
                 if let (Some(prev_blocks), Value::Array(blocks)) =
@@ -124,6 +127,51 @@ pub(crate) fn to_claude_messages(messages: &[&Message]) -> Vec<ClaudeMessage> {
         }
     }
     out
+}
+
+/// Puts `cache_control` on the last block of a message's content, so the prompt up to and
+/// including it is cached. Plain-string content becomes one text block. Thinking blocks and
+/// blank text can't carry a breakpoint, so they are skipped (nothing cacheable: unchanged).
+fn with_cache_breakpoint(content: Value, cache_control: CacheControl) -> Value {
+    let mut blocks = match content {
+        Value::String(text) if text.is_empty() => return Value::String(text),
+        Value::String(text) => vec![json!({"type": "text", "text": text})],
+        Value::Array(blocks) => blocks,
+        other => return other,
+    };
+    let target = blocks.iter_mut().rev().find(|b| {
+        let kind = b.get("type").and_then(Value::as_str).unwrap_or_default();
+        let empty_text = kind == "text" && b["text"].as_str().is_none_or(|t| t.trim().is_empty());
+        !matches!(kind, "thinking" | "redacted_thinking") && !empty_text
+    });
+    if let Some(Value::Object(block)) = target {
+        block.insert("cache_control".into(), cache_control.to_anthropic());
+    }
+    Value::Array(blocks)
+}
+
+/// The `system` parameter: the system messages joined into one string, or — when any of them
+/// is marked for caching — one text block per message so the breakpoint lands where asked.
+pub(crate) fn system_param(system_messages: &[&Message]) -> Option<Value> {
+    if system_messages.is_empty() {
+        return None;
+    }
+    if system_messages.iter().all(|m| m.cache_control.is_none()) {
+        let joined: Vec<&str> = system_messages.iter().map(|m| m.content.as_str()).collect();
+        return Some(Value::String(joined.join("\n\n")));
+    }
+    let blocks = system_messages
+        .iter()
+        .filter(|m| !m.content.is_empty())
+        .map(|m| {
+            let mut block = json!({"type": "text", "text": m.content});
+            if let Some(cache_control) = m.cache_control {
+                block["cache_control"] = cache_control.to_anthropic();
+            }
+            block
+        })
+        .collect();
+    Some(Value::Array(blocks))
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -158,7 +206,7 @@ pub(crate) struct Payload {
     pub messages: Vec<ClaudeMessage>,
     pub max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<String>,
+    pub system: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -177,6 +225,9 @@ pub(crate) struct Payload {
     pub thinking: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_config: Option<Value>,
+    /// Automatic prompt caching: the API puts the breakpoint on the last cacheable block.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<Value>,
 }
 
 /// What a model accepts for reasoning, guessed from its name (as langchaingo does).
@@ -388,6 +439,23 @@ pub(crate) struct Usage {
     pub input_tokens: u32,
     #[serde(default)]
     pub output_tokens: u32,
+    #[serde(default)]
+    pub cache_read_input_tokens: u32,
+    #[serde(default)]
+    pub cache_creation_input_tokens: u32,
+}
+
+impl Usage {
+    /// `input_tokens` excludes cached tokens; `prompt_tokens` counts the whole prompt, as
+    /// with the other providers.
+    pub fn token_usage(&self) -> TokenUsage {
+        let prompt =
+            self.input_tokens + self.cache_read_input_tokens + self.cache_creation_input_tokens;
+        TokenUsage::new(prompt, self.output_tokens).with_cache_tokens(
+            self.cache_read_input_tokens,
+            self.cache_creation_input_tokens,
+        )
+    }
 }
 
 /// Turns response blocks into a [`GenerateResult`]: the text, or — when Claude asks for tools —

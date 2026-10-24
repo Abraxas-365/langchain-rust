@@ -1,7 +1,7 @@
 use crate::{
     language_models::{
         box_llm_events, llm::LLM, options::CallOptions, GenerateResult, LLMError, LLMEvent,
-        LLMEventStream, ThinkingBlock, TokenUsage,
+        LLMEventStream, ThinkingBlock,
     },
     llm::DeepseekError,
     schemas::{Message, StreamData},
@@ -132,11 +132,7 @@ impl Deepseek {
             }
         }
 
-        let tokens = Some(TokenUsage {
-            prompt_tokens: res.usage.prompt_tokens,
-            completion_tokens: res.usage.completion_tokens,
-            total_tokens: res.usage.total_tokens,
-        });
+        let tokens = Some(res.usage.token_usage());
 
         Ok(GenerateResult {
             tokens,

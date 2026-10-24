@@ -545,10 +545,13 @@ fn invocation_error<E: std::error::Error>(e: E) -> BedrockError {
 }
 
 fn token_usage(u: &aws_sdk_bedrockruntime::types::TokenUsage) -> TokenUsage {
+    let tokens = |n: Option<i32>| n.unwrap_or(0) as u32;
     TokenUsage {
         prompt_tokens: u.input_tokens() as u32,
         completion_tokens: u.output_tokens() as u32,
         total_tokens: u.total_tokens() as u32,
+        cache_read_tokens: tokens(u.cache_read_input_tokens()),
+        cache_creation_tokens: tokens(u.cache_write_input_tokens()),
     }
 }
 

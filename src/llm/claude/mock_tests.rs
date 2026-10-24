@@ -15,7 +15,7 @@ use crate::{
     },
     llm::{AnthropicError, Claude},
     prompt_args,
-    schemas::{messages::ImageContent, Message, ToolCall},
+    schemas::{messages::ImageContent, CacheControl, Message, ToolCall},
     tools::Tool,
 };
 
@@ -78,6 +78,50 @@ async fn claude_generate_sends_headers_and_parses_text() {
             tokens.total_tokens
         ),
         (10, 5, 15)
+    );
+}
+
+#[tokio::test]
+async fn claude_prompt_caching_end_to_end() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("POST", "/v1/messages")
+        .match_body(Matcher::PartialJson(json!({
+            "cache_control": {"type": "ephemeral"},
+            "system": [{"type": "text", "text": "long manual", "cache_control": {"type": "ephemeral", "ttl": "1h"}}],
+            "messages": [{"role": "user", "content": "q"}]
+        })))
+        .with_body(
+            json!({
+                "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-test",
+                "content": [{"type": "text", "text": "a"}], "stop_reason": "end_turn", "stop_sequence": null,
+                "usage": {"input_tokens": 4, "output_tokens": 2,
+                          "cache_read_input_tokens": 2048, "cache_creation_input_tokens": 100}
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let res = claude(&server)
+        .with_options(CallOptions::new().with_prompt_caching(CacheControl::Ephemeral))
+        .generate(&[
+            Message::new_system_message("long manual")
+                .with_cache_control(CacheControl::EphemeralOneHour),
+            Message::new_human_message("q"),
+        ])
+        .await
+        .unwrap();
+    mock.assert_async().await;
+    let tokens = res.tokens.unwrap();
+    assert_eq!(
+        (
+            tokens.prompt_tokens,
+            tokens.total_tokens,
+            tokens.cache_read_tokens,
+            tokens.cache_creation_tokens
+        ),
+        (2152, 2154, 2048, 100)
     );
 }
 

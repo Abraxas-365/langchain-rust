@@ -25,6 +25,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Anthropic Claude](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_anthropic_claude.rs)
   - [x] [Response caching for any LLM](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_cache.rs)
   - [x] [Reasoning / thinking (Claude, OpenAI, Ollama, DeepSeek)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_thinking.rs)
+  - [x] [Prompt caching (Claude; cache usage for OpenAI, DeepSeek, Qwen, Bedrock)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/llm_prompt_caching.rs)
 
 - Embeddings
 

@@ -1,3 +1,4 @@
+use crate::language_models::TokenUsage;
 use crate::schemas::{Message, MessageType};
 use serde::{Deserialize, Serialize};
 
@@ -64,6 +65,21 @@ pub(crate) struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    /// Prompt tokens served from DeepSeek's context cache (automatic).
+    #[serde(default)]
+    pub prompt_cache_hit_tokens: u32,
+}
+
+impl Usage {
+    pub fn token_usage(&self) -> TokenUsage {
+        TokenUsage {
+            prompt_tokens: self.prompt_tokens,
+            completion_tokens: self.completion_tokens,
+            total_tokens: self.total_tokens,
+            ..Default::default()
+        }
+        .with_cache_tokens(self.prompt_cache_hit_tokens, 0)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

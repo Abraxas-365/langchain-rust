@@ -9,7 +9,7 @@ use async_openai::types::chat::{
     ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
     ChatCompletionRequestUserMessageContent, ChatCompletionRequestUserMessageContentPart,
     ChatCompletionStreamOptions, ChatCompletionToolChoiceOption, ChatCompletionTools,
-    CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+    CompletionUsage, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
     CreateChatCompletionStreamResponse, ImageDetail, ImageUrl, ReasoningEffort, ResponseFormat,
     StopConfiguration,
 };
@@ -110,11 +110,7 @@ impl<C: Config + Clone + Send + Sync + 'static> OpenAI<C> {
                     match result {
                         Ok(response) => {
                             if let Some(usage) = response.usage {
-                                generate_result.tokens = Some(TokenUsage {
-                                    prompt_tokens: usage.prompt_tokens,
-                                    completion_tokens: usage.completion_tokens,
-                                    total_tokens: usage.total_tokens,
-                                });
+                                generate_result.tokens = Some(token_usage(&usage));
                             }
                             for chat_choice in response.choices.iter() {
                                 let chat_choice: ChatChoiceStream = chat_choice.clone();
@@ -143,11 +139,7 @@ impl<C: Config + Clone + Send + Sync + 'static> OpenAI<C> {
                 let mut generate_result = GenerateResult::default();
 
                 if let Some(usage) = response.usage {
-                    generate_result.tokens = Some(TokenUsage {
-                        prompt_tokens: usage.prompt_tokens,
-                        completion_tokens: usage.completion_tokens,
-                        total_tokens: usage.total_tokens,
-                    });
+                    generate_result.tokens = Some(token_usage(&usage));
                 }
 
                 if let Some(choice) = &response.choices.first() {
@@ -256,6 +248,22 @@ impl<C: Config + Clone + Send + Sync + 'static> LLM for OpenAI<C> {
     }
 }
 
+/// OpenAI caches long prompts automatically; `cached_tokens` is the part read from it.
+fn token_usage(usage: &CompletionUsage) -> TokenUsage {
+    let cached = usage
+        .prompt_tokens_details
+        .as_ref()
+        .and_then(|d| d.cached_tokens)
+        .unwrap_or(0);
+    TokenUsage {
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+        total_tokens: usage.total_tokens,
+        cache_read_tokens: cached,
+        cache_creation_tokens: 0,
+    }
+}
+
 /// Rebuilds a [`GenerateResult`] from OpenAI stream chunks. Tool calls arrive as
 /// fragments keyed by `index`: the first carries `id` and `name`, the rest append to
 /// `arguments`.
@@ -270,11 +278,7 @@ impl StreamAccumulator {
     /// Applies one chunk; returns its text delta, if any. Only the first choice is used.
     fn push(&mut self, chunk: CreateChatCompletionStreamResponse) -> Option<String> {
         if let Some(usage) = chunk.usage {
-            self.tokens = Some(TokenUsage {
-                prompt_tokens: usage.prompt_tokens,
-                completion_tokens: usage.completion_tokens,
-                total_tokens: usage.total_tokens,
-            });
+            self.tokens = Some(token_usage(&usage));
         }
         let delta = chunk.choices.into_iter().find(|c| c.index == 0)?.delta;
         for part in delta.tool_calls.unwrap_or_default() {

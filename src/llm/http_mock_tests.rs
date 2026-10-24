@@ -5,7 +5,9 @@ use mockito::Matcher;
 use serde_json::json;
 
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, LLMError, LLMEvent, ThinkingBlock},
+    language_models::{
+        llm::LLM, options::CallOptions, LLMError, LLMEvent, ThinkingBlock, TokenUsage,
+    },
     llm::{Deepseek, DeepseekError, DeepseekModel, Qwen, QwenError},
     schemas::Message,
 };
@@ -271,6 +273,44 @@ fn qwen(server: &mockito::ServerGuard) -> Qwen {
     Qwen::new()
         .with_api_key("qk")
         .with_base_url(format!("{}/chat", server.url()))
+}
+
+#[tokio::test]
+async fn deepseek_and_qwen_report_cached_prompt_tokens() {
+    let body = |usage: serde_json::Value| {
+        let mut v: serde_json::Value = serde_json::from_str(&chat_body("ok")).unwrap();
+        v["usage"] = usage;
+        v.to_string()
+    };
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/v1/chat/completions")
+        .with_body(body(
+            json!({"prompt_tokens": 100, "completion_tokens": 2, "total_tokens": 102,
+                               "prompt_cache_hit_tokens": 64, "prompt_cache_miss_tokens": 36}),
+        ))
+        .create_async()
+        .await;
+    server
+        .mock("POST", "/chat")
+        .with_body(body(
+            json!({"prompt_tokens": 50, "completion_tokens": 2, "total_tokens": 52,
+                               "prompt_tokens_details": {"cached_tokens": 32}}),
+        ))
+        .create_async()
+        .await;
+    let msgs = [Message::new_human_message("hi")];
+
+    let ds = deepseek(&server).generate(&msgs).await.unwrap();
+    assert_eq!(
+        ds.tokens,
+        Some(TokenUsage::new(100, 2).with_cache_tokens(64, 0))
+    );
+    let qw = qwen(&server).generate(&msgs).await.unwrap();
+    assert_eq!(
+        qw.tokens,
+        Some(TokenUsage::new(50, 2).with_cache_tokens(32, 0))
+    );
 }
 
 #[tokio::test]
