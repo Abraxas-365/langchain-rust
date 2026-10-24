@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore},
+    vectorstore::{vectorstore::in_id_order, VecStoreOptions, VectorStore},
 };
 
 pub struct Store {
@@ -185,12 +185,7 @@ impl VectorStore for Store {
         docs: &[Document],
         opt: &PgOptions,
     ) -> Result<Vec<String>, Box<dyn Error>> {
-        if opt.score_threshold.is_some() || opt.filters.is_some() || opt.name_space.is_some() {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "score_threshold, filters, and name_space are not supported in pgvector",
-            )));
-        }
+        reject_query_options(opt)?;
         // The uuid column is TEXT. Reject empty ids before any write or embedding.
         for doc in docs {
             if doc.id.as_ref().is_some_and(|id| id.is_empty()) {
@@ -343,4 +338,69 @@ WHERE {}.collection_id = EXCLUDED.collection_id"#,
 
         Ok(docs)
     }
+
+    /// Deletes rows of this store's collection only; ids owned by another collection
+    /// are left alone.
+    async fn delete(&self, ids: &[String], opt: &PgOptions) -> Result<(), Box<dyn Error>> {
+        reject_query_options(opt)?;
+        if ids.is_empty() {
+            return Ok(());
+        }
+        sqlx::query(AssertSqlSafe(format!(
+            "DELETE FROM {} WHERE uuid = ANY($1) AND collection_id = $2",
+            self.embedder_table_name
+        )))
+        .bind(ids)
+        .bind(&self.collection_uuid)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_by_ids(
+        &self,
+        ids: &[String],
+        opt: &PgOptions,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        reject_query_options(opt)?;
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let rows = sqlx::query(AssertSqlSafe(format!(
+            "SELECT uuid, document, cmetadata FROM {} WHERE uuid = ANY($1) AND collection_id = $2",
+            self.embedder_table_name
+        )))
+        .bind(ids)
+        .bind(&self.collection_uuid)
+        .fetch_all(&self.pool)
+        .await?;
+        let docs = rows
+            .into_iter()
+            .map(|row| {
+                let id: String = row.try_get(0)?;
+                let page_content: String = row.try_get(1)?;
+                let metadata: Option<Value> = row.try_get(2)?;
+                let metadata = match metadata {
+                    Some(Value::Object(obj)) => obj.into_iter().collect(),
+                    _ => HashMap::new(),
+                };
+                Ok(Document::new(page_content)
+                    .with_metadata(metadata)
+                    .with_id(id))
+            })
+            .collect::<Result<Vec<Document>, sqlx::Error>>()?;
+        Ok(in_id_order(ids, docs))
+    }
+}
+
+/// Writes and id lookups are scoped by the store's collection, not by options.
+fn reject_query_options(opt: &PgOptions) -> Result<(), Box<dyn Error>> {
+    if opt.score_threshold.is_some() || opt.filters.is_some() || opt.name_space.is_some() {
+        return Err(
+            "score_threshold, filters, and name_space are not supported in pgvector \
+                    writes or id lookups"
+                .into(),
+        );
+    }
+    Ok(())
 }
