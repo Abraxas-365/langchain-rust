@@ -11,20 +11,39 @@ pub mod options;
 mod error;
 pub use error::*;
 
+pub mod thinking;
+pub use thinking::{ThinkingBlock, ThinkingConfig, ThinkingDisplay, ThinkingEffort};
+
 /// The result of an LLM call.
 ///
 /// When the model asks for tools, `tool_calls` holds them (same type for every provider)
 /// and `generation` holds the same calls as an OpenAI-style JSON array, so code that
 /// reads `generation` keeps working. Use [`GenerateResult::with_tool_calls`] to build one.
+///
+/// `thinking` holds the model's reasoning when the provider returns it (see
+/// [`ThinkingConfig`]); `generation` never includes it.
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct GenerateResult {
     pub tokens: Option<TokenUsage>,
     pub generation: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tool_calls: Vec<ToolCall>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub thinking: Vec<ThinkingBlock>,
 }
 
 impl GenerateResult {
+    /// Sets the model's reasoning blocks.
+    pub fn with_thinking(mut self, thinking: Vec<ThinkingBlock>) -> Self {
+        self.thinking = thinking;
+        self
+    }
+
+    /// The readable reasoning, blocks joined by blank lines (empty when there is none).
+    pub fn thinking_text(&self) -> String {
+        thinking::join_thinking(&self.thinking)
+    }
+
     /// Sets `tool_calls` and mirrors them into `generation` as JSON. Empty `calls`
     /// leave the result untouched.
     pub fn with_tool_calls(mut self, calls: Vec<ToolCall>) -> Self {
@@ -65,13 +84,16 @@ impl GenerateResult {
 /// An event from [`llm::LLM::generate_stream`] (and `Chain::call_stream`).
 ///
 /// Zero or more `Text` events arrive as the model writes, then exactly one `Done` with
-/// the complete result: full text, typed `tool_calls` and token usage when the
-/// provider reports it.
+/// the complete result: full text, typed `tool_calls`, reasoning and token usage when
+/// the provider reports them. Models that reason send `Thinking` chunks too, usually
+/// before the text.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum LLMEvent {
     /// A chunk of text, as the model produces it.
     Text(String),
+    /// A chunk of the model's reasoning, as it produces it. Never part of `Text`.
+    Thinking(String),
     /// The complete response. Always the last event.
     Done(GenerateResult),
 }
@@ -87,10 +109,15 @@ where
     Box::pin(stream)
 }
 
-/// The events for a result that was not streamed: its text in one piece (unless the
-/// model asked for tools, in which case `generation` is just the JSON mirror), then `Done`.
+/// The events for a result that was not streamed: its reasoning and its text, each in
+/// one piece (no text when the model asked for tools, as `generation` is then just the
+/// JSON mirror), then `Done`.
 pub(crate) fn result_events(result: GenerateResult) -> Vec<LLMEvent> {
-    let mut events = Vec::with_capacity(2);
+    let mut events = Vec::with_capacity(3);
+    let thinking = result.thinking_text();
+    if !thinking.is_empty() {
+        events.push(LLMEvent::Thinking(thinking));
+    }
     if !result.has_tool_calls() && !result.generation.is_empty() {
         events.push(LLMEvent::Text(result.generation.clone()));
     }
@@ -239,6 +266,56 @@ mod tests {
             result_events(GenerateResult::default()).as_slice(),
             [LLMEvent::Done(_)]
         ));
+    }
+
+    #[test]
+    fn result_events_send_thinking_before_text() {
+        let result = GenerateResult {
+            generation: "4".into(),
+            ..Default::default()
+        }
+        .with_thinking(vec![
+            ThinkingBlock::text("2+2"),
+            ThinkingBlock::text("is 4"),
+        ]);
+        let events = result_events(result);
+        assert!(
+            matches!(events.as_slice(), [LLMEvent::Thinking(t), LLMEvent::Text(x), LLMEvent::Done(r)]
+                if t == "2+2\n\nis 4" && x == "4" && r.thinking.len() == 2),
+            "{events:?}"
+        );
+
+        // Thinking with tool calls: thinking, then Done (no JSON text).
+        let tools = result_events(
+            GenerateResult::default()
+                .with_tool_calls(vec![ToolCall::new("a", "f", "{}")])
+                .with_thinking(vec![ThinkingBlock::text("use f")]),
+        );
+        assert!(matches!(
+            tools.as_slice(),
+            [LLMEvent::Thinking(_), LLMEvent::Done(_)]
+        ));
+    }
+
+    #[test]
+    fn generate_result_thinking_serde() {
+        let old: GenerateResult =
+            serde_json::from_str(r#"{"tokens":null,"generation":"hi"}"#).unwrap();
+        assert!(old.thinking.is_empty());
+        assert!(serde_json::to_value(&old)
+            .unwrap()
+            .get("thinking")
+            .is_none());
+
+        let with = GenerateResult::default().with_thinking(vec![ThinkingBlock::Thinking {
+            thinking: "t".into(),
+            signature: Some("s".into()),
+        }]);
+        let v = serde_json::to_value(&with).unwrap();
+        assert_eq!(v["thinking"][0]["signature"], "s");
+        let back: GenerateResult = serde_json::from_value(v).unwrap();
+        assert_eq!(back.thinking, with.thinking);
+        assert_eq!(back.thinking_text(), "t");
     }
 
     /// An LLM that only implements `generate` still streams through the default method.

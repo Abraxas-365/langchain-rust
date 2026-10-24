@@ -4,6 +4,8 @@ use tokio::sync::Mutex;
 
 use crate::schemas::{FunctionCallBehavior, FunctionDefinition, ResponseFormat};
 
+use super::ThinkingConfig;
+
 #[derive(Clone)]
 pub struct CallOptions {
     pub candidate_count: Option<usize>,
@@ -28,6 +30,8 @@ pub struct CallOptions {
     pub function_call_behavior: Option<FunctionCallBehavior>,
     pub response_format: Option<ResponseFormat>,
     pub stream_usage: Option<bool>,
+    /// Reasoning settings, for models that think before answering. See [`ThinkingConfig`].
+    pub thinking: Option<ThinkingConfig>,
 }
 
 impl Default for CallOptions {
@@ -56,6 +60,7 @@ impl CallOptions {
             function_call_behavior: None,
             response_format: None,
             stream_usage: None,
+            thinking: None,
         }
     }
 
@@ -161,6 +166,13 @@ impl CallOptions {
         self
     }
 
+    /// Turns reasoning on or off and tunes it. Providers map it to their own parameter
+    /// (Anthropic `thinking`, OpenAI `reasoning_effort`, Ollama `think`).
+    pub fn with_thinking(mut self, thinking: ThinkingConfig) -> Self {
+        self.thinking = Some(thinking);
+        self
+    }
+
     pub fn merge_options(&mut self, incoming_options: CallOptions) {
         // For simple scalar types wrapped in Option, prefer incoming option if it is Some
         self.candidate_count = incoming_options.candidate_count.or(self.candidate_count);
@@ -186,6 +198,7 @@ impl CallOptions {
             .response_format
             .or(self.response_format.clone());
         self.stream_usage = incoming_options.stream_usage.or(self.stream_usage);
+        self.thinking = incoming_options.thinking.or(self.thinking.clone());
 
         // For `Vec<String>`, merge if both are Some; prefer incoming if only incoming is Some
         if let Some(mut new_stop_words) = incoming_options.stop_words {
@@ -276,6 +289,26 @@ mod tests {
             Some(ResponseFormat::JsonObject)
         ));
         assert_eq!(base.stream_usage, Some(true));
+    }
+
+    #[test]
+    fn merge_thinking_prefers_incoming_and_keeps_existing() {
+        use crate::language_models::ThinkingEffort;
+
+        let mut base = CallOptions::new().with_thinking(ThinkingConfig::enabled());
+        base.merge_options(CallOptions::new());
+        assert_eq!(base.thinking, Some(ThinkingConfig::enabled()), "kept");
+
+        let high = ThinkingConfig::enabled().with_effort(ThinkingEffort::High);
+        base.merge_options(CallOptions::new().with_thinking(high.clone()));
+        assert_eq!(base.thinking, Some(high), "incoming wins");
+
+        base.merge_options(CallOptions::new().with_thinking(ThinkingConfig::disabled()));
+        assert_eq!(
+            base.thinking,
+            Some(ThinkingConfig::disabled()),
+            "an explicit off overrides an earlier on"
+        );
     }
 
     #[tokio::test]

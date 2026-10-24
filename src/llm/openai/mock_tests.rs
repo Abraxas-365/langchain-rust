@@ -162,6 +162,43 @@ fn request_includes_options() {
 }
 
 #[test]
+fn thinking_effort_maps_to_reasoning_effort() {
+    use crate::language_models::{ThinkingConfig, ThinkingEffort};
+    let effort_for = |config: Option<ThinkingConfig>| {
+        let mut options = CallOptions::new();
+        if let Some(config) = config {
+            options = options.with_thinking(config);
+        }
+        let llm = OpenAI::default()
+            .with_model("o4-mini")
+            .with_options(options);
+        let req = request_json(&llm, &[Message::new_human_message("x")], false);
+        req.get("reasoning_effort").cloned().unwrap_or(Value::Null)
+    };
+    for (effort, wire) in [
+        (ThinkingEffort::Low, "low"),
+        (ThinkingEffort::Medium, "medium"),
+        (ThinkingEffort::High, "high"),
+        (ThinkingEffort::XHigh, "xhigh"),
+        (ThinkingEffort::Max, "max"),
+    ] {
+        assert_eq!(
+            effort_for(Some(ThinkingConfig::enabled().with_effort(effort))),
+            wire
+        );
+    }
+    // No effort, thinking off, or no config: the parameter is left out.
+    assert_eq!(effort_for(Some(ThinkingConfig::enabled())), Value::Null);
+    assert_eq!(
+        effort_for(Some(
+            ThinkingConfig::disabled().with_effort(ThinkingEffort::High)
+        )),
+        Value::Null
+    );
+    assert_eq!(effort_for(None), Value::Null);
+}
+
+#[test]
 fn tool_choice_auto_none_and_simple_formats() {
     for (behavior, expected) in [
         (FunctionCallBehavior::Auto, json!("auto")),

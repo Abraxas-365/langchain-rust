@@ -9,7 +9,10 @@ use serde_json::{json, Value};
 use crate::{
     agent::{AgentExecutor, OpenAiToolAgentBuilder},
     chain::Chain,
-    language_models::{llm::LLM, options::CallOptions, LLMError},
+    language_models::{
+        llm::LLM, options::CallOptions, LLMError, LLMEvent, ThinkingBlock, ThinkingConfig,
+        ThinkingEffort,
+    },
     llm::{AnthropicError, Claude},
     prompt_args,
     schemas::{messages::ImageContent, Message, ToolCall},
@@ -331,6 +334,117 @@ async fn tools_agent_runs_a_tool_loop_with_claude() {
     assert_eq!(*calls.lock().unwrap(), vec![json!({"city": "Lima"})]);
     first.assert_async().await;
     second.assert_async().await;
+}
+
+#[tokio::test]
+async fn tools_agent_sends_signed_thinking_back_to_claude() {
+    let mut server = mockito::Server::new_async().await;
+    let thinking =
+        json!({"type": "thinking", "thinking": "I need the weather tool.", "signature": "sig-1"});
+    // 2nd turn: the assistant turn must start with the signed thinking block, unchanged.
+    let second = server
+        .mock("POST", "/v1/messages")
+        .match_body(Matcher::PartialJson(json!({
+            "thinking": {"type": "adaptive"},
+            "messages": [
+                {"role": "user", "content": "weather in Lima?"},
+                {"role": "assistant", "content": [
+                    thinking,
+                    {"type": "tool_use", "id": "toolu_1", "name": "weather", "input": {"city": "Lima"}}
+                ]},
+                {"role": "user", "content": [
+                    {"type": "tool_result", "tool_use_id": "toolu_1", "content": "sunny, 22C"}
+                ]}
+            ]
+        })))
+        .with_body(message_body(
+            json!([{"type": "text", "text": "Sunny, 22C."}]),
+            "end_turn",
+        ))
+        .expect(1)
+        .create_async()
+        .await;
+    let first = server
+        .mock("POST", "/v1/messages")
+        .match_body(Matcher::PartialJson(json!({
+            "thinking": {"type": "adaptive"},
+            "messages": [{"role": "user", "content": "weather in Lima?"}]
+        })))
+        .with_body(message_body(
+            json!([thinking, {"type": "tool_use", "id": "toolu_1", "name": "weather", "input": {"city": "Lima"}}]),
+            "tool_use",
+        ))
+        .expect(1)
+        .create_async()
+        .await;
+
+    let tool: Arc<dyn Tool> = Arc::new(Weather(Arc::new(StdMutex::new(Vec::new()))));
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[tool])
+        .build(
+            claude(&server)
+                .with_options(CallOptions::new().with_thinking(ThinkingConfig::enabled())),
+        )
+        .unwrap();
+    let out = AgentExecutor::from_agent(agent)
+        .invoke(prompt_args! {"input" => "weather in Lima?"})
+        .await
+        .unwrap();
+
+    assert_eq!(out, "Sunny, 22C.");
+    first.assert_async().await;
+    second.assert_async().await;
+}
+
+#[tokio::test]
+async fn claude_generate_stream_yields_thinking_then_text() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/v1/messages")
+        .match_body(Matcher::PartialJson(json!({
+            "stream": true,
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": "low"}
+        })))
+        .with_header("content-type", "text/event-stream")
+        .with_body(sse(&[
+            json!({"type": "message_start", "message": {"usage": {"input_tokens": 3, "output_tokens": 1}}}),
+            json!({"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}}),
+            json!({"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "Easy."}}),
+            json!({"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "s1"}}),
+            json!({"type": "content_block_stop", "index": 0}),
+            json!({"type": "content_block_start", "index": 1, "content_block": {"type": "text", "text": ""}}),
+            json!({"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "4"}}),
+            json!({"type": "content_block_stop", "index": 1}),
+            json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 9}}),
+            json!({"type": "message_stop"}),
+        ]))
+        .create_async()
+        .await;
+
+    let llm = claude(&server).with_options(
+        CallOptions::new()
+            .with_thinking(ThinkingConfig::enabled().with_effort(ThinkingEffort::Low)),
+    );
+    let events: Vec<LLMEvent> = llm
+        .generate_stream(&[Message::new_human_message("2+2?")])
+        .map(Result::unwrap)
+        .collect()
+        .await;
+    assert!(matches!(&events[0], LLMEvent::Thinking(t) if t == "Easy."));
+    assert!(matches!(&events[1], LLMEvent::Text(t) if t == "4"));
+    let LLMEvent::Done(done) = &events[2] else {
+        panic!("expected Done, got {events:?}")
+    };
+    assert_eq!(events.len(), 3);
+    assert_eq!(done.generation, "4");
+    assert_eq!(
+        done.thinking,
+        vec![ThinkingBlock::Thinking {
+            thinking: "Easy.".into(),
+            signature: Some("s1".into())
+        }]
+    );
 }
 
 #[tokio::test]

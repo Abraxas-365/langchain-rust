@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::language_models::{GenerateResult, TokenUsage};
+use crate::language_models::{GenerateResult, ThinkingBlock, ThinkingConfig, TokenUsage};
 use crate::schemas::messages::ImageSource;
 use crate::schemas::{FunctionCallBehavior, FunctionDefinition, Message, ToolCall};
 
@@ -52,15 +52,16 @@ impl ClaudeMessage {
         Self::new("user", Value::Array(blocks))
     }
 
-    /// An assistant turn. Tool calls (stored in the OpenAI-like format used across the crate)
-    /// become `tool_use` blocks, preceded by the text if there is any.
+    /// An assistant turn. Thinking blocks (needed when Claude thought before calling
+    /// tools) come first, then the text, then tool calls (stored in the OpenAI-like format
+    /// used across the crate) as `tool_use` blocks.
     pub fn assistant(message: &Message) -> Self {
         let calls = message.parse_tool_calls();
-        if calls.is_empty() {
+        let mut blocks: Vec<Value> = thinking_blocks(message).collect();
+        if calls.is_empty() && blocks.is_empty() {
             return Self::text("assistant", &message.content);
         }
 
-        let mut blocks = Vec::new();
         if !message.content.trim().is_empty() {
             blocks.push(json!({"type": "text", "text": message.content}));
         }
@@ -172,6 +173,162 @@ pub(crate) struct Payload {
     pub tools: Option<Vec<ClaudeTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_config: Option<Value>,
+}
+
+/// What a model accepts for reasoning, guessed from its name (as langchaingo does).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Capabilities {
+    /// Extended thinking at all.
+    pub thinking: bool,
+    /// Only `{"type": "adaptive"}`; budgets are rejected.
+    pub adaptive: bool,
+    /// `output_config.effort`.
+    pub effort: bool,
+}
+
+const ADAPTIVE: Capabilities = Capabilities {
+    thinking: true,
+    adaptive: true,
+    effort: true,
+};
+const BUDGET: Capabilities = Capabilities {
+    thinking: true,
+    adaptive: false,
+    effort: false,
+};
+const BUDGET_EFFORT: Capabilities = Capabilities {
+    thinking: true,
+    adaptive: false,
+    effort: true,
+};
+const LEGACY: Capabilities = Capabilities {
+    thinking: false,
+    adaptive: false,
+    effort: false,
+};
+
+/// First match wins, so more specific names come first.
+const CAPABILITY_RULES: &[(&str, Capabilities)] = &[
+    ("claude-fable", ADAPTIVE),
+    ("claude-opus-4-7", ADAPTIVE),
+    ("claude-opus-4-8", ADAPTIVE),
+    ("claude-opus-4-6", BUDGET_EFFORT),
+    ("claude-sonnet-4-6", BUDGET_EFFORT),
+    ("claude-4", BUDGET),
+    ("claude-3-7", BUDGET),
+    ("claude-3.7", BUDGET),
+    ("claude-3", LEGACY),
+    ("claude-2", LEGACY),
+    ("claude-instant", LEGACY),
+];
+
+/// 4.x families and the highest minor version whose behaviour is known; later minors are
+/// assumed to be newest-generation (adaptive) models.
+const FAMILY_RULES: &[(&str, u32)] = &[
+    ("claude-opus-4", 8),
+    ("claude-sonnet-4", 6),
+    ("claude-haiku-4", 5),
+];
+
+pub(crate) fn model_capabilities(model: &str) -> Capabilities {
+    let model = model.to_lowercase();
+    if let Some((_, caps)) = CAPABILITY_RULES
+        .iter()
+        .find(|(name, _)| model.contains(name))
+    {
+        return *caps;
+    }
+    for (prefix, last_listed) in FAMILY_RULES {
+        if let Some(minor) = family_minor(&model, prefix) {
+            return if minor > *last_listed {
+                ADAPTIVE
+            } else {
+                BUDGET
+            };
+        }
+    }
+    // Not a Claude name (gateway alias, compatible endpoint): keep the long-standing
+    // budget contract. An unknown Claude name is most likely a newer model.
+    if !model.contains("claude") {
+        return BUDGET;
+    }
+    ADAPTIVE
+}
+
+/// The minor version in names like `claude-opus-4-5-20251101`; `Some(0)` for the bare
+/// family name or a dated `.0` snapshot, `None` when `model` is not in the family.
+fn family_minor(model: &str, prefix: &str) -> Option<u32> {
+    let rest = &model[model.find(prefix)? + prefix.len()..];
+    let Some(rest) = rest.strip_prefix('-') else {
+        return Some(0);
+    };
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    if digits.is_empty() || digits.len() > 2 {
+        return Some(0);
+    }
+    Some(digits.parse().unwrap_or(0))
+}
+
+/// Smallest thinking budget Anthropic accepts, also the default.
+pub(crate) const MIN_THINKING_BUDGET: u32 = 1024;
+const MAX_THINKING_BUDGET: u32 = 128_000;
+
+/// The `thinking` and `output_config` request fields for `config` on `model`, plus the
+/// budget (when one is sent) so the caller can size `max_tokens`.
+pub(crate) fn thinking_params(
+    model: &str,
+    config: Option<&ThinkingConfig>,
+) -> (Option<Value>, Option<Value>, Option<u32>) {
+    let Some(config) = config else {
+        return (None, None, None);
+    };
+    let caps = model_capabilities(model);
+    if !caps.thinking {
+        return (None, None, None);
+    }
+    let output_config = config
+        .effort
+        .filter(|_| caps.effort)
+        .map(|effort| json!({"effort": effort.as_str()}));
+    // Thinking off is sent as no parameter: some models reject `{"type": "disabled"}`.
+    if !config.enabled {
+        return (None, output_config, None);
+    }
+    if caps.adaptive {
+        let mut thinking = json!({"type": "adaptive"});
+        if let Some(display) = config.display {
+            thinking["display"] = json!(display.as_str());
+        }
+        return (Some(thinking), output_config, None);
+    }
+    let budget = config
+        .budget_tokens
+        .unwrap_or(MIN_THINKING_BUDGET)
+        .clamp(MIN_THINKING_BUDGET, MAX_THINKING_BUDGET);
+    (
+        Some(json!({"type": "enabled", "budget_tokens": budget})),
+        output_config,
+        Some(budget),
+    )
+}
+
+/// Thinking blocks to send back in an assistant turn. Blocks without a signature come
+/// from other providers and are dropped: Anthropic rejects unsigned thinking.
+fn thinking_blocks(message: &Message) -> impl Iterator<Item = Value> + '_ {
+    message.thinking.iter().filter_map(|block| match block {
+        ThinkingBlock::Thinking {
+            thinking,
+            signature: Some(signature),
+        } => Some(json!({"type": "thinking", "thinking": thinking, "signature": signature})),
+        ThinkingBlock::Redacted { data } => {
+            Some(json!({"type": "redacted_thinking", "data": data}))
+        }
+        _ => None,
+    })
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -187,8 +344,8 @@ pub(crate) struct ApiResponse {
     pub usage: Usage,
 }
 
-/// A response content block. Only `text` and `tool_use` are used; other block types
-/// (e.g. `thinking`) are accepted and ignored.
+/// A response content block. `text`, `tool_use`, `thinking` and `redacted_thinking` are
+/// used; other block types are accepted and ignored.
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub(crate) struct Content {
     #[serde(rename = "type")]
@@ -201,6 +358,28 @@ pub(crate) struct Content {
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
+    /// Encrypted reasoning of a `redacted_thinking` block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+}
+
+impl Content {
+    fn thinking_block(&self) -> Option<ThinkingBlock> {
+        match self.content_type.as_str() {
+            "thinking" => Some(ThinkingBlock::Thinking {
+                thinking: self.thinking.clone().unwrap_or_default(),
+                signature: self.signature.clone().filter(|s| !s.is_empty()),
+            }),
+            "redacted_thinking" => Some(ThinkingBlock::Redacted {
+                data: self.data.clone().unwrap_or_default(),
+            }),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -237,4 +416,5 @@ pub(crate) fn result_from_blocks(blocks: &[Content], tokens: Option<TokenUsage>)
         ..Default::default()
     }
     .with_tool_calls(calls)
+    .with_thinking(blocks.iter().filter_map(Content::thinking_block).collect())
 }

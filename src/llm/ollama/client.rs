@@ -1,7 +1,7 @@
 use crate::{
     language_models::{
-        box_llm_events, llm::LLM, options::CallOptions, GenerateResult, LLMError, LLMEvent,
-        LLMEventStream, TokenUsage,
+        box_llm_events, llm::LLM, options::CallOptions, thinking, GenerateResult, LLMError,
+        LLMEvent, LLMEventStream, ThinkingBlock, ThinkingConfig, ThinkingEffort, TokenUsage,
     },
     observability::{traced_event_stream, traced_generate},
     schemas::{self, FunctionDefinition, Message, MessageType, StreamData},
@@ -11,6 +11,7 @@ use futures::Stream;
 use ollama_rs::generation::{
     chat::ChatMessageFinalResponseData,
     images::Image,
+    parameters::ThinkType,
     tools::{ToolCall, ToolCallFunction, ToolInfo},
 };
 pub use ollama_rs::{
@@ -32,6 +33,8 @@ pub struct Ollama {
     pub(crate) options: Option<GenerationOptions>,
     /// Tools advertised to the model (set by the tools agent through `add_options`).
     pub(crate) tools: Vec<FunctionDefinition>,
+    /// Sent as Ollama's `think` parameter.
+    pub(crate) thinking: Option<ThinkingConfig>,
 }
 
 /// [llama3.2](https://ollama.com/library/llama3.2) is a 3B parameters, 2.0GB model.
@@ -50,6 +53,7 @@ impl Ollama {
             model: model.into(),
             options,
             tools: Vec::new(),
+            thinking: None,
         }
     }
 
@@ -66,6 +70,15 @@ impl Ollama {
     /// Tools the model may call. The tools agent sets these automatically.
     pub fn with_tools(mut self, tools: Vec<FunctionDefinition>) -> Self {
         self.tools = tools;
+        self
+    }
+
+    /// Turns thinking on or off for models that support it (qwen3, deepseek-r1,
+    /// gpt-oss, ...). An effort becomes `think: "low" | "medium" | "high"`. Without this
+    /// the model's default applies. Also settable through
+    /// [`CallOptions::with_thinking`].
+    pub fn with_thinking(mut self, thinking: ThinkingConfig) -> Self {
+        self.thinking = Some(thinking);
         self
     }
 
@@ -90,11 +103,36 @@ impl Ollama {
                     .collect::<Result<Vec<_>, _>>()?,
             );
         }
+        if let Some(thinking) = &self.thinking {
+            request = request.think(think_type(thinking));
+        }
         Ok(match &self.options {
             Some(options) => request.options(options.clone()),
             None => request,
         })
     }
+}
+
+fn think_type(config: &ThinkingConfig) -> ThinkType {
+    if !config.enabled {
+        return ThinkType::False;
+    }
+    match config.effort {
+        None => ThinkType::True,
+        Some(ThinkingEffort::Low) => ThinkType::Low,
+        Some(ThinkingEffort::Medium) => ThinkType::Medium,
+        // Ollama's scale stops at high.
+        Some(_) => ThinkType::High,
+    }
+}
+
+/// The thinking Ollama returned, as a block (`None` when empty).
+fn thinking_block(thinking: Option<String>) -> Vec<ThinkingBlock> {
+    thinking
+        .filter(|t| !t.is_empty())
+        .map(ThinkingBlock::text)
+        .into_iter()
+        .collect()
 }
 
 fn tool_info(f: &FunctionDefinition) -> Result<ToolInfo, LLMError> {
@@ -158,6 +196,9 @@ impl From<&Message> for ChatMessage {
         chat_message.images = images;
         if message.message_type == MessageType::AIMessage {
             chat_message.tool_calls = to_ollama_tool_calls(message);
+            // Thinking models use their earlier reasoning in tool loops.
+            let thinking = thinking::join_thinking(&message.thinking);
+            chat_message.thinking = (!thinking.is_empty()).then_some(thinking);
         }
         chat_message
     }
@@ -201,7 +242,8 @@ impl LLM for Ollama {
                 generation: result.message.content,
                 ..Default::default()
             }
-            .with_tool_calls(from_ollama_tool_calls(&result.message.tool_calls)))
+            .with_tool_calls(from_ollama_tool_calls(&result.message.tool_calls))
+            .with_thinking(thinking_block(result.message.thinking)))
         })
         .await
     }
@@ -236,6 +278,7 @@ impl LLM for Ollama {
 
             let mut result = GenerateResult::default();
             let mut calls = Vec::new();
+            let mut thinking = String::new();
             while let Some(chunk) = stream.next().await {
                 let chunk = chunk
                     .map_err(|_| LLMError::from(OllamaError::Other("Stream error".to_string())))?;
@@ -244,21 +287,32 @@ impl LLM for Ollama {
                 if let Some(final_data) = &chunk.final_data {
                     result.tokens = Some(token_usage(final_data));
                 }
+                if let Some(t) = chunk.message.thinking.filter(|t| !t.is_empty()) {
+                    thinking.push_str(&t);
+                    yield LLMEvent::Thinking(t);
+                }
                 if !chunk.message.content.is_empty() {
                     result.generation.push_str(&chunk.message.content);
                     yield LLMEvent::Text(chunk.message.content);
                 }
             }
-            yield LLMEvent::Done(result.with_tool_calls(calls));
+            yield LLMEvent::Done(
+                result
+                    .with_tool_calls(calls)
+                    .with_thinking(thinking_block(Some(thinking))),
+            );
         });
         traced_event_stream(PROVIDER, &self.model, events)
     }
 
-    /// Only `functions` is used (it becomes the Ollama `tools` list); generation settings go
-    /// through [`GenerationOptions`].
+    /// `functions` (the Ollama `tools` list) and `thinking` are used; generation
+    /// settings go through [`GenerationOptions`].
     fn add_options(&mut self, options: CallOptions) {
         if let Some(functions) = options.functions {
             self.tools = functions;
+        }
+        if let Some(thinking) = options.thinking {
+            self.thinking = Some(thinking);
         }
     }
 }
@@ -536,6 +590,190 @@ mod tests {
             err.to_string().contains("https://example.com/cat.png"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn thinking_maps_to_think_and_goes_back_in_assistant_turns() {
+        use crate::language_models::{ThinkingBlock, ThinkingConfig, ThinkingEffort};
+        let think = |ollama: Ollama| {
+            let request = ollama
+                .generate_request(&[Message::new_human_message("x")])
+                .unwrap();
+            serde_json::to_value(&request).unwrap()["think"].clone()
+        };
+        assert!(think(Ollama::default()).is_null(), "model default");
+        assert_eq!(
+            think(Ollama::default().with_thinking(ThinkingConfig::enabled())),
+            true
+        );
+        assert_eq!(
+            think(Ollama::default().with_thinking(ThinkingConfig::disabled())),
+            false
+        );
+        for (effort, wire) in [
+            (ThinkingEffort::Low, "low"),
+            (ThinkingEffort::Medium, "medium"),
+            (ThinkingEffort::High, "high"),
+            (ThinkingEffort::XHigh, "high"),
+            (ThinkingEffort::Max, "high"),
+        ] {
+            let ollama =
+                Ollama::default().with_thinking(ThinkingConfig::enabled().with_effort(effort));
+            assert_eq!(think(ollama), wire, "{effort:?}");
+        }
+        // add_options sets it (the tools agent path) and keeps it when absent.
+        let mut ollama = Ollama::default();
+        ollama.add_options(CallOptions::new().with_thinking(ThinkingConfig::disabled()));
+        ollama.add_options(CallOptions::new());
+        assert_eq!(think(ollama), false);
+
+        let request = Ollama::default()
+            .generate_request(&[
+                Message::new_ai_message("42").with_thinking(vec![
+                    ThinkingBlock::text("a"),
+                    ThinkingBlock::Redacted { data: "x".into() },
+                    ThinkingBlock::text("b"),
+                ]),
+                Message::new_human_message("why?").with_thinking(vec![ThinkingBlock::text("no")]),
+                Message::new_ai_message("plain"),
+            ])
+            .unwrap();
+        let v = serde_json::to_value(&request).unwrap();
+        assert_eq!(v["messages"][0]["thinking"], "a\n\nb");
+        assert!(v["messages"][1].get("thinking").is_none_or(|t| t.is_null()));
+        assert!(v["messages"][2].get("thinking").is_none_or(|t| t.is_null()));
+    }
+
+    #[tokio::test]
+    async fn generate_returns_thinking() {
+        use crate::language_models::{ThinkingBlock, ThinkingConfig};
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/chat")
+            .match_body(mockito::Matcher::PartialJson(
+                serde_json::json!({"think": true}),
+            ))
+            .with_header("content-type", "application/json")
+            .with_body(chat_response(serde_json::json!({
+                "role": "assistant", "content": "4", "thinking": "2+2 is 4."
+            })))
+            .create_async()
+            .await;
+        let result = ollama_for(&server)
+            .with_thinking(ThinkingConfig::enabled())
+            .generate(&[Message::new_human_message("2+2?")])
+            .await
+            .unwrap();
+        mock.assert_async().await;
+        assert_eq!(result.generation, "4");
+        assert_eq!(result.thinking, vec![ThinkingBlock::text("2+2 is 4.")]);
+
+        // No thinking in the response: none in the result.
+        let mut server = mockito::Server::new_async().await;
+        server
+            .mock("POST", "/api/chat")
+            .with_header("content-type", "application/json")
+            .with_body(chat_response(serde_json::json!({
+                "role": "assistant", "content": "4", "thinking": ""
+            })))
+            .create_async()
+            .await;
+        let result = ollama_for(&server).generate(&[]).await.unwrap();
+        assert!(result.thinking.is_empty());
+    }
+
+    #[tokio::test]
+    async fn generate_stream_yields_thinking_before_text() {
+        use crate::language_models::{LLMEvent, ThinkingBlock};
+        let mut server = mockito::Server::new_async().await;
+        let chunk = |content: &str, thinking: Option<&str>| {
+            let mut message = serde_json::json!({"role": "assistant", "content": content});
+            if let Some(t) = thinking {
+                message["thinking"] = t.into();
+            }
+            serde_json::json!({
+                "model": "m", "created_at": "2024-01-01T00:00:00Z",
+                "message": message, "done": false
+            })
+            .to_string()
+        };
+        let last = chat_response(serde_json::json!({"role": "assistant", "content": ""}));
+        let body = [
+            chunk("", Some("Two ")),
+            chunk("", Some("plus two.")),
+            chunk("4", None),
+            last,
+        ]
+        .join("\n");
+        server
+            .mock("POST", "/api/chat")
+            .with_header("content-type", "application/x-ndjson")
+            .with_body(body + "\n")
+            .create_async()
+            .await;
+
+        let events: Vec<LLMEvent> = ollama_for(&server)
+            .generate_stream(&[Message::new_human_message("2+2?")])
+            .map(Result::unwrap)
+            .collect()
+            .await;
+        let summary: Vec<String> = events
+            .iter()
+            .map(|e| match e {
+                LLMEvent::Thinking(t) => format!("R:{t}"),
+                LLMEvent::Text(t) => format!("T:{t}"),
+                LLMEvent::Done(r) => format!("D:{}", r.generation),
+            })
+            .collect();
+        assert_eq!(summary, ["R:Two ", "R:plus two.", "T:4", "D:4"]);
+        let LLMEvent::Done(done) = events.last().unwrap() else {
+            unreachable!()
+        };
+        assert_eq!(done.thinking, vec![ThinkingBlock::text("Two plus two.")]);
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a local Ollama with a thinking model; set OLLAMA_MODEL (e.g. qwen3:14b)"]
+    async fn live_ollama_thinking() {
+        use crate::language_models::{LLMEvent, ThinkingConfig};
+        let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "qwen3:14b".into());
+        let question = [Message::new_human_message(
+            "Which is larger, 9.11 or 9.8? Answer with just the number.",
+        )];
+
+        let on = Ollama::default()
+            .with_model(&model)
+            .with_thinking(ThinkingConfig::enabled());
+        let result = on.generate(&question).await.unwrap();
+        println!(
+            "thinking: {}\nanswer: {}",
+            result.thinking_text(),
+            result.generation
+        );
+        assert!(!result.thinking.is_empty(), "thinking returned");
+        assert!(result.generation.contains("9.8"), "{}", result.generation);
+        assert!(
+            !result.generation.contains("<think>"),
+            "thinking kept out of the answer"
+        );
+
+        let events: Vec<LLMEvent> = on
+            .generate_stream(&question)
+            .map(Result::unwrap)
+            .collect()
+            .await;
+        let thinking_chunks = events
+            .iter()
+            .filter(|e| matches!(e, LLMEvent::Thinking(_)))
+            .count();
+        assert!(thinking_chunks > 0, "streamed thinking");
+
+        let off = Ollama::default()
+            .with_model(&model)
+            .with_thinking(ThinkingConfig::disabled());
+        let result = off.generate(&question).await.unwrap();
+        assert!(result.thinking.is_empty(), "{:?}", result.thinking);
+        assert!(result.generation.contains("9.8"), "{}", result.generation);
     }
 
     #[test]

@@ -31,6 +31,8 @@ pub enum AgentStreamEvent {
     /// A chunk of text from the model, as it is generated. With tool-calling agents this
     /// is the answer itself (or a short preamble before tool calls).
     Text(String),
+    /// A chunk of the model's reasoning, as it is generated (models with thinking on).
+    Thinking(String),
     /// The agent is about to run a tool.
     ToolStart { tool: String, input: String },
     /// A tool finished. `output` is what the agent sees; a failed tool shows up here as
@@ -299,7 +301,9 @@ where
                         for (action, observation) in steps {
                             // Only OpenAI-tools style agents encode `LogTools` in the log;
                             // other agents (e.g. ConversationalAgent) store raw LLM text.
-                            let Ok(LogTools { tool_id, tools }) =
+                            // Thinking is not stored: providers only need it within the
+                            // tool loop that produced it.
+                            let Ok(LogTools { tool_id, tools, .. }) =
                                 serde_json::from_str::<LogTools>(&action.log)
                             else {
                                 continue;
@@ -351,6 +355,7 @@ where
         while let Some(event) = plan.next().await {
             match event? {
                 PlanEvent::Text(text) => emitter.emit(AgentStreamEvent::Text(text)).await,
+                PlanEvent::Thinking(text) => emitter.emit(AgentStreamEvent::Thinking(text)).await,
                 PlanEvent::Usage(usage) => {
                     tokens.get_or_insert_with(TokenUsage::default).add(&usage);
                     emitter.emit(AgentStreamEvent::Usage(usage)).await;

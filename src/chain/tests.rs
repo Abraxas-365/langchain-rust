@@ -398,6 +398,7 @@ fn texts_and_done(events: Vec<LLMEvent>) -> (Vec<String>, GenerateResult) {
     for event in events {
         match event {
             LLMEvent::Text(t) => texts.push(t),
+            LLMEvent::Thinking(_) => {}
             LLMEvent::Done(r) => done = Some(r),
         }
     }

@@ -10,7 +10,8 @@ use async_openai::types::chat::{
     ChatCompletionRequestUserMessageContent, ChatCompletionRequestUserMessageContentPart,
     ChatCompletionStreamOptions, ChatCompletionToolChoiceOption, ChatCompletionTools,
     CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
-    CreateChatCompletionStreamResponse, ImageDetail, ImageUrl, ResponseFormat, StopConfiguration,
+    CreateChatCompletionStreamResponse, ImageDetail, ImageUrl, ReasoningEffort, ResponseFormat,
+    StopConfiguration,
 };
 use async_openai::{error::OpenAIError, Client};
 use async_trait::async_trait;
@@ -21,7 +22,7 @@ use crate::schemas::convert::{LangchainIntoOpenAI, TryLangchainIntoOpenAI};
 use crate::{
     language_models::{
         box_llm_events, llm::LLM, options::CallOptions, GenerateResult, LLMError, LLMEvent,
-        LLMEventStream, TokenUsage,
+        LLMEventStream, ThinkingConfig, ThinkingEffort, TokenUsage,
     },
     schemas::{
         messages::{ImageContent, Message, MessageType},
@@ -445,9 +446,26 @@ impl<C: Config> OpenAI<C> {
                 .response_format::<ResponseFormat>(response_format.clone().into_openai());
         }
 
+        if let Some(effort) = self.options.thinking.as_ref().and_then(reasoning_effort) {
+            request_builder.reasoning_effort(effort);
+        }
+
         request_builder.messages(messages);
         Ok(request_builder.build()?)
     }
+}
+
+/// `reasoning_effort` for a thinking config: only an explicit effort is sent, since
+/// models without reasoning reject the parameter and reasoning models can't turn it off.
+fn reasoning_effort(config: &ThinkingConfig) -> Option<ReasoningEffort> {
+    let effort = config.effort.filter(|_| config.enabled)?;
+    Some(match effort {
+        ThinkingEffort::Low => ReasoningEffort::Low,
+        ThinkingEffort::Medium => ReasoningEffort::Medium,
+        ThinkingEffort::High => ReasoningEffort::High,
+        ThinkingEffort::XHigh => ReasoningEffort::Xhigh,
+        ThinkingEffort::Max => ReasoningEffort::Max,
+    })
 }
 
 #[cfg(test)]
