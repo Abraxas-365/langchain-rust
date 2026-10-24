@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+use crate::language_models::ThinkingBlock;
+
 pub enum ToolInput {
     //Will implement this in the future
     StrInput(String),
@@ -21,6 +23,10 @@ pub struct AgentAction {
 pub struct LogTools {
     pub tool_id: String,
     pub tools: String,
+    /// The reasoning the model returned with these tool calls. The agent sends it back
+    /// with the calls, which Claude requires when thinking is on.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub thinking: Vec<ThinkingBlock>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -18,6 +18,8 @@ use super::AgentError;
 pub enum PlanEvent {
     /// Text the model writes while planning, as it arrives.
     Text(String),
+    /// Reasoning the model produces while planning, as it arrives.
+    Thinking(String),
     /// Tokens used by the model call(s) behind this plan, when the LLM reports them.
     /// Comes before `Done`.
     Usage(TokenUsage),

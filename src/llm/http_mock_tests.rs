@@ -5,7 +5,7 @@ use mockito::Matcher;
 use serde_json::json;
 
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, LLMError},
+    language_models::{llm::LLM, options::CallOptions, LLMError, LLMEvent, ThinkingBlock},
     llm::{Deepseek, DeepseekError, DeepseekModel, Qwen, QwenError},
     schemas::Message,
 };
@@ -102,6 +102,96 @@ async fn deepseek_reasoner_includes_reasoning() {
         .await
         .unwrap();
     assert_eq!(res, "Reasoning:\nthinking\n\nAnswer:\n42");
+}
+
+#[tokio::test]
+async fn deepseek_returns_reasoning_as_thinking() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/v1/chat/completions")
+        .with_body(chat_body("42"))
+        .create_async()
+        .await;
+    let res = deepseek(&server)
+        .with_model(DeepseekModel::DeepseekReasoner.to_string())
+        .generate(&[Message::new_human_message("q")])
+        .await
+        .unwrap();
+    assert_eq!(res.generation, "42", "the answer stays clean");
+    assert_eq!(res.thinking, vec![ThinkingBlock::text("thinking")]);
+}
+
+#[tokio::test]
+async fn deepseek_generate_stream_separates_reasoning_from_text() {
+    let mut server = mockito::Server::new_async().await;
+    let mut body = String::new();
+    for delta in [
+        json!({"reasoning_content": "Compare ", "content": null}),
+        json!({"reasoning_content": "decimals.", "content": ""}),
+        json!({"content": "9.8"}),
+        json!({"content": " wins"}),
+    ] {
+        let v = json!({"choices": [{"index": 0, "delta": delta}]});
+        body.push_str(&format!("data: {v}\n\n"));
+    }
+    let usage = json!({"choices": [], "usage": {"prompt_tokens": 4, "completion_tokens": 6, "total_tokens": 10}});
+    body.push_str(&format!("data: {usage}\n\ndata: [DONE]\n\n"));
+    server
+        .mock("POST", "/v1/chat/completions")
+        .match_body(Matcher::PartialJson(json!({"stream": true})))
+        .with_header("content-type", "text/event-stream")
+        .with_body(body)
+        .create_async()
+        .await;
+
+    let events: Vec<_> = deepseek(&server)
+        .generate_stream(&[Message::new_human_message("q")])
+        .map(Result::unwrap)
+        .collect()
+        .await;
+    let summary: Vec<String> = events
+        .iter()
+        .map(|e| match e {
+            LLMEvent::Thinking(t) => format!("R:{t}"),
+            LLMEvent::Text(t) => format!("T:{t}"),
+            LLMEvent::Done(r) => format!("D:{}|{}", r.generation, r.thinking_text()),
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        [
+            "R:Compare ",
+            "R:decimals.",
+            "T:9.8",
+            "T: wins",
+            "D:9.8 wins|Compare decimals."
+        ]
+    );
+    let LLMEvent::Done(done) = events.last().unwrap() else {
+        unreachable!()
+    };
+    assert_eq!(done.tokens.as_ref().unwrap().total_tokens, 10);
+}
+
+#[tokio::test]
+async fn deepseek_generate_stream_reports_http_errors() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("POST", "/v1/chat/completions")
+        .with_status(401)
+        .create_async()
+        .await;
+    let first = deepseek(&server)
+        .generate_stream(&[Message::new_human_message("q")])
+        .next()
+        .await
+        .unwrap();
+    assert!(matches!(
+        first,
+        Err(LLMError::DeepseekError(DeepseekError::AuthenticationError(
+            _
+        )))
+    ));
 }
 
 #[tokio::test]

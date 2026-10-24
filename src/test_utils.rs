@@ -100,6 +100,10 @@ impl LLM for FakeLLM {
             Some(Ok(result)) => result,
         };
         let mut events: Vec<Result<LLMEvent, LLMError>> = Vec::new();
+        let thinking = result.thinking_text();
+        if !thinking.is_empty() {
+            events.push(Ok(LLMEvent::Thinking(thinking)));
+        }
         if !result.has_tool_calls() {
             events.extend(
                 result

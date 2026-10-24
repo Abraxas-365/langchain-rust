@@ -1,16 +1,20 @@
 use crate::{
-    language_models::{llm::LLM, options::CallOptions, GenerateResult, LLMError, TokenUsage},
+    language_models::{
+        box_llm_events, llm::LLM, options::CallOptions, GenerateResult, LLMError, LLMEvent,
+        LLMEventStream, ThinkingBlock, TokenUsage,
+    },
     llm::DeepseekError,
     schemas::{Message, StreamData},
 };
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use reqwest::Client;
+use serde_json::Value;
 use std::pin::Pin;
 
 use super::models::{ApiResponse, DeepseekMessage, Payload, ResponseFormat};
 use crate::llm::sse::{sse_json_events, usage_from_chunk};
-use crate::observability::traced_generate;
+use crate::observability::{traced_event_stream, traced_generate};
 
 pub enum DeepseekModel {
     DeepseekChat,
@@ -84,56 +88,46 @@ impl Deepseek {
         self
     }
 
-    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
-        let client = Client::new();
-        let is_stream = self.options.streaming_func.is_some();
-
-        let payload = self.build_payload(messages, is_stream);
-        let res = client
-            .post(&format!("{}/v1/chat/completions", self.base_url))
+    /// Posts a chat request; known error statuses become [`DeepseekError`]s.
+    async fn post(&self, payload: &Payload) -> Result<reqwest::Response, LLMError> {
+        let res = Client::new()
+            .post(format!("{}/v1/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
-            .json(&payload)
+            .json(payload)
             .send()
             .await?;
+        let error = match res.status().as_u16() {
+            400 => DeepseekError::InvalidFormatError("Invalid request format".to_string()),
+            401 => DeepseekError::AuthenticationError("Invalid API Key".to_string()),
+            402 => DeepseekError::InsufficientBalanceError("Insufficient balance".to_string()),
+            422 => DeepseekError::InvalidParametersError("Invalid parameters".to_string()),
+            429 => DeepseekError::RateLimitError("Rate limit reached".to_string()),
+            500 => DeepseekError::ServerError("Server error".to_string()),
+            503 => DeepseekError::ServerOverloadedError("Server overloaded".to_string()),
+            _ => return Ok(res),
+        };
+        Err(LLMError::DeepseekError(error))
+    }
 
-        let status = res.status().as_u16();
-
-        let res = match status {
-            400 => Err(LLMError::DeepseekError(DeepseekError::InvalidFormatError(
-                "Invalid request format".to_string(),
-            ))),
-            401 => Err(LLMError::DeepseekError(DeepseekError::AuthenticationError(
-                "Invalid API Key".to_string(),
-            ))),
-            402 => Err(LLMError::DeepseekError(
-                DeepseekError::InsufficientBalanceError("Insufficient balance".to_string()),
-            )),
-            422 => Err(LLMError::DeepseekError(
-                DeepseekError::InvalidParametersError("Invalid parameters".to_string()),
-            )),
-            429 => Err(LLMError::DeepseekError(DeepseekError::RateLimitError(
-                "Rate limit reached".to_string(),
-            ))),
-            500 => Err(LLMError::DeepseekError(DeepseekError::ServerError(
-                "Server error".to_string(),
-            ))),
-            503 => Err(LLMError::DeepseekError(
-                DeepseekError::ServerOverloadedError("Server overloaded".to_string()),
-            )),
-            _ => Ok(res.json::<ApiResponse>().await?),
-        }?;
+    async fn generate(&self, messages: &[Message]) -> Result<GenerateResult, LLMError> {
+        let is_stream = self.options.streaming_func.is_some();
+        let payload = self.build_payload(messages, is_stream);
+        let res = self.post(&payload).await?.json::<ApiResponse>().await?;
 
         let choice = res.choices.first();
 
         let mut generation = choice
             .map(|c| c.message.content.clone())
             .unwrap_or_default();
+        let reasoning = choice
+            .and_then(|c| c.message.reasoning_content.clone())
+            .filter(|r| !r.is_empty());
 
-        // If include_reasoning is enabled and the model is deepseek-reasoner,
-        // append the reasoning content to the generation if available
+        // `include_reasoning` predates `GenerateResult::thinking`: it also pastes the
+        // reasoning into the text, for deepseek-reasoner only.
         if self.include_reasoning && self.model == DeepseekModel::DeepseekReasoner.to_string() {
-            if let Some(reasoning) = choice.and_then(|c| c.message.reasoning_content.clone()) {
+            if let Some(reasoning) = &reasoning {
                 generation = format!("Reasoning:\n{}\n\nAnswer:\n{}", reasoning, generation);
             }
         }
@@ -148,7 +142,8 @@ impl Deepseek {
             tokens,
             generation,
             ..Default::default()
-        })
+        }
+        .with_thinking(reasoning.into_iter().map(ThinkingBlock::text).collect()))
     }
 
     fn build_payload(&self, messages: &[Message], stream: bool) -> Payload {
@@ -233,17 +228,8 @@ impl LLM for Deepseek {
         &self,
         messages: &[Message],
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamData, LLMError>> + Send>>, LLMError> {
-        let client = Client::new();
         let payload = self.build_payload(messages, true);
-        let request = client
-            .post(&format!("{}/v1/chat/completions", self.base_url))
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&payload)
-            .build()?;
-
-        let stream = client.execute(request).await?;
-        let stream = stream.bytes_stream();
+        let stream = self.post(&payload).await?.bytes_stream();
 
         let include_reasoning = self.include_reasoning;
         let is_reasoner = self.model == DeepseekModel::DeepseekReasoner.to_string();
@@ -276,6 +262,55 @@ impl LLM for Deepseek {
         Ok(Box::pin(processed_stream))
     }
 
+    /// Streams `reasoning_content` as [`LLMEvent::Thinking`] and the answer as
+    /// [`LLMEvent::Text`]; `Done` carries both (`include_reasoning` does not apply here).
+    fn generate_stream<'a>(&'a self, messages: &'a [Message]) -> LLMEventStream<'a> {
+        let events = box_llm_events(async_stream::try_stream! {
+            let payload = self.build_payload(messages, true);
+            let res = self.post(&payload).await?;
+            let chunks = sse_json_events(res.bytes_stream());
+            futures::pin_mut!(chunks);
+
+            let mut text = String::new();
+            let mut reasoning = String::new();
+            let mut tokens = None;
+            while let Some(chunk) = chunks.next().await {
+                let chunk = chunk?;
+                if let Some(usage) = usage_from_chunk(&chunk) {
+                    tokens = Some(usage);
+                }
+                let Some(delta) = chunk.pointer("/choices/0/delta") else {
+                    continue;
+                };
+                let field = |name: &str| {
+                    delta
+                        .get(name)
+                        .and_then(Value::as_str)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                };
+                if let Some(thinking) = field("reasoning_content") {
+                    reasoning.push_str(&thinking);
+                    yield LLMEvent::Thinking(thinking);
+                }
+                if let Some(content) = field("content") {
+                    text.push_str(&content);
+                    yield LLMEvent::Text(content);
+                }
+            }
+            let thinking = (!reasoning.is_empty()).then(|| ThinkingBlock::text(reasoning));
+            yield LLMEvent::Done(
+                GenerateResult {
+                    tokens,
+                    generation: text,
+                    ..Default::default()
+                }
+                .with_thinking(thinking.into_iter().collect()),
+            );
+        });
+        traced_event_stream("deepseek", &self.model, events)
+    }
+
     fn add_options(&mut self, options: CallOptions) {
         self.options = options;
     }
@@ -284,18 +319,12 @@ impl LLM for Deepseek {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schemas::{Message, MessageType};
+    use crate::schemas::Message;
 
     #[tokio::test]
     #[ignore]
     async fn test_deepseek_generate() {
-        let messages = vec![Message {
-            content: "Hello".to_string(),
-            message_type: MessageType::HumanMessage,
-            id: Some("test_id".to_string()),
-            images: None,
-            tool_calls: None,
-        }];
+        let messages = vec![Message::new_human_message("Hello")];
 
         let client = Deepseek::new();
         let res = client.generate(&messages).await;
@@ -305,13 +334,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_deepseek_stream() {
-        let messages = vec![Message {
-            content: "Hello".to_string(),
-            message_type: MessageType::HumanMessage,
-            id: Some("test_id".to_string()),
-            images: None,
-            tool_calls: None,
-        }];
+        let messages = vec![Message::new_human_message("Hello")];
 
         let client = Deepseek::new();
         let res = client.stream(&messages).await;
@@ -321,25 +344,21 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_deepseek_reasoner() {
-        let messages = vec![Message {
-            content: "9.11 and 9.8, which is greater?".to_string(),
-            message_type: MessageType::HumanMessage,
-            id: Some("test_id".to_string()),
-            images: None,
-            tool_calls: None,
-        }];
+        let messages = vec![Message::new_human_message(
+            "9.11 and 9.8, which is greater?",
+        )];
 
-        // Create a client with the DeepseekReasoner model and enable reasoning content
-        let client = Deepseek::new()
-            .with_model(DeepseekModel::DeepseekReasoner.to_string())
-            .with_include_reasoning(true);
+        let client = Deepseek::new().with_model(DeepseekModel::DeepseekReasoner.to_string());
 
-        let res = client.generate(&messages).await;
-        assert!(res.is_ok());
-
-        // The response will contain both the reasoning and answer content
-        if let Ok(result) = res {
-            println!("Generation result: {}", result.generation);
-        }
+        let result = client.generate(&messages).await.unwrap();
+        assert!(
+            !result.thinking.is_empty(),
+            "reasoner returns its reasoning"
+        );
+        println!(
+            "Reasoning: {}\nAnswer: {}",
+            result.thinking_text(),
+            result.generation
+        );
     }
 }

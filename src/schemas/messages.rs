@@ -2,6 +2,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::language_models::ThinkingBlock;
+
 /// Enum `MessageType` represents the type of a message.
 /// It can be a `SystemMessage`, `AIMessage`, or `HumanMessage`.
 ///
@@ -134,6 +136,9 @@ fn sniff_media_type(data: &str) -> Option<&'static str> {
 
 /// Struct `Message` represents a message with its content and type.
 ///
+/// `thinking` holds an AI message's reasoning blocks, so providers that need them back
+/// in later turns (Claude, in a tool-use loop) get them unchanged.
+///
 /// # Usage
 /// ```rust,ignore
 /// let human_message = Message::new_human_message("Hello");
@@ -147,61 +152,50 @@ pub struct Message {
     pub id: Option<String>,
     pub tool_calls: Option<Value>,
     pub images: Option<Vec<ImageContent>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub thinking: Vec<ThinkingBlock>,
 }
 
 impl Message {
-    // Function to create a new Human message with a generic type that implements Display
-    pub fn new_human_message<T: std::fmt::Display>(content: T) -> Self {
+    fn of_type<T: std::fmt::Display>(message_type: MessageType, content: T) -> Self {
         Message {
             content: content.to_string(),
-            message_type: MessageType::HumanMessage,
-            id: None,
-            tool_calls: None,
-            images: None,
+            message_type,
+            ..Default::default()
         }
     }
 
+    // Function to create a new Human message with a generic type that implements Display
+    pub fn new_human_message<T: std::fmt::Display>(content: T) -> Self {
+        Self::of_type(MessageType::HumanMessage, content)
+    }
+
     pub fn new_human_message_with_images<T: Into<ImageContent>>(images: Vec<T>) -> Self {
-        Message {
-            content: String::default(),
-            message_type: MessageType::HumanMessage,
-            id: None,
-            tool_calls: None,
-            images: Some(images.into_iter().map(|i| i.into()).collect()),
-        }
+        Self::of_type(MessageType::HumanMessage, "").with_images(images)
     }
 
     // Function to create a new System message with a generic type that implements Display
     pub fn new_system_message<T: std::fmt::Display>(content: T) -> Self {
-        Message {
-            content: content.to_string(),
-            message_type: MessageType::SystemMessage,
-            id: None,
-            tool_calls: None,
-            images: None,
-        }
+        Self::of_type(MessageType::SystemMessage, content)
     }
 
     // Function to create a new AI message with a generic type that implements Display
     pub fn new_ai_message<T: std::fmt::Display>(content: T) -> Self {
-        Message {
-            content: content.to_string(),
-            message_type: MessageType::AIMessage,
-            id: None,
-            tool_calls: None,
-            images: None,
-        }
+        Self::of_type(MessageType::AIMessage, content)
     }
 
     // Function to create a new Tool message with a generic type that implements Display
     pub fn new_tool_message<T: std::fmt::Display, S: Into<String>>(content: T, id: S) -> Self {
         Message {
-            content: content.to_string(),
-            message_type: MessageType::ToolMessage,
             id: Some(id.into()),
-            tool_calls: None,
-            images: None,
+            ..Self::of_type(MessageType::ToolMessage, content)
         }
+    }
+
+    /// Attaches the model's reasoning to an AI message, so it is sent back in later turns.
+    pub fn with_thinking(mut self, thinking: Vec<ThinkingBlock>) -> Self {
+        self.thinking = thinking;
+        self
     }
 
     /// Attaches images to the message (keeping its text). Providers that support
@@ -485,5 +479,30 @@ mod tests {
             Message::messages_to_string(&[m, Message::new_ai_message("a cat")]),
             "HumanMessage: look [image: https://a/cat.png] [image]\nAIMessage: a cat"
         );
+    }
+
+    #[test]
+    fn thinking_round_trips_and_old_messages_still_parse() {
+        let blocks = vec![
+            ThinkingBlock::Thinking {
+                thinking: "plan".into(),
+                signature: Some("sig".into()),
+            },
+            ThinkingBlock::Redacted { data: "enc".into() },
+        ];
+        let m = Message::new_ai_message("done").with_thinking(blocks.clone());
+        let value = serde_json::to_value(&m).unwrap();
+        assert_eq!(value["thinking"][0]["signature"], "sig");
+        let back: Message = serde_json::from_value(value).unwrap();
+        assert_eq!(back.thinking, blocks);
+
+        // Stored before this field existed: no `thinking` key.
+        let old: Message = serde_json::from_value(json!({
+            "content": "hi", "message_type": "ai", "id": null, "tool_calls": null, "images": null
+        }))
+        .unwrap();
+        assert!(old.thinking.is_empty());
+        let plain = serde_json::to_value(Message::new_ai_message("x")).unwrap();
+        assert!(plain.get("thinking").is_none(), "omitted when empty");
     }
 }

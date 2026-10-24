@@ -245,6 +245,7 @@ fn options_fingerprint(o: &CallOptions) -> Value {
         }),
         "function_call_behavior": o.function_call_behavior.as_ref().map(|b| format!("{b:?}")),
         "response_format": o.response_format.as_ref().map(|r| format!("{r:?}")),
+        "thinking": o.thinking,
     })
 }
 

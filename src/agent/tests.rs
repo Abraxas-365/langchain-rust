@@ -434,6 +434,62 @@ async fn openai_tools_agent_uses_typed_tool_calls() {
 }
 
 #[tokio::test]
+async fn tools_agent_replays_thinking_with_its_tool_calls() {
+    use crate::language_models::ThinkingBlock;
+
+    let signed = ThinkingBlock::Thinking {
+        thinking: "Need the weather.".into(),
+        signature: Some("sig".into()),
+    };
+    let calls = vec![
+        ToolCall::new("c1", "weather", r#"{"input":"Lima"}"#),
+        ToolCall::new("c2", "weather", r#"{"input":"Cusco"}"#),
+    ];
+    let llm = FakeLLM::with_results([
+        GenerateResult::default()
+            .with_tool_calls(calls)
+            .with_thinking(vec![signed.clone()]),
+        GenerateResult {
+            generation: "Both sunny".into(),
+            ..Default::default()
+        },
+    ]);
+    let weather = RecordingTool::ok("weather", "sunny");
+    let tools: Vec<Arc<dyn Tool>> = vec![Arc::new(weather)];
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&tools)
+        .build(llm.clone())
+        .unwrap();
+    let memory = Arc::new(Mutex::new(SimpleMemory::new()));
+    let executor = AgentExecutor::from_agent(agent).with_memory(memory.clone());
+
+    let events: Vec<_> = without_usage(collect_events(&executor, "weather?").await)
+        .into_iter()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        events[0],
+        AgentStreamEvent::Thinking("Need the weather.".into()),
+        "thinking streams before the tools run: {events:?}"
+    );
+
+    // The second plan sees one AI message (both calls) carrying the thinking, once.
+    let second = &llm.calls()[1];
+    let ai: Vec<_> = second
+        .iter()
+        .filter(|m| m.message_type == MessageType::AIMessage)
+        .collect();
+    assert_eq!(ai.len(), 1);
+    assert_eq!(ai[0].thinking, vec![signed]);
+    assert_eq!(ai[0].parse_tool_calls().len(), 2);
+
+    // Memory keeps the calls but not the thinking.
+    let stored = memory.lock().await.messages().await.unwrap();
+    assert!(stored.iter().all(|m| m.thinking.is_empty()));
+    assert_eq!(stored[1].parse_tool_calls().len(), 2);
+}
+
+#[tokio::test]
 async fn openai_tools_agent_empty_or_invalid_json_list_is_final() {
     // A JSON array that is not tool calls must not be treated as an action.
     let llm = FakeLLM::new([r#"[1, 2, 3]"#, "[]"]);

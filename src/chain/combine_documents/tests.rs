@@ -35,6 +35,7 @@ async fn stream_text(chain: &dyn Chain, input: PromptArgs) -> (String, GenerateR
     while let Some(event) = events.next().await {
         match event.unwrap() {
             LLMEvent::Text(t) => text.push_str(&t),
+            LLMEvent::Thinking(_) => {}
             LLMEvent::Done(r) => done = Some(r),
         }
     }

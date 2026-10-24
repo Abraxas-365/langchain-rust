@@ -105,6 +105,7 @@ async fn options_are_part_of_the_key() {
         )]),
         CallOptions::new().with_function_call_behavior(FunctionCallBehavior::Auto),
         CallOptions::new().with_response_format(ResponseFormat::JsonObject),
+        CallOptions::new().with_thinking(crate::language_models::ThinkingConfig::enabled()),
     ] {
         cached.add_options(opts);
         keys.push(cached.cache_key(&msgs).unwrap());
@@ -192,6 +193,7 @@ async fn generate_stream_caches_and_replays() {
                 .generate_stream(&msgs)
                 .map(|e| match e.unwrap() {
                     LLMEvent::Text(t) => format!("T:{t}"),
+                    LLMEvent::Thinking(t) => format!("R:{t}"),
                     LLMEvent::Done(r) => format!("D:{}:{:?}", r.generation, r.tokens),
                 })
                 .collect::<Vec<_>>()

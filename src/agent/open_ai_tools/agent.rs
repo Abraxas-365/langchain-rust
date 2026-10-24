@@ -54,14 +54,20 @@ impl OpenAiToolAgent {
         for (action, observation) in intermediate_steps {
             // Deserialize directly and embed in method calls to streamline code.
             // Extract the tool ID and tool calls from the log.
-            let LogTools { tool_id, tools } = serde_json::from_str(&action.log)?;
+            let LogTools {
+                tool_id,
+                tools,
+                thinking,
+            } = serde_json::from_str(&action.log)?;
             let tools_vec: Vec<ToolCall> = serde_json::from_str(&tools)?;
 
             // one action can trigger multiple observations.  But make sure we add it to
             // the scratchpad before the related observations.  There can also be multiple
             // different actions in the same thought chain.
             if tools_ai_message_seen.insert(tools, ()).is_none() {
-                thoughts.push(Message::new_ai_message_with_tool_calls("", &tools_vec));
+                thoughts.push(
+                    Message::new_ai_message_with_tool_calls("", &tools_vec).with_thinking(thinking),
+                );
             }
 
             // Add a tool message for each observation. Observation is the ouput of the tool call.
@@ -111,6 +117,7 @@ impl Agent for OpenAiToolAgent {
             let mut hold: Option<bool> = None;
             while let Some(event) = events.next().await {
                 match event? {
+                    LLMEvent::Thinking(thinking) => yield PlanEvent::Thinking(thinking),
                     LLMEvent::Text(text) => {
                         if hold == Some(false) {
                             yield PlanEvent::Text(text);
@@ -172,13 +179,15 @@ impl OpenAiToolAgent {
             }));
         };
 
-        // Every action carries the full list: the scratchpad replays it as one AI message.
+        // Every action carries the full list (and the reasoning behind it): the scratchpad
+        // replays it as one AI message.
         let tools = ToolCall::list_to_string(&calls);
         let mut actions: Vec<AgentAction> = Vec::new();
         for call in calls {
             let log = LogTools {
                 tool_id: call.id,
                 tools: tools.clone(),
+                thinking: result.thinking.clone(),
             };
             actions.push(AgentAction {
                 tool: call.name,
