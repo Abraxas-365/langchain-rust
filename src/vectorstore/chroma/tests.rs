@@ -269,6 +269,109 @@ async fn a_failed_delete_stops_the_write() {
 }
 
 #[tokio::test]
+async fn get_by_ids_posts_get_and_returns_request_order() {
+    let mut server = Server::new_async().await;
+    let store = store_on(&mut server, StoreBuilder::new()).await;
+    let get = server
+        .mock("POST", collection_path("get").as_str())
+        .match_body(Matcher::Json(json!({
+            "ids": ["b", "missing", "a"],
+            "include": ["documents", "metadatas"],
+            "where": { "$and": [{ "namespace": "t1" }, { "lang": "go" }] },
+        })))
+        .with_body(
+            json!({
+                "ids": ["a", "b"],
+                "documents": ["alpha", null],
+                "metadatas": [{ "source": "a.txt" }, null],
+                "include": ["documents", "metadatas"],
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    let opts = VecStoreOptions::default()
+        .with_name_space("t1")
+        .with_filters(json!({ "lang": "go" }));
+    let docs = store
+        .get_by_ids(&["b", "missing", "a"].map(String::from), &opts)
+        .await
+        .unwrap();
+    get.assert_async().await;
+    let ids: Vec<_> = docs.iter().map(|d| d.id.as_deref().unwrap()).collect();
+    assert_eq!(ids, ["b", "a"]);
+    assert_eq!(docs[0].page_content, "");
+    assert!(docs[0].metadata.is_empty());
+    assert_eq!(docs[1].page_content, "alpha");
+    assert_eq!(docs[1].metadata["source"], json!("a.txt"));
+    assert_eq!(docs[1].score, 0.0);
+
+    // Plain options send no `where`; empty input sends nothing.
+    let plain = server
+        .mock("POST", collection_path("get").as_str())
+        .match_body(Matcher::Json(json!({
+            "ids": ["a"],
+            "include": ["documents", "metadatas"],
+        })))
+        .with_body(json!({ "ids": [] }).to_string())
+        .expect(1)
+        .create_async()
+        .await;
+    assert!(store
+        .get_by_ids(&["a".to_string()], &VecStoreOptions::default())
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(store
+        .get_by_ids(&[], &VecStoreOptions::default())
+        .await
+        .unwrap()
+        .is_empty());
+    plain.assert_async().await;
+}
+
+#[tokio::test]
+async fn delete_posts_ids_with_the_namespace_and_reports_errors() {
+    let mut server = Server::new_async().await;
+    let store = store_on(&mut server, StoreBuilder::new()).await;
+    let scoped = server
+        .mock("POST", collection_path("delete").as_str())
+        .match_body(Matcher::Json(json!({
+            "ids": ["a", "b"],
+            "where": { "namespace": "t1" },
+        })))
+        .with_body("{}")
+        .expect(1)
+        .create_async()
+        .await;
+    store
+        .delete(
+            &["a".to_string(), "b".to_string()],
+            &VecStoreOptions::default().with_name_space("t1"),
+        )
+        .await
+        .unwrap();
+    store
+        .delete(&[], &VecStoreOptions::default())
+        .await
+        .unwrap();
+    scoped.assert_async().await;
+
+    server
+        .mock("POST", collection_path("delete").as_str())
+        .match_body(Matcher::Json(json!({ "ids": ["x"] })))
+        .with_status(500)
+        .with_body(json!({ "error": "Internal", "message": "boom" }).to_string())
+        .create_async()
+        .await;
+    let err = store
+        .delete(&["x".to_string()], &VecStoreOptions::default())
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("boom"), "{err}");
+}
+
+#[tokio::test]
 async fn add_documents_rejects_an_empty_id_before_embedding() {
     let mut server = Server::new_async().await;
     let store = store_on(&mut server, StoreBuilder::new()).await;
@@ -599,6 +702,45 @@ async fn live_chroma_round_trip() {
     assert_eq!(found[0].id.as_deref(), Some("doc-1"));
     assert_eq!(found[0].page_content, "rust crab");
     assert!(!found[0].metadata.contains_key("old"), "{found:?}");
+
+    // get_by_ids / delete, scoped by namespace.
+    let got = store
+        .get_by_ids(&["nope".to_string(), "doc-1".to_string()], &ids_ns)
+        .await
+        .unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].id.as_deref(), Some("doc-1"));
+    assert_eq!(got[0].page_content, "rust crab");
+    assert_eq!(got[0].metadata["namespace"], json!("ids"));
+    let other_ns = VecStoreOptions::default().with_name_space("other");
+    assert!(store
+        .get_by_ids(&["doc-1".to_string()], &other_ns)
+        .await
+        .unwrap()
+        .is_empty());
+    store
+        .delete(&["doc-1".to_string()], &other_ns)
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .get_by_ids(&["doc-1".to_string()], &VecStoreOptions::default())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    store.delete(&["doc-1".to_string()], &ids_ns).await.unwrap();
+    assert!(store
+        .get_by_ids(&["doc-1".to_string()], &VecStoreOptions::default())
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(store
+        .similarity_search("crabs", 5, &ids_ns)
+        .await
+        .unwrap()
+        .is_empty());
 
     reqwest::Client::new()
         .delete(format!(

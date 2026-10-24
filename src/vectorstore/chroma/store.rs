@@ -8,7 +8,7 @@ use serde_json::{json, Map, Value};
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{document_ids, VecStoreOptions, VectorStore},
+    vectorstore::{document_ids, vectorstore::in_id_order, VecStoreOptions, VectorStore},
 };
 
 /// Distance function of a new collection. Existing collections keep theirs.
@@ -74,6 +74,16 @@ struct QueryResponse {
     metadatas: Rows<Map<String, Value>>,
     #[serde(default)]
     distances: Rows<f64>,
+}
+
+/// `/get` answers with flat lists, one cell per id.
+#[derive(Deserialize)]
+struct GetResponse {
+    ids: Vec<String>,
+    #[serde(default)]
+    documents: Option<Vec<Option<String>>>,
+    #[serde(default)]
+    metadatas: Option<Vec<Option<Map<String, Value>>>>,
 }
 
 /// Sends a request and turns Chroma's `{"error", "message"}` bodies into errors.
@@ -283,6 +293,68 @@ impl VectorStore for Store {
             });
         }
         Ok(results)
+    }
+
+    /// Deletes the ids. `name_space` and `filters` narrow it to matching records.
+    async fn delete(&self, ids: &[String], opt: &ChromaOptions) -> Result<(), Box<dyn Error>> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let mut body = json!({ "ids": ids });
+        if let Some(filter) = self.namespace_filter(opt) {
+            body["where"] = filter;
+        }
+        send(
+            self.client
+                .post(format!("{}/delete", self.collection_url))
+                .json(&body),
+            &self.api_key,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Returns the stored documents in request order (score 0), skipping missing ids.
+    /// `name_space` and `filters` narrow it to matching records.
+    async fn get_by_ids(
+        &self,
+        ids: &[String],
+        opt: &ChromaOptions,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let mut body = json!({ "ids": ids, "include": ["documents", "metadatas"] });
+        if let Some(filter) = self.namespace_filter(opt) {
+            body["where"] = filter;
+        }
+        let response = send(
+            self.client
+                .post(format!("{}/get", self.collection_url))
+                .json(&body),
+            &self.api_key,
+        )
+        .await?;
+        let response: GetResponse = serde_json::from_value(response)?;
+        let mut documents = response.documents.unwrap_or_default().into_iter();
+        let mut metadatas = response.metadatas.unwrap_or_default().into_iter();
+        let docs = response
+            .ids
+            .into_iter()
+            .map(|id| {
+                let page_content = documents.next().flatten().unwrap_or_default();
+                let metadata = metadatas
+                    .next()
+                    .flatten()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect();
+                Document::new(page_content)
+                    .with_metadata(metadata)
+                    .with_id(id)
+            })
+            .collect();
+        Ok(in_id_order(ids, docs))
     }
 }
 

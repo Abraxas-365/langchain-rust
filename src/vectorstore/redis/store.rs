@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::{
     embedding::Embedder,
     schemas::Document,
-    vectorstore::{document_ids, VecStoreOptions, VectorStore},
+    vectorstore::{document_ids, vectorstore::in_id_order, VecStoreOptions, VectorStore},
 };
 
 /// Alias of the KNN distance in search replies. Not a field anyone stores.
@@ -397,6 +397,18 @@ where
         key: &str,
         fields: Vec<(String, &RedisValue)>,
     ) -> Result<Document, Box<dyn Error>> {
+        let (mut doc, distance) = self.hash_document(key, fields)?;
+        let distance = distance.ok_or_else(|| format!("FT.SEARCH reply without {SCORE_FIELD}"))?;
+        doc.score = self.distance.score(distance);
+        Ok(doc)
+    }
+
+    /// A stored hash as a document (score 0), plus the KNN distance if the reply had one.
+    fn hash_document(
+        &self,
+        key: &str,
+        fields: Vec<(String, &RedisValue)>,
+    ) -> Result<(Document, Option<f64>), Box<dyn Error>> {
         let mut page_content = String::new();
         let mut distance = None;
         let mut metadata = HashMap::new();
@@ -423,17 +435,59 @@ where
                 metadata.insert(name, value);
             }
         }
-        let distance = distance.ok_or_else(|| format!("FT.SEARCH reply without {SCORE_FIELD}"))?;
-        Ok(Document {
-            page_content,
-            metadata,
-            score: self.distance.score(distance),
-            id: Some(
-                key.strip_prefix(&self.key_prefix)
-                    .unwrap_or(key)
-                    .to_string(),
-            ),
-        })
+        let id = key
+            .strip_prefix(&self.key_prefix)
+            .unwrap_or(key)
+            .to_string();
+        let doc = Document::new(page_content)
+            .with_metadata(metadata)
+            .with_id(id);
+        Ok((doc, distance))
+    }
+
+    /// The hash key of an id. Accepts both the bare id (as searches return it) and the
+    /// full key (as `add_documents` returns it).
+    fn key_of(&self, id: &str) -> String {
+        if id.starts_with(&self.key_prefix) {
+            id.to_string()
+        } else {
+            format!("{}{id}", self.key_prefix)
+        }
+    }
+
+    /// HGETALL of each id's key, skipping missing hashes and, when a namespace is in
+    /// effect, hashes of other namespaces.
+    async fn fetch_hashes(
+        &self,
+        ids: &[String],
+        opt: &VecStoreOptions<Value>,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        let namespace = opt.name_space.as_deref().or(self.namespace.as_deref());
+        let keys: Vec<String> = ids.iter().map(|id| self.key_of(id)).collect();
+        let mut pipe = ::redis::pipe();
+        for key in &keys {
+            pipe.cmd("HGETALL").arg(key);
+        }
+        let mut connection = self.connection.clone();
+        let replies: Vec<RedisValue> = pipe.query_async(&mut connection).await?;
+        let mut docs = Vec::new();
+        for (key, reply) in keys.iter().zip(&replies) {
+            let fields =
+                fields(reply).ok_or_else(|| format!("unexpected HGETALL reply: {reply:?}"))?;
+            if fields.is_empty() {
+                continue;
+            }
+            let (doc, _) = self.hash_document(key, fields)?;
+            let stored_ns = doc
+                .metadata
+                .get(&self.namespace_key)
+                .and_then(Value::as_str);
+            if namespace.is_some_and(|ns| stored_ns != Some(ns)) {
+                continue;
+            }
+            docs.push(doc);
+        }
+        Ok(docs)
     }
 }
 
@@ -558,6 +612,50 @@ where
             docs.push(doc);
         }
         Ok(docs)
+    }
+
+    /// Accepts bare ids or full keys. With a namespace (option or store default), only
+    /// documents of that namespace are deleted.
+    async fn delete(&self, ids: &[String], opt: &Self::Options) -> Result<(), Box<dyn Error>> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let namespace = opt.name_space.as_deref().or(self.namespace.as_deref());
+        let keys: Vec<String> = if namespace.is_some() {
+            self.fetch_hashes(ids, opt)
+                .await?
+                .iter()
+                .filter_map(|doc| doc.id.as_deref().map(|id| self.key_of(id)))
+                .collect()
+        } else {
+            ids.iter().map(|id| self.key_of(id)).collect()
+        };
+        if keys.is_empty() {
+            return Ok(());
+        }
+        let mut connection = self.connection.clone();
+        let _: i64 = ::redis::cmd("DEL")
+            .arg(&keys)
+            .query_async(&mut connection)
+            .await?;
+        Ok(())
+    }
+
+    /// Accepts bare ids or full keys; returned documents carry the bare id.
+    async fn get_by_ids(
+        &self,
+        ids: &[String],
+        opt: &Self::Options,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let docs = self.fetch_hashes(ids, opt).await?;
+        let wanted: Vec<String> = ids
+            .iter()
+            .map(|id| id.strip_prefix(&self.key_prefix).unwrap_or(id).to_string())
+            .collect();
+        Ok(in_id_order(&wanted, docs))
     }
 }
 

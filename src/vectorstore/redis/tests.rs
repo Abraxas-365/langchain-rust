@@ -331,6 +331,138 @@ fn store_with_ready_index(conn: &FakeRedis, builder: StoreBuilder) -> Store<Fake
     store
 }
 
+/// HGETALL replies for `kb:a` (namespace t1, RESP2) and `kb:b` (namespace t2, RESP3);
+/// every other key is missing. DEL answers with the count.
+fn hash_conn() -> FakeRedis {
+    FakeRedis::new(
+        |args| match (args[0].as_str(), args.get(1).map(String::as_str)) {
+            ("HGETALL", Some("kb:a")) => Ok(RedisValue::Array(vec![
+                bulk("content"),
+                bulk("alpha"),
+                bulk("content_vector"),
+                RedisValue::BulkString(vec![0, 0, 128, 63]),
+                bulk("namespace"),
+                bulk("t1"),
+                bulk("year"),
+                bulk("2024"),
+            ])),
+            ("HGETALL", Some("kb:b")) => Ok(RedisValue::Map(vec![
+                (bulk("content"), bulk("beta")),
+                (bulk("namespace"), bulk("t2")),
+            ])),
+            ("HGETALL", _) => Ok(RedisValue::Array(vec![])),
+            ("DEL", _) => Ok(RedisValue::Int(args.len() as i64 - 1)),
+            other => panic!("unexpected command {other:?}"),
+        },
+    )
+}
+
+#[tokio::test]
+async fn get_by_ids_reads_hashes_in_request_order() {
+    let conn = hash_conn();
+    let store = store(
+        &conn,
+        StoreBuilder::new()
+            .key_prefix("kb:")
+            .metadata_schema([MetadataField::numeric("year")]),
+    );
+    let ids = ["b", "missing", "kb:a", "b"].map(String::from);
+    let docs = store
+        .get_by_ids(&ids, &VecStoreOptions::default())
+        .await
+        .unwrap();
+    // Bare ids and full keys both work; one pipeline of HGETALLs, no embedding.
+    assert_eq!(
+        conn.commands(),
+        [
+            ["HGETALL", "kb:b"],
+            ["HGETALL", "kb:missing"],
+            ["HGETALL", "kb:a"],
+            ["HGETALL", "kb:b"],
+        ]
+    );
+    let got: Vec<_> = docs.iter().map(|d| d.id.as_deref().unwrap()).collect();
+    assert_eq!(got, ["b", "a"]);
+    assert_eq!(docs[0].page_content, "beta");
+    assert_eq!(docs[1].page_content, "alpha");
+    assert_eq!(docs[1].metadata["year"], json!(2024));
+    assert_eq!(docs[1].metadata["namespace"], json!("t1"));
+    assert!(!docs[1].metadata.contains_key("content_vector"));
+    assert_eq!(docs[1].score, 0.0);
+
+    // A namespace hides documents of other namespaces.
+    let docs = store
+        .get_by_ids(&ids, &VecStoreOptions::default().with_name_space("t1"))
+        .await
+        .unwrap();
+    assert_eq!(docs.len(), 1);
+    assert_eq!(docs[0].id.as_deref(), Some("a"));
+
+    let conn = hash_conn();
+    let store = store_with_ready_index(&conn, StoreBuilder::new().key_prefix("kb:"));
+    assert!(store
+        .get_by_ids(&[], &VecStoreOptions::default())
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(conn.commands().is_empty());
+}
+
+#[tokio::test]
+async fn delete_removes_keys_and_respects_the_namespace() {
+    let conn = hash_conn();
+    let store = store(&conn, StoreBuilder::new().key_prefix("kb:"));
+    store
+        .delete(
+            &["a".to_string(), "kb:b".to_string(), "c".to_string()],
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(conn.commands(), [["DEL", "kb:a", "kb:b", "kb:c"]]);
+
+    // Store default namespace: only that namespace's existing hashes are deleted.
+    let conn = hash_conn();
+    let store =
+        store_with_ready_index(&conn, StoreBuilder::new().key_prefix("kb:").namespace("t2"));
+    store
+        .delete(
+            &["a".to_string(), "b".to_string()],
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(conn.names(), ["HGETALL", "HGETALL", "DEL"]);
+    assert_eq!(conn.commands()[2], ["DEL", "kb:b"]);
+
+    // The option overrides the default; nothing matches, so no DEL.
+    let conn = hash_conn();
+    let store =
+        store_with_ready_index(&conn, StoreBuilder::new().key_prefix("kb:").namespace("t2"));
+    store
+        .delete(
+            &["a".to_string()],
+            &VecStoreOptions::default().with_name_space("t9"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(conn.names(), ["HGETALL"]);
+
+    let conn = hash_conn();
+    store_with_ready_index(&conn, StoreBuilder::new())
+        .delete(&[], &VecStoreOptions::default())
+        .await
+        .unwrap();
+    assert!(conn.commands().is_empty());
+
+    let conn = FakeRedis::new(|_| Err(make_extension_error("ERR".into(), Some("boom".into()))));
+    let err = store_with_ready_index(&conn, StoreBuilder::new())
+        .delete(&["a".to_string()], &VecStoreOptions::default())
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("boom"), "{err}");
+}
+
 #[tokio::test]
 async fn existing_index_is_reused_and_a_racing_create_is_fine() {
     let conn = FakeRedis::new(|args| match args[0].as_str() {
@@ -892,6 +1024,47 @@ async fn redis_vector_live_round_trip() {
     assert_eq!(found[0].id.as_deref(), Some("doc-1"));
     assert_eq!(found[0].page_content, "beta");
     assert!(!found[0].metadata.contains_key("old"), "{found:?}");
+
+    // get_by_ids / delete by bare id or full key, scoped by namespace.
+    let got = store
+        .get_by_ids(&["nope".to_string(), keys[0].clone()], &tenant("ids"))
+        .await
+        .unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].id.as_deref(), Some("doc-1"));
+    assert_eq!(got[0].page_content, "beta");
+    assert!(store
+        .get_by_ids(&["doc-1".to_string()], &tenant("tenant-a"))
+        .await
+        .unwrap()
+        .is_empty());
+    store
+        .delete(&["doc-1".to_string()], &tenant("tenant-a"))
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .get_by_ids(&["doc-1".to_string()], &VecStoreOptions::default())
+            .await
+            .unwrap()
+            .len(),
+        1,
+        "other namespace kept it"
+    );
+    store
+        .delete(&["doc-1".to_string()], &tenant("ids"))
+        .await
+        .unwrap();
+    assert!(store
+        .get_by_ids(&["doc-1".to_string()], &VecStoreOptions::default())
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(store
+        .similarity_search("beta", 5, &tenant("ids"))
+        .await
+        .unwrap()
+        .is_empty());
 
     let client = ::redis::Client::open(url.as_str()).unwrap();
     let mut conn = client.get_multiplexed_async_connection().await.unwrap();

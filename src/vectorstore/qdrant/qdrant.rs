@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use qdrant_client::qdrant::point_id::PointIdOptions;
 use qdrant_client::qdrant::{
-    Filter, PointId, PointStruct, SearchPointsBuilder, UpsertPointsBuilder,
+    DeletePointsBuilder, Filter, GetPointsBuilder, PointId, PointStruct, SearchPointsBuilder,
+    UpsertPointsBuilder,
 };
 use qdrant_client::Payload;
 use serde_json::{json, Value};
@@ -19,7 +20,7 @@ pub use qdrant_client::Qdrant as QdrantClient;
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore},
+    vectorstore::{vectorstore::in_id_order, VecStoreOptions, VectorStore},
 };
 use uuid::Uuid;
 
@@ -242,25 +243,92 @@ impl VectorStore for Store {
             .result
             .into_iter()
             .map(|scored_point| {
-                let payload = scored_point.payload;
-
-                let page_content = payload[&self.content_field].to_string();
-                let metadata =
-                    serde_json::from_value(payload[&self.metadata_field].clone().into_json())
-                        .unwrap();
-                let score = scored_point.score as f64;
-                let id = scored_point.id.as_ref().and_then(point_id_to_string);
-                Document {
-                    page_content,
-                    metadata,
-                    score,
-                    id,
-                }
+                let mut doc = self.payload_to_document(scored_point.payload);
+                doc.score = scored_point.score as f64;
+                doc.id = scored_point.id.as_ref().and_then(point_id_to_string);
+                doc
             })
             .collect();
 
         Ok(documents)
     }
+
+    async fn delete(&self, ids: &[String], opt: &QdrantOptions) -> Result<(), Box<dyn Error>> {
+        let (point_ids, _) = point_ids_for_lookup(ids, opt)?;
+        if point_ids.is_empty() {
+            return Ok(());
+        }
+        self.client
+            .delete_points(
+                DeletePointsBuilder::new(&self.collection_name)
+                    .points(point_ids)
+                    .wait(true),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn get_by_ids(
+        &self,
+        ids: &[String],
+        opt: &QdrantOptions,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        let (point_ids, canonical) = point_ids_for_lookup(ids, opt)?;
+        if point_ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let found = self
+            .client
+            .get_points(GetPointsBuilder::new(&self.collection_name, point_ids).with_payload(true))
+            .await?;
+        let docs = found
+            .result
+            .into_iter()
+            .map(|point| {
+                let mut doc = self.payload_to_document(point.payload);
+                doc.id = point.id.as_ref().and_then(point_id_to_string);
+                doc
+            })
+            .collect();
+        Ok(in_id_order(&canonical, docs))
+    }
+}
+
+impl Store {
+    fn payload_to_document(
+        &self,
+        payload: HashMap<String, qdrant_client::qdrant::Value>,
+    ) -> Document {
+        let page_content = payload
+            .get(&self.content_field)
+            .and_then(|v| v.as_str())
+            .cloned()
+            .unwrap_or_default();
+        let metadata = payload
+            .get(&self.metadata_field)
+            .and_then(|v| serde_json::from_value(v.clone().into_json()).ok())
+            .unwrap_or_default();
+        Document::new(page_content).with_metadata(metadata)
+    }
+}
+
+/// Point ids to look up or delete, plus the canonical id strings they are stored under
+/// (an upper-case UUID matches its lower-case point). Namespaces don't exist in Qdrant.
+fn point_ids_for_lookup(
+    ids: &[String],
+    opt: &QdrantOptions,
+) -> Result<(Vec<PointId>, Vec<String>), Box<dyn Error>> {
+    if opt.name_space.is_some() {
+        return Err("Qdrant doesn't support namespaces".into());
+    }
+    let resolved = ids
+        .iter()
+        .map(|id| parse_supplied_id(id))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(resolved
+        .into_iter()
+        .map(|r| (r.point_id, r.canonical))
+        .unzip())
 }
 
 #[cfg(test)]
@@ -528,7 +596,7 @@ mod tests {
         if updated.len() != 1 {
             return Err(format!("expected one point with id 42, got {updated:?}").into());
         }
-        if updated[0].page_content != "\"second\"" {
+        if updated[0].page_content != "second" {
             return Err(format!("numeric point content was {}", updated[0].page_content).into());
         }
 
@@ -540,7 +608,7 @@ mod tests {
         if uuid_hits.len() != 1 {
             return Err(format!("expected one uuid point, got {by_uuid:?}").into());
         }
-        if uuid_hits[0].page_content != "\"uuid-body\"" {
+        if uuid_hits[0].page_content != "uuid-body" {
             return Err(format!("uuid point content was {}", uuid_hits[0].page_content).into());
         }
 
@@ -551,6 +619,31 @@ mod tests {
         if generated.is_none() {
             return Err(format!("generated id {} was not stored", first[2]).into());
         }
+
+        // get_by_ids: request order, upper-case UUID, missing id skipped.
+        let ask = [uuid.to_uppercase(), "7".to_string(), "42".to_string()];
+        let got = store.get_by_ids(&ask, &opts).await?;
+        let got_ids: Vec<_> = got.iter().map(|d| d.id.clone().unwrap()).collect();
+        assert_eq!(got_ids, [uuid.to_string(), "42".to_string()]);
+        assert_eq!(got[1].page_content, "second");
+        assert!(store.get_by_ids(&[], &opts).await?.is_empty());
+        assert!(store
+            .get_by_ids(&["not-an-id".to_string()], &opts)
+            .await
+            .is_err());
+
+        store
+            .delete(&["42".to_string(), "7".to_string()], &opts)
+            .await?;
+        assert!(store
+            .get_by_ids(&["42".to_string()], &opts)
+            .await?
+            .is_empty());
+        assert_eq!(
+            store.get_by_ids(&[uuid.to_string()], &opts).await?.len(),
+            1,
+            "other points kept"
+        );
         Ok(())
     }
 }

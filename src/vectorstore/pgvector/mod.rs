@@ -413,4 +413,83 @@ mod tests {
 
         drop_tables(&store_a).await;
     }
+
+    /// get_by_ids / delete: request order, missing ids, collection scoping, options.
+    #[tokio::test]
+    #[ignore]
+    async fn pgvector_get_by_ids_and_delete() {
+        let url = postgres_url().await;
+        let suffix = uuid::Uuid::new_v4().simple().to_string();
+        let embed_table = format!("lc_emb_{suffix}");
+        let coll_table = format!("lc_coll_{suffix}");
+        let store_a = build_store(
+            &url,
+            &format!("col_a_{suffix}"),
+            &embed_table,
+            &coll_table,
+            embedder(),
+        )
+        .await;
+        let store_b = build_store(
+            &url,
+            &format!("col_b_{suffix}"),
+            &embed_table,
+            &coll_table,
+            embedder(),
+        )
+        .await;
+        let opts = VecStoreOptions::default();
+        let ids = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+
+        store_a
+            .add_documents(
+                &[
+                    Document::new("near")
+                        .with_id("a1")
+                        .with_metadata(HashMap::from([("k".to_string(), json!(1))])),
+                    Document::new("far").with_id("a2"),
+                ],
+                &opts,
+            )
+            .await
+            .unwrap();
+        store_b
+            .add_documents(&[Document::new("mid").with_id("b1")], &opts)
+            .await
+            .unwrap();
+
+        let got = store_a
+            .get_by_ids(&ids(&["a2", "missing", "b1", "a1"]), &opts)
+            .await
+            .unwrap();
+        let got_ids: Vec<_> = got.iter().map(|d| d.id.as_deref().unwrap()).collect();
+        assert_eq!(
+            got_ids,
+            ["a2", "a1"],
+            "request order, other collection hidden"
+        );
+        assert_eq!(got[1].page_content, "near");
+        assert_eq!(got[1].metadata["k"], json!(1));
+        assert_eq!(got[1].score, 0.0);
+        assert!(store_a.get_by_ids(&[], &opts).await.unwrap().is_empty());
+
+        let ns = VecStoreOptions::default().with_name_space("x");
+        assert!(store_a.get_by_ids(&ids(&["a1"]), &ns).await.is_err());
+        assert!(store_a.delete(&ids(&["a1"]), &ns).await.is_err());
+
+        // b1 belongs to the other collection: untouched.
+        store_a
+            .delete(&ids(&["a1", "b1", "missing"]), &opts)
+            .await
+            .unwrap();
+        assert!(stored_row(&store_a, "a1").await.is_none());
+        assert!(stored_row(&store_a, "a2").await.is_some());
+        assert!(stored_row(&store_b, "b1").await.is_some());
+        store_a.delete(&[], &opts).await.unwrap();
+        let found = store_a.similarity_search("query", 10, &opts).await.unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].id.as_deref(), Some("a2"));
+
+        drop_tables(&store_a).await;
+    }
 }
