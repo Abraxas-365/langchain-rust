@@ -5,17 +5,18 @@ use crate::{
     },
     llm::AnthropicError,
     observability::{traced_event_stream, traced_generate},
-    schemas::{Message, MessageType, StreamData},
+    schemas::{CacheControl, Message, MessageType, StreamData},
 };
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use reqwest::Client;
+use serde::Deserialize;
 use serde_json::Value;
 use std::pin::Pin;
 
 use super::models::{
-    result_from_blocks, thinking_params, to_claude_messages, tool_choice, ApiResponse, ClaudeTool,
-    Content, Payload,
+    result_from_blocks, system_param, thinking_params, to_claude_messages, tool_choice,
+    ApiResponse, ClaudeTool, Content, Payload, Usage,
 };
 use crate::llm::sse::sse_json_events;
 
@@ -147,13 +148,10 @@ impl Claude {
         let payload = self.build_payload(messages, false);
         let res: ApiResponse = self.send(&payload).await?.json().await?;
 
-        let tokens = Some(TokenUsage {
-            prompt_tokens: res.usage.input_tokens,
-            completion_tokens: res.usage.output_tokens,
-            total_tokens: res.usage.input_tokens + res.usage.output_tokens,
-        });
-
-        Ok(result_from_blocks(&res.content, tokens))
+        Ok(result_from_blocks(
+            &res.content,
+            Some(res.usage.token_usage()),
+        ))
     }
 
     /// Streams the response, forwarding text deltas to `streaming_func` while rebuilding the
@@ -184,13 +182,7 @@ impl Claude {
         let (system_messages, other_messages): (Vec<_>, Vec<_>) = messages
             .iter()
             .partition(|m| m.message_type == MessageType::SystemMessage);
-        let system = (!system_messages.is_empty()).then(|| {
-            system_messages
-                .iter()
-                .map(|m| m.content.as_str())
-                .collect::<Vec<_>>()
-                .join("\n\n")
-        });
+        let system = system_param(&system_messages);
         let tools = self
             .options
             .functions
@@ -226,6 +218,7 @@ impl Claude {
             tools,
             thinking,
             output_config,
+            cache_control: self.options.prompt_caching.map(CacheControl::to_anthropic),
         }
     }
 }
@@ -305,7 +298,7 @@ enum Delta {
 struct StreamAccumulator {
     blocks: Vec<Content>,
     partial_json: Vec<String>,
-    usage: TokenUsage,
+    usage: Usage,
 }
 
 impl StreamAccumulator {
@@ -313,9 +306,7 @@ impl StreamAccumulator {
     fn push(&mut self, event: &Value) -> Result<Option<Delta>, LLMError> {
         match event["type"].as_str().unwrap_or_default() {
             "message_start" => {
-                let usage = &event["message"]["usage"];
-                self.usage.prompt_tokens = usage["input_tokens"].as_u64().unwrap_or(0) as u32;
-                self.usage.completion_tokens = usage["output_tokens"].as_u64().unwrap_or(0) as u32;
+                self.usage = Usage::deserialize(&event["message"]["usage"]).unwrap_or_default();
             }
             "content_block_start" => {
                 let index = block_index(event)?;
@@ -373,8 +364,17 @@ impl StreamAccumulator {
                 }
             }
             "message_delta" => {
-                if let Some(out) = event["usage"]["output_tokens"].as_u64() {
-                    self.usage.completion_tokens = out as u32;
+                // Cumulative counts; the cache fields may be repeated here.
+                let usage = &event["usage"];
+                let get = |key: &str| usage[key].as_u64().map(|n| n as u32);
+                if let Some(out) = get("output_tokens") {
+                    self.usage.output_tokens = out;
+                }
+                if let Some(read) = get("cache_read_input_tokens") {
+                    self.usage.cache_read_input_tokens = read;
+                }
+                if let Some(creation) = get("cache_creation_input_tokens") {
+                    self.usage.cache_creation_input_tokens = creation;
                 }
             }
             _ => {}
@@ -383,14 +383,7 @@ impl StreamAccumulator {
     }
 
     fn finish(self) -> GenerateResult {
-        let usage = self.usage;
-        result_from_blocks(
-            &self.blocks,
-            Some(TokenUsage::new(
-                usage.prompt_tokens,
-                usage.completion_tokens,
-            )),
-        )
+        result_from_blocks(&self.blocks, Some(self.usage.token_usage()))
     }
 }
 
@@ -929,6 +922,216 @@ mod offline_tests {
             Message::new_ai_message("answer").with_thinking(vec![ThinkingBlock::text("x")]);
         let v = payload_json("claude-sonnet-4-5", CallOptions::new(), &[message]);
         assert_eq!(v["messages"][0]["content"], "answer");
+    }
+
+    #[test]
+    fn prompt_caching_option_sets_request_level_cache_control() {
+        let hi = [Message::new_human_message("hi")];
+        let v = payload_json("claude-x", CallOptions::new(), &hi);
+        assert!(v.get("cache_control").is_none(), "off by default");
+        let v = payload_json(
+            "claude-x",
+            CallOptions::new().with_prompt_caching(CacheControl::Ephemeral),
+            &hi,
+        );
+        assert_eq!(v["cache_control"], json!({"type": "ephemeral"}));
+        // Messages are left alone: the API places the breakpoint itself.
+        assert_eq!(v["messages"], json!([{"role": "user", "content": "hi"}]));
+        let v = payload_json(
+            "claude-x",
+            CallOptions::new().with_prompt_caching(CacheControl::EphemeralOneHour),
+            &hi,
+        );
+        assert_eq!(
+            v["cache_control"],
+            json!({"type": "ephemeral", "ttl": "1h"})
+        );
+    }
+
+    #[test]
+    fn cached_system_messages_become_blocks() {
+        let docs = Message::new_system_message("long document")
+            .with_cache_control(CacheControl::EphemeralOneHour);
+        let v = payload_json(
+            "claude-x",
+            CallOptions::new(),
+            &[
+                docs,
+                Message::new_system_message(""),
+                Message::new_system_message("be brief"),
+                Message::new_human_message("q"),
+            ],
+        );
+        assert_eq!(
+            v["system"],
+            json!([
+                {"type": "text", "text": "long document", "cache_control": {"type": "ephemeral", "ttl": "1h"}},
+                {"type": "text", "text": "be brief"},
+            ])
+        );
+        // Without any breakpoint the system prompt stays a plain string, as before.
+        let v = payload_json(
+            "claude-x",
+            CallOptions::new(),
+            &[
+                Message::new_system_message("a"),
+                Message::new_system_message("b"),
+            ],
+        );
+        assert_eq!(v["system"], "a\n\nb");
+    }
+
+    #[test]
+    fn message_breakpoint_goes_on_its_last_block() {
+        let eph = || json!({"type": "ephemeral"});
+        let cached = |m: Message| m.with_cache_control(CacheControl::Ephemeral);
+        let calls = vec![crate::schemas::ToolCall::new("t1", "f", "{}")];
+        let thinking = vec![ThinkingBlock::Thinking {
+            thinking: "plan".into(),
+            signature: Some("sig".into()),
+        }];
+        let messages = [
+            cached(Message::new_human_message("context")),
+            cached(Message::new_human_message("").with_images(vec!["https://a/b.png"])),
+            cached(
+                Message::new_ai_message_with_tool_calls("", &calls).with_thinking(thinking.clone()),
+            ),
+            cached(Message::new_tool_message("result", "t1")),
+            cached(Message::new_ai_message("plain answer")),
+            cached(Message::new_human_message("")),
+        ];
+        let v = payload_json("claude-x", CallOptions::new(), &messages);
+        let m = &v["messages"];
+        // String content becomes one text block carrying the breakpoint.
+        assert_eq!(
+            m[0]["content"],
+            json!([{"type": "text", "text": "context", "cache_control": eph()}])
+        );
+        // Image-only message: on the image.
+        assert_eq!(m[1]["content"][0]["type"], "image");
+        assert_eq!(m[1]["content"][0]["cache_control"], eph());
+        // Assistant: on the tool_use, never on the thinking block.
+        assert!(m[2]["content"][0].get("cache_control").is_none());
+        assert_eq!(m[2]["content"][0]["type"], "thinking");
+        assert_eq!(m[2]["content"][1]["type"], "tool_use");
+        assert_eq!(m[2]["content"][1]["cache_control"], eph());
+        // Tool result.
+        assert_eq!(m[3]["content"][0]["type"], "tool_result");
+        assert_eq!(m[3]["content"][0]["cache_control"], eph());
+        assert_eq!(
+            m[4]["content"],
+            json!([{"type": "text", "text": "plain answer", "cache_control": eph()}])
+        );
+        // Empty text can't be cached: left as is.
+        assert_eq!(m[5]["content"], "");
+    }
+
+    #[test]
+    fn breakpoint_skips_to_the_last_cacheable_block() {
+        let cached = |m: Message| m.with_cache_control(CacheControl::Ephemeral);
+        let thinking = vec![ThinkingBlock::Thinking {
+            thinking: "plan".into(),
+            signature: Some("sig".into()),
+        }];
+        let v = payload_json(
+            "claude-x",
+            CallOptions::new(),
+            &[
+                cached(Message::new_human_message("describe").with_images(vec!["https://a/b.png"])),
+                cached(Message::new_ai_message("").with_thinking(thinking)),
+                cached(Message::new_human_message(" ").with_images(vec!["https://a/c.png"])),
+            ],
+        );
+        let m = &v["messages"];
+        // Image + text: only the last block (the text) is marked.
+        assert!(m[0]["content"][0].get("cache_control").is_none());
+        assert_eq!(m[0]["content"][1]["text"], "describe");
+        assert_eq!(
+            m[0]["content"][1]["cache_control"],
+            json!({"type": "ephemeral"})
+        );
+        // Thinking-only turn: nothing cacheable, sent unchanged.
+        assert_eq!(
+            m[1]["content"],
+            json!([{"type": "thinking", "thinking": "plan", "signature": "sig"}])
+        );
+        // Blank text is skipped: the image before it gets the breakpoint.
+        assert_eq!(
+            m[2]["content"][0]["cache_control"],
+            json!({"type": "ephemeral"})
+        );
+        assert!(m[2]["content"][1].get("cache_control").is_none());
+    }
+
+    #[test]
+    fn breakpoint_on_parallel_tool_results_marks_the_last_one() {
+        let calls = vec![
+            crate::schemas::ToolCall::new("a", "f", "{}"),
+            crate::schemas::ToolCall::new("b", "f", "{}"),
+        ];
+        let v = payload_json(
+            "claude-x",
+            CallOptions::new(),
+            &[
+                Message::new_human_message("go"),
+                Message::new_ai_message_with_tool_calls("", &calls),
+                Message::new_tool_message("ra", "a"),
+                Message::new_tool_message("rb", "b").with_cache_control(CacheControl::Ephemeral),
+            ],
+        );
+        let results = &v["messages"][2]["content"];
+        assert_eq!(results.as_array().unwrap().len(), 2, "still merged: {v}");
+        assert!(results[0].get("cache_control").is_none());
+        assert_eq!(results[1]["cache_control"], json!({"type": "ephemeral"}));
+    }
+
+    #[test]
+    fn usage_counts_cached_input_in_prompt_tokens() {
+        let usage: super::Usage = serde_json::from_value(json!({
+            "input_tokens": 20, "output_tokens": 7,
+            "cache_read_input_tokens": 1800, "cache_creation_input_tokens": 300
+        }))
+        .unwrap();
+        assert_eq!(
+            usage.token_usage(),
+            TokenUsage::new(2120, 7).with_cache_tokens(1800, 300)
+        );
+        let plain: super::Usage =
+            serde_json::from_value(json!({"input_tokens": 3, "output_tokens": 4})).unwrap();
+        assert_eq!(plain.token_usage(), TokenUsage::new(3, 4));
+    }
+
+    #[test]
+    fn stream_accumulator_reads_cache_usage() {
+        let mut acc = StreamAccumulator::default();
+        for e in [
+            json!({"type": "message_start", "message": {"usage": {
+                "input_tokens": 10, "output_tokens": 1,
+                "cache_read_input_tokens": 500, "cache_creation_input_tokens": 0}}}),
+            json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+            json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}}),
+            json!({"type": "message_delta", "delta": {}, "usage": {"output_tokens": 9}}),
+        ] {
+            acc.push(&e).unwrap();
+        }
+        assert_eq!(
+            acc.finish().tokens,
+            Some(TokenUsage::new(510, 9).with_cache_tokens(500, 0))
+        );
+
+        // message_delta may repeat the (cumulative) cache counts.
+        let mut acc = StreamAccumulator::default();
+        for e in [
+            json!({"type": "message_start", "message": {"usage": {"input_tokens": 10, "output_tokens": 1}}}),
+            json!({"type": "message_delta", "delta": {}, "usage": {
+                "output_tokens": 2, "cache_read_input_tokens": 40, "cache_creation_input_tokens": 60}}),
+        ] {
+            acc.push(&e).unwrap();
+        }
+        assert_eq!(
+            acc.finish().tokens,
+            Some(TokenUsage::new(110, 2).with_cache_tokens(40, 60))
+        );
     }
 
     #[test]

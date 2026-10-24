@@ -2,7 +2,7 @@ use futures::Future;
 use std::{pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
-use crate::schemas::{FunctionCallBehavior, FunctionDefinition, ResponseFormat};
+use crate::schemas::{CacheControl, FunctionCallBehavior, FunctionDefinition, ResponseFormat};
 
 use super::ThinkingConfig;
 
@@ -32,6 +32,9 @@ pub struct CallOptions {
     pub stream_usage: Option<bool>,
     /// Reasoning settings, for models that think before answering. See [`ThinkingConfig`].
     pub thinking: Option<ThinkingConfig>,
+    /// Caches the whole prompt (tools, system and messages) on every call, moving the
+    /// breakpoint forward as the conversation grows (Anthropic automatic prompt caching).
+    pub prompt_caching: Option<CacheControl>,
 }
 
 impl Default for CallOptions {
@@ -61,6 +64,7 @@ impl CallOptions {
             response_format: None,
             stream_usage: None,
             thinking: None,
+            prompt_caching: None,
         }
     }
 
@@ -173,6 +177,17 @@ impl CallOptions {
         self
     }
 
+    /// Caches the prompt across calls (Anthropic: request-level `cache_control`), so long
+    /// system prompts, tool definitions and conversation history are read from the cache
+    /// instead of being processed again. Use [`Message::with_cache_control`] for explicit
+    /// breakpoints instead.
+    ///
+    /// [`Message::with_cache_control`]: crate::schemas::Message::with_cache_control
+    pub fn with_prompt_caching(mut self, cache_control: CacheControl) -> Self {
+        self.prompt_caching = Some(cache_control);
+        self
+    }
+
     pub fn merge_options(&mut self, incoming_options: CallOptions) {
         // For simple scalar types wrapped in Option, prefer incoming option if it is Some
         self.candidate_count = incoming_options.candidate_count.or(self.candidate_count);
@@ -199,6 +214,7 @@ impl CallOptions {
             .or(self.response_format.clone());
         self.stream_usage = incoming_options.stream_usage.or(self.stream_usage);
         self.thinking = incoming_options.thinking.or(self.thinking.clone());
+        self.prompt_caching = incoming_options.prompt_caching.or(self.prompt_caching);
 
         // For `Vec<String>`, merge if both are Some; prefer incoming if only incoming is Some
         if let Some(mut new_stop_words) = incoming_options.stop_words {
@@ -309,6 +325,15 @@ mod tests {
             Some(ThinkingConfig::disabled()),
             "an explicit off overrides an earlier on"
         );
+    }
+
+    #[test]
+    fn merge_prompt_caching_prefers_incoming_and_keeps_existing() {
+        let mut base = CallOptions::new().with_prompt_caching(CacheControl::Ephemeral);
+        base.merge_options(CallOptions::new());
+        assert_eq!(base.prompt_caching, Some(CacheControl::Ephemeral), "kept");
+        base.merge_options(CallOptions::new().with_prompt_caching(CacheControl::EphemeralOneHour));
+        assert_eq!(base.prompt_caching, Some(CacheControl::EphemeralOneHour));
     }
 
     #[tokio::test]

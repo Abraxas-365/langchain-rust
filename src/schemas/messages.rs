@@ -4,6 +4,8 @@ use serde_json::Value;
 
 use crate::language_models::ThinkingBlock;
 
+use super::CacheControl;
+
 /// Enum `MessageType` represents the type of a message.
 /// It can be a `SystemMessage`, `AIMessage`, or `HumanMessage`.
 ///
@@ -154,6 +156,9 @@ pub struct Message {
     pub images: Option<Vec<ImageContent>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub thinking: Vec<ThinkingBlock>,
+    /// Cache the prompt up to and including this message (Anthropic prompt caching).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<CacheControl>,
 }
 
 impl Message {
@@ -195,6 +200,21 @@ impl Message {
     /// Attaches the model's reasoning to an AI message, so it is sent back in later turns.
     pub fn with_thinking(mut self, thinking: Vec<ThinkingBlock>) -> Self {
         self.thinking = thinking;
+        self
+    }
+
+    /// Marks the prompt up to and including this message for caching, e.g. a long system
+    /// prompt or a document. Anthropic allows at most four breakpoints per request.
+    ///
+    /// ```rust
+    /// use langchain_rust::schemas::{CacheControl, Message};
+    ///
+    /// let system = Message::new_system_message("…long instructions…")
+    ///     .with_cache_control(CacheControl::Ephemeral);
+    /// assert_eq!(system.cache_control, Some(CacheControl::Ephemeral));
+    /// ```
+    pub fn with_cache_control(mut self, cache_control: CacheControl) -> Self {
+        self.cache_control = Some(cache_control);
         self
     }
 
@@ -504,5 +524,23 @@ mod tests {
         assert!(old.thinking.is_empty());
         let plain = serde_json::to_value(Message::new_ai_message("x")).unwrap();
         assert!(plain.get("thinking").is_none(), "omitted when empty");
+    }
+
+    #[test]
+    fn cache_control_round_trips_and_is_omitted_when_unset() {
+        let m =
+            Message::new_system_message("sys").with_cache_control(CacheControl::EphemeralOneHour);
+        let value = serde_json::to_value(&m).unwrap();
+        assert_eq!(value["cache_control"], "ephemeral_one_hour");
+        let back: Message = serde_json::from_value(value).unwrap();
+        assert_eq!(back.cache_control, Some(CacheControl::EphemeralOneHour));
+
+        let plain = serde_json::to_value(Message::new_human_message("x")).unwrap();
+        assert!(plain.get("cache_control").is_none());
+        let old: Message = serde_json::from_value(json!({
+            "content": "hi", "message_type": "human", "id": null, "tool_calls": null, "images": null
+        }))
+        .unwrap();
+        assert_eq!(old.cache_control, None);
     }
 }

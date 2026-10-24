@@ -194,7 +194,11 @@ async fn generate_stream_caches_and_replays() {
                 .map(|e| match e.unwrap() {
                     LLMEvent::Text(t) => format!("T:{t}"),
                     LLMEvent::Thinking(t) => format!("R:{t}"),
-                    LLMEvent::Done(r) => format!("D:{}:{:?}", r.generation, r.tokens),
+                    LLMEvent::Done(r) => format!(
+                        "D:{}:{:?}",
+                        r.generation,
+                        r.tokens.map(|t| (t.prompt_tokens, t.completion_tokens))
+                    ),
                 })
                 .collect::<Vec<_>>()
                 .await
@@ -207,7 +211,7 @@ async fn generate_stream_caches_and_replays() {
             "T:one ",
             "T:two ",
             "T:three",
-            "D:one two three:Some(TokenUsage { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 })"
+            "D:one two three:Some((1, 1))"
         ]
     );
     assert_eq!(cache.len(), 1);

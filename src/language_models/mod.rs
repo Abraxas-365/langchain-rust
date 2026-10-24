@@ -125,26 +125,35 @@ pub(crate) fn result_events(result: GenerateResult) -> Vec<LLMEvent> {
     events
 }
 
+/// Tokens used by one call (or summed over several, e.g. an agent run).
+///
+/// `prompt_tokens` counts the whole input, cached or not. `cache_read_tokens` is the part
+/// served from the provider's prompt cache (cheaper) and `cache_creation_tokens` the part
+/// written to it (Anthropic bills writes extra); both are 0 when unknown.
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 pub struct TokenUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    #[serde(default)]
+    pub cache_read_tokens: u32,
+    #[serde(default)]
+    pub cache_creation_tokens: u32,
 }
 
 impl TokenUsage {
     pub fn sum(&self, other: &TokenUsage) -> TokenUsage {
-        TokenUsage {
-            prompt_tokens: self.prompt_tokens + other.prompt_tokens,
-            completion_tokens: self.completion_tokens + other.completion_tokens,
-            total_tokens: self.total_tokens + other.total_tokens,
-        }
+        let mut sum = self.clone();
+        sum.add(other);
+        sum
     }
 
     pub fn add(&mut self, other: &TokenUsage) {
         self.prompt_tokens += other.prompt_tokens;
         self.completion_tokens += other.completion_tokens;
         self.total_tokens += other.total_tokens;
+        self.cache_read_tokens += other.cache_read_tokens;
+        self.cache_creation_tokens += other.cache_creation_tokens;
     }
 }
 
@@ -154,7 +163,15 @@ impl TokenUsage {
             prompt_tokens,
             completion_tokens,
             total_tokens: prompt_tokens + completion_tokens,
+            ..Default::default()
         }
+    }
+
+    /// Sets how many prompt tokens were read from / written to the prompt cache.
+    pub fn with_cache_tokens(mut self, read: u32, creation: u32) -> Self {
+        self.cache_read_tokens = read;
+        self.cache_creation_tokens = creation;
+        self
     }
 }
 
@@ -177,6 +194,24 @@ mod tests {
         assert_eq!(c.total_tokens, 10);
         // sum does not mutate
         assert_eq!(a.total_tokens, 7);
+    }
+
+    #[test]
+    fn token_usage_cache_tokens_add_up_and_old_json_parses() {
+        let a = TokenUsage::new(100, 5).with_cache_tokens(80, 10);
+        let b = TokenUsage::new(50, 5).with_cache_tokens(20, 40);
+        let s = a.sum(&b);
+        assert_eq!((s.cache_read_tokens, s.cache_creation_tokens), (100, 50));
+        assert_eq!((s.prompt_tokens, s.total_tokens), (150, 160));
+        let mut c = a.clone();
+        c.add(&b);
+        assert_eq!(c, s);
+
+        let old: TokenUsage = serde_json::from_value(serde_json::json!({
+            "prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3
+        }))
+        .unwrap();
+        assert_eq!(old, TokenUsage::new(1, 2));
     }
 
     #[test]

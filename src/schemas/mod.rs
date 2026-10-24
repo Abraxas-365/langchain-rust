@@ -29,3 +29,6 @@ pub mod convert;
 mod stream;
 
 pub use stream::*;
+
+mod cache_control;
+pub use cache_control::*;

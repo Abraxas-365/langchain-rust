@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::language_models::TokenUsage;
 use crate::schemas::{Message, MessageType};
 
 #[derive(Serialize, Deserialize)]
@@ -75,6 +76,30 @@ pub(crate) struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    #[serde(default)]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub(crate) struct PromptTokensDetails {
+    #[serde(default)]
+    pub cached_tokens: u32,
+}
+
+impl Usage {
+    pub fn token_usage(&self) -> TokenUsage {
+        let cached = self
+            .prompt_tokens_details
+            .as_ref()
+            .map_or(0, |d| d.cached_tokens);
+        TokenUsage {
+            prompt_tokens: self.prompt_tokens,
+            completion_tokens: self.completion_tokens,
+            total_tokens: self.total_tokens,
+            ..Default::default()
+        }
+        .with_cache_tokens(cached, 0)
+    }
 }
 
 // Stream response structures
