@@ -426,6 +426,7 @@ impl VectorStore for Store {
                     .as_f64()
                     .or_else(|| additional["distance"].as_f64().map(|d| -d))
                     .unwrap_or_default();
+                let id = additional["id"].as_str().map(str::to_string);
                 let page_content = match properties.remove(&self.text_key) {
                     Some(Value::String(text)) => text,
                     Some(Value::Null) | None => String::new(),
@@ -438,6 +439,7 @@ impl VectorStore for Store {
                         .filter(|(_, v)| !v.is_null())
                         .collect(),
                     score,
+                    id,
                 })
             })
             .filter(|doc| {

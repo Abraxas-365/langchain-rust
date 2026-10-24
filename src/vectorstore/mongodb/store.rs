@@ -233,6 +233,12 @@ impl Store {
             }
             None => String::new(),
         };
+        let id = match stored.remove("_id") {
+            Some(Bson::ObjectId(id)) => Some(id.to_hex()),
+            Some(Bson::String(id)) => Some(id),
+            Some(Bson::Null) | None => None,
+            Some(other) => Some(other.to_string()),
+        };
         let metadata: HashMap<String, Value> = match stored.remove(&self.metadata_key) {
             Some(Bson::Document(metadata)) => metadata
                 .into_iter()
@@ -244,6 +250,7 @@ impl Store {
             page_content,
             metadata,
             score,
+            id,
         })
     }
 

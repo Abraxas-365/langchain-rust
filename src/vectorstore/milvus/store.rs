@@ -418,7 +418,11 @@ impl Store {
             .remove("distance")
             .and_then(|d| d.as_f64())
             .unwrap_or_default();
-        hit.remove(&schema.primary);
+        let id = match hit.remove(&schema.primary) {
+            Some(Value::String(id)) => Some(id),
+            Some(Value::Number(id)) => Some(id.to_string()),
+            _ => None,
+        };
         let page_content = match hit.remove(&self.text_field) {
             Some(Value::String(text)) => text,
             Some(Value::Null) | None => String::new(),
@@ -447,6 +451,7 @@ impl Store {
             page_content,
             metadata,
             score: score(&schema.metric, distance),
+            id,
         }
     }
 }

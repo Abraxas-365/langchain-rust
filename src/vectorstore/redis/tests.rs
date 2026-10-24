@@ -520,6 +520,7 @@ async fn similarity_search_builds_the_knn_query_and_parses_resp2() {
 
     assert_eq!(docs.len(), 2);
     assert_eq!(docs[0].page_content, "alpha");
+    assert_eq!(docs[1].id.as_deref(), Some("2"), "key without the prefix");
     assert!((docs[0].score - 0.9).abs() < 1e-12, "{}", docs[0].score);
     assert_eq!(
         docs[0].metadata,

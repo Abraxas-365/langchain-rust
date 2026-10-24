@@ -47,6 +47,8 @@ struct QueryResponse {
 #[derive(Deserialize)]
 struct ScoredVector {
     #[serde(default)]
+    id: String,
+    #[serde(default)]
     score: f64,
     #[serde(default)]
     metadata: Option<Map<String, Value>>,
@@ -188,6 +190,7 @@ impl VectorStore for Store {
                     page_content,
                     metadata: metadata.into_iter().collect(),
                     score: m.score,
+                    id: Some(m.id).filter(|id| !id.is_empty()),
                 }
             })
             .collect())

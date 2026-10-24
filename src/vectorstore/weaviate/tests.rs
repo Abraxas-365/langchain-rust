@@ -413,6 +413,8 @@ async fn similarity_search_builds_the_graphql_query_and_maps_hits() {
     assert_eq!(docs.len(), 2);
     assert_eq!(docs[0].page_content, "alpha");
     assert_eq!(docs[0].score, 0.9);
+    assert_eq!(docs[0].id.as_deref(), Some("1"));
+    assert_eq!(docs[1].id.as_deref(), Some("2"));
     assert_eq!(
         docs[0].metadata,
         std::collections::HashMap::from([

@@ -231,8 +231,10 @@ async fn similarity_search_queries_and_maps_matches() {
         "text key is not repeated in metadata"
     );
     assert_eq!(docs[0].metadata["source"], json!("a.txt"));
+    assert_eq!(docs[0].id.as_deref(), Some("1"));
     assert_eq!(docs[1].page_content, "beta");
     assert!(docs[1].metadata.is_empty());
+    assert_eq!(docs[1].id.as_deref(), Some("2"));
 }
 
 #[tokio::test]

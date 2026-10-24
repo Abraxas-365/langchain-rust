@@ -245,7 +245,7 @@ impl VectorStore for Store {
             .into_iter();
 
         let mut results = Vec::with_capacity(ids.len());
-        for _ in ids {
+        for id in ids {
             let page_content = documents.next().flatten().unwrap_or_default();
             let metadata = metadatas
                 .next()
@@ -267,6 +267,7 @@ impl VectorStore for Store {
                 page_content,
                 metadata,
                 score,
+                id: Some(id),
             });
         }
         Ok(results)

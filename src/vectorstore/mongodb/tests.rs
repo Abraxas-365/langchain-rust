@@ -286,6 +286,7 @@ async fn results_become_documents() {
         .unwrap();
     assert_eq!(doc.page_content, "alpha");
     assert_eq!(doc.score, 0.875);
+    assert_eq!(doc.id, Some(id.to_hex()));
     assert_eq!(
         doc.metadata,
         HashMap::<String, Value>::from([

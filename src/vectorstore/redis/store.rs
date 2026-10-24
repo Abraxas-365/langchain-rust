@@ -392,7 +392,11 @@ where
         cmd
     }
 
-    fn document(&self, fields: Vec<(String, &RedisValue)>) -> Result<Document, Box<dyn Error>> {
+    fn document(
+        &self,
+        key: &str,
+        fields: Vec<(String, &RedisValue)>,
+    ) -> Result<Document, Box<dyn Error>> {
         let mut page_content = String::new();
         let mut distance = None;
         let mut metadata = HashMap::new();
@@ -424,6 +428,11 @@ where
             page_content,
             metadata,
             score: self.distance.score(distance),
+            id: Some(
+                key.strip_prefix(&self.key_prefix)
+                    .unwrap_or(key)
+                    .to_string(),
+            ),
         })
     }
 }
@@ -528,8 +537,8 @@ where
             Err(err) => return Err(err.into()),
         };
         let mut docs = Vec::new();
-        for (_, fields) in search_hits(&reply)? {
-            let doc = self.document(fields)?;
+        for (key, fields) in search_hits(&reply)? {
+            let doc = self.document(&key, fields)?;
             if opt
                 .score_threshold
                 .is_some_and(|threshold| doc.score < f64::from(threshold))

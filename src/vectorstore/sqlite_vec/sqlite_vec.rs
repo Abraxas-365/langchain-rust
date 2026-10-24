@@ -191,6 +191,7 @@ impl VectorStore for Store {
                     page_content,
                     metadata,
                     score,
+                    id: None,
                 })
             })
             .collect::<Result<Vec<Document>, sqlx::Error>>()?;

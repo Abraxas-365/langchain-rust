@@ -422,6 +422,7 @@ async fn rows_and_documents() {
         &schema,
     );
     assert_eq!(doc.page_content, "hi");
+    assert_eq!(doc.id.as_deref(), Some("id1"));
     assert_eq!(doc.score, -0.25, "L2: -distance");
     assert_eq!(
         serde_json::to_value(&doc.metadata).unwrap(),
