@@ -70,7 +70,7 @@ fastembed = { version = "7", optional = true }
 # Same ort as fastembed (it pins an exact rc); needed to share one ONNX Environment per process.
 ort = { version = "2.0.0-rc.15", optional = true, default-features = false }
 flume = { version = "0.12", optional = true }
-gix = { version = "0.89", default-features = false, optional = true, features = [
+gix = { version = "0.90", default-features = false, optional = true, features = [
     "parallel",
     "revision",
     "serde",
