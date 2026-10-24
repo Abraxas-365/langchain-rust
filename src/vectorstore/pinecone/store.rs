@@ -8,7 +8,7 @@ use serde_json::{json, Map, Value};
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore},
+    vectorstore::{document_ids, VecStoreOptions, VectorStore},
 };
 
 /// Vectors per upsert request (Pinecone's recommended batch size; the hard limit is 1000).
@@ -105,7 +105,10 @@ impl Store {
 impl VectorStore for Store {
     type Options = PineconeOptions;
 
-    /// Embeds and upserts the documents in batches, returning their new ids.
+    /// Embeds and upserts the documents in batches, returning their ids.
+    ///
+    /// A [`Document::id`] is used as the vector id, so writing it again overwrites
+    /// that record (values and metadata).
     async fn add_documents(
         &self,
         docs: &[Document],
@@ -114,6 +117,7 @@ impl VectorStore for Store {
         if docs.is_empty() {
             return Ok(vec![]);
         }
+        let ids = document_ids(docs, || uuid::Uuid::new_v4().to_string())?;
         let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
         let embeddings = embedder.embed_documents(&texts).await?;
@@ -125,11 +129,6 @@ impl VectorStore for Store {
             )
             .into());
         }
-
-        let ids: Vec<String> = docs
-            .iter()
-            .map(|_| uuid::Uuid::new_v4().to_string())
-            .collect();
         let vectors: Vec<Value> = docs
             .iter()
             .zip(&embeddings)

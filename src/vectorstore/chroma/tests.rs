@@ -183,6 +183,113 @@ async fn add_documents_sends_the_ids_it_returns() {
 }
 
 #[tokio::test]
+async fn add_documents_replaces_caller_ids_by_deleting_then_upserting() {
+    let mut server = Server::new_async().await;
+    let store = store_on(&mut server, StoreBuilder::new()).await;
+    // (endpoint, body) in request order.
+    let seen = Arc::new(std::sync::Mutex::new(
+        Vec::<(String, serde_json::Value)>::new(),
+    ));
+    for endpoint in ["upsert", "delete"] {
+        let seen_in_mock = seen.clone();
+        server
+            .mock("POST", collection_path(endpoint).as_str())
+            .with_body_from_request(move |request| {
+                seen_in_mock.lock().unwrap().push((
+                    endpoint.to_string(),
+                    serde_json::from_slice(request.body().unwrap()).unwrap(),
+                ));
+                b"{}".to_vec()
+            })
+            .create_async()
+            .await;
+    }
+    let docs = [
+        Document::new("alpha").with_id("doc-1"),
+        Document::new("beta"),
+    ];
+    let ids = store
+        .add_documents(&docs, &VecStoreOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(ids[0], "doc-1");
+    assert!(uuid::Uuid::parse_str(&ids[1]).is_ok(), "{ids:?}");
+    let again = store
+        .add_documents(
+            &[Document::new("beta").with_id("doc-1")],
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(again, ["doc-1"]);
+    // Generated ids are new, so plain writes skip the delete.
+    store
+        .add_documents(&[Document::new("alpha")], &VecStoreOptions::default())
+        .await
+        .unwrap();
+
+    let seen = seen.lock().unwrap();
+    let endpoints: Vec<&str> = seen.iter().map(|(e, _)| e.as_str()).collect();
+    assert_eq!(
+        endpoints,
+        ["delete", "upsert", "delete", "upsert", "upsert"]
+    );
+    // Only caller ids are deleted (upsert merges metadata, so they must go first).
+    assert_eq!(seen[0].1, json!({ "ids": ["doc-1"] }));
+    assert_eq!(seen[1].1["ids"], json!(ids));
+    assert_eq!(seen[2].1, json!({ "ids": ["doc-1"] }));
+    assert_eq!(seen[3].1["ids"], json!(["doc-1"]));
+    assert_eq!(seen[3].1["documents"], json!(["beta"]));
+}
+
+#[tokio::test]
+async fn a_failed_delete_stops_the_write() {
+    let mut server = Server::new_async().await;
+    let store = store_on(&mut server, StoreBuilder::new()).await;
+    server
+        .mock("POST", collection_path("delete").as_str())
+        .with_status(500)
+        .with_body(json!({ "error": "Internal", "message": "boom" }).to_string())
+        .create_async()
+        .await;
+    let upsert = server
+        .mock("POST", collection_path("upsert").as_str())
+        .expect(0)
+        .create_async()
+        .await;
+    let err = store
+        .add_documents(
+            &[Document::new("alpha").with_id("doc-1")],
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("boom"), "{err}");
+    upsert.assert_async().await;
+}
+
+#[tokio::test]
+async fn add_documents_rejects_an_empty_id_before_embedding() {
+    let mut server = Server::new_async().await;
+    let store = store_on(&mut server, StoreBuilder::new()).await;
+    let upsert = server
+        .mock("POST", collection_path("upsert").as_str())
+        .expect(0)
+        .create_async()
+        .await;
+    let opts = VecStoreOptions::default().with_embedder(crate::test_utils::PanickingEmbedder);
+    let err = store
+        .add_documents(
+            &[Document::new("alpha"), Document::new("beta").with_id("")],
+            &opts,
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("must not be empty"), "{err}");
+    upsert.assert_async().await;
+}
+
+#[tokio::test]
 async fn add_documents_with_a_namespace_tags_metadata_and_skips_empty_input() {
     let mut server = Server::new_async().await;
     let store = store_on(&mut server, StoreBuilder::new().namespace_key("tenant_id")).await;
@@ -470,6 +577,28 @@ async fn live_chroma_round_trip() {
         .await
         .unwrap();
     assert_eq!(thresholded.len(), 2, "both rust crab copies");
+
+    // Caller ids: writing one again replaces the record, and searches return it.
+    let ids_ns = VecStoreOptions::default().with_name_space("ids");
+    store
+        .add_documents(
+            &[Document::new("go gopher")
+                .with_id("doc-1")
+                .with_metadata([("old".to_string(), json!(true))].into())],
+            &ids_ns,
+        )
+        .await
+        .unwrap();
+    let ids = store
+        .add_documents(&[Document::new("rust crab").with_id("doc-1")], &ids_ns)
+        .await
+        .unwrap();
+    assert_eq!(ids, ["doc-1"]);
+    let found = store.similarity_search("crabs", 5, &ids_ns).await.unwrap();
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].id.as_deref(), Some("doc-1"));
+    assert_eq!(found[0].page_content, "rust crab");
+    assert!(!found[0].metadata.contains_key("old"), "{found:?}");
 
     reqwest::Client::new()
         .delete(format!(

@@ -8,7 +8,7 @@ use tokio::sync::OnceCell;
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore},
+    vectorstore::{document_ids, VecStoreOptions, VectorStore},
 };
 
 /// Rows per insert request.
@@ -461,6 +461,10 @@ impl VectorStore for Store {
     type Options = MilvusOptions;
 
     /// Embeds the documents and inserts them in batches, returning their ids.
+    ///
+    /// With a `VarChar` primary key, a [`Document::id`] is used as the key and its
+    /// batch is upserted, replacing a row with the same id. `autoId` collections
+    /// assign their own ids, so supplying one is an error.
     async fn add_documents(
         &self,
         docs: &[Document],
@@ -469,6 +473,8 @@ impl VectorStore for Store {
         if docs.is_empty() {
             return Ok(vec![]);
         }
+        // Checked before embedding; the schema decides below whether they're used.
+        let doc_ids = document_ids(docs, || uuid::Uuid::new_v4().to_string())?;
         let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
         let vectors = embedder.embed_documents(&texts).await?;
@@ -484,23 +490,37 @@ impl VectorStore for Store {
             .schema(Some(vectors[0].len()))
             .await?
             .ok_or("Milvus collection is missing")?;
+        if schema.auto_id && docs.iter().any(|doc| doc.id.is_some()) {
+            return Err(format!(
+                "Milvus collection {} has an autoId primary key; documents can't set their id",
+                self.collection
+            )
+            .into());
+        }
         let namespace = self.namespace(opt);
 
         let mut ids = Vec::with_capacity(docs.len());
-        let pairs: Vec<_> = docs.iter().zip(&vectors).collect();
-        for batch in pairs.chunks(BATCH_SIZE) {
-            let own_ids: Vec<Option<String>> = batch
-                .iter()
-                .map(|_| (!schema.auto_id).then(|| uuid::Uuid::new_v4().to_string()))
-                .collect();
+        for ((batch, batch_ids), batch_vectors) in docs
+            .chunks(BATCH_SIZE)
+            .zip(doc_ids.chunks(BATCH_SIZE))
+            .zip(vectors.chunks(BATCH_SIZE))
+        {
             let rows = batch
                 .iter()
-                .zip(&own_ids)
-                .map(|((doc, vector), id)| self.row(doc, vector, id.as_deref(), namespace, schema))
+                .zip(batch_ids)
+                .zip(batch_vectors)
+                .map(|((doc, id), vector)| {
+                    let id = (!schema.auto_id).then_some(id.as_str());
+                    self.row(doc, vector, id, namespace, schema)
+                })
                 .collect::<Result<Vec<_>, _>>()?;
-            let answer = self
-                .post("entities/insert", json!({ "data": rows }))
-                .await?;
+            // Insert doesn't dedupe primary keys; upsert replaces rows with the same id.
+            let endpoint = if batch.iter().any(|doc| doc.id.is_some()) {
+                "entities/upsert"
+            } else {
+                "entities/insert"
+            };
+            let answer = self.post(endpoint, json!({ "data": rows })).await?;
             if schema.auto_id {
                 let inserted: Vec<String> = answer["data"]["insertIds"]
                     .as_array()
@@ -522,7 +542,7 @@ impl VectorStore for Store {
                 }
                 ids.extend(inserted);
             } else {
-                ids.extend(own_ids.into_iter().flatten());
+                ids.extend(batch_ids.iter().cloned());
             }
         }
         Ok(ids)

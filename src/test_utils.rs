@@ -156,3 +156,18 @@ impl Embedder for FakeEmbedder {
         Ok(self.lookup(text))
     }
 }
+
+/// Embedder that panics when used, for paths that must fail (or return) before
+/// embedding anything.
+pub struct PanickingEmbedder;
+
+#[async_trait]
+impl Embedder for PanickingEmbedder {
+    async fn embed_documents(&self, _: &[String]) -> Result<Vec<Vec<f64>>, EmbedderError> {
+        panic!("embed_documents called")
+    }
+
+    async fn embed_query(&self, _: &str) -> Result<Vec<f64>, EmbedderError> {
+        panic!("embed_query called")
+    }
+}

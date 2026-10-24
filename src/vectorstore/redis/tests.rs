@@ -286,6 +286,43 @@ async fn first_write_creates_the_index_then_pipelines_hsets() {
     assert_eq!(conn.commands()[0][6..], ["namespace", "call"]);
 }
 
+#[tokio::test]
+async fn caller_ids_become_keys_and_replace_the_whole_hash() {
+    let conn = FakeRedis::new(|_| Ok(RedisValue::Okay));
+    let store = store_with_ready_index(&conn, StoreBuilder::new().key_prefix("kb:"));
+    let keys = store
+        .add_documents(
+            &[
+                Document::new("alpha").with_id("doc-1"),
+                Document::new("beta"),
+            ],
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(keys[0], "kb:doc-1");
+    let generated = keys[1].strip_prefix("kb:").unwrap();
+    assert!(uuid::Uuid::parse_str(generated).is_ok(), "{keys:?}");
+    // The caller id is deleted first so fields of the old version don't linger;
+    // generated keys are new and skip the DEL.
+    assert_eq!(conn.names(), ["DEL", "HSET", "HSET"]);
+    let commands = conn.commands();
+    assert_eq!(commands[0], ["DEL", "kb:doc-1"]);
+    assert_eq!(commands[1][1], "kb:doc-1");
+    assert_eq!(commands[2][1], keys[1]);
+
+    let conn = FakeRedis::new(|_| Ok(RedisValue::Okay));
+    let err = store_with_ready_index(&conn, StoreBuilder::new())
+        .add_documents(
+            &[Document::new("alpha").with_id("")],
+            &VecStoreOptions::default().with_embedder(PanickingEmbedder),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("must not be empty"), "{err}");
+    assert!(conn.names().is_empty());
+}
+
 fn store_with_ready_index(conn: &FakeRedis, builder: StoreBuilder) -> Store<FakeRedis> {
     let store = store(conn, builder);
     store
@@ -831,6 +868,30 @@ async fn redis_vector_live_round_trip() {
         .await
         .unwrap();
     assert_eq!(all.len(), 15);
+
+    // Caller ids: the hash is replaced (no stale fields), and searches return the id.
+    let keys = store
+        .add_documents(
+            &[Document::new("alpha")
+                .with_id("doc-1")
+                .with_metadata([("old".to_string(), json!(true))].into())],
+            &tenant("ids"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(keys, [format!("doc:{index}:doc-1")]);
+    store
+        .add_documents(&[Document::new("beta").with_id("doc-1")], &tenant("ids"))
+        .await
+        .unwrap();
+    let found = store
+        .similarity_search("beta", 5, &tenant("ids"))
+        .await
+        .unwrap();
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].id.as_deref(), Some("doc-1"));
+    assert_eq!(found[0].page_content, "beta");
+    assert!(!found[0].metadata.contains_key("old"), "{found:?}");
 
     let client = ::redis::Client::open(url.as_str()).unwrap();
     let mut conn = client.get_multiplexed_async_connection().await.unwrap();

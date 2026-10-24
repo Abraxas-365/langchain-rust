@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::{
     embedding::Embedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore},
+    vectorstore::{document_ids, VecStoreOptions, VectorStore},
 };
 
 /// Alias of the KNN distance in search replies. Not a field anyone stores.
@@ -451,6 +451,12 @@ where
 {
     type Options = VecStoreOptions<Value>;
 
+    /// Embeds the documents and writes each as a hash, returning their keys
+    /// (`key_prefix` + id).
+    ///
+    /// A [`Document::id`] becomes the key's id part and replaces that hash: the old
+    /// one is deleted first, in the same pipeline, so stale metadata fields don't
+    /// survive. Searches return the id without the prefix.
     async fn add_documents(
         &self,
         docs: &[Document],
@@ -459,6 +465,10 @@ where
         if docs.is_empty() {
             return Ok(Vec::new());
         }
+        let keys: Vec<String> = document_ids(docs, || uuid::Uuid::new_v4().to_string())?
+            .into_iter()
+            .map(|id| format!("{}{id}", self.key_prefix))
+            .collect();
         let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
         let vectors = embedder.embed_documents(&texts).await?;
@@ -473,16 +483,16 @@ where
         self.ensure_index(vectors[0].len()).await?;
 
         let namespace = opt.name_space.as_deref().or(self.namespace.as_deref());
-        let keys: Vec<String> = docs
-            .iter()
-            .map(|_| format!("{}{}", self.key_prefix, uuid::Uuid::new_v4()))
-            .collect();
         let mut connection = self.connection.clone();
         for start in (0..docs.len()).step_by(WRITE_BATCH) {
             let end = (start + WRITE_BATCH).min(docs.len());
             let mut pipe = ::redis::pipe();
             for i in start..end {
                 let doc = &docs[i];
+                if doc.id.is_some() {
+                    // HSET merges fields; drop the old hash so this is a replace.
+                    pipe.cmd("DEL").arg(&keys[i]).ignore();
+                }
                 let cmd = pipe.cmd("HSET").arg(&keys[i]);
                 cmd.arg(&self.content_key)
                     .arg(&doc.page_content)

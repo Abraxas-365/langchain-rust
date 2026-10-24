@@ -110,8 +110,7 @@ fn points_for_upsert(
     extra_payload: Option<Value>,
 ) -> Result<(Vec<PointStruct>, Vec<String>), Box<dyn Error>> {
     if vectors.len() != docs.len() {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(Box::new(std::io::Error::other(
             "Number of vectors and documents do not match",
         )));
     }

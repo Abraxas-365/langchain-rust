@@ -57,6 +57,19 @@ pub struct Document {
     ///   upserts that point. `None` generates a UUID. Empty, negative, overflowing, and
     ///   other arbitrary strings are rejected. Repeated ids in one batch keep the last
     ///   document.
+    /// - **Chroma** and **Pinecone** use any non-empty id in their upsert, replacing the
+    ///   record with that id. `None` generates a UUID.
+    /// - **Weaviate** needs a UUID (anything else is rejected before embedding) and
+    ///   replaces the object with that id. Ids come back lowercase and hyphenated.
+    /// - **Milvus** uses the id as a `VarChar` primary key and upserts the batch.
+    ///   Collections with an `autoId` key reject documents that set an id.
+    /// - **Redis** uses the id as the key after the prefix and replaces the whole hash
+    ///   (the old one is deleted in the same pipeline, so stale fields don't survive).
+    ///   `add_documents` returns the full keys; searches return the id without prefix.
+    /// - **MongoDB** stores the id as a string `_id` and replaces the document with
+    ///   that `_id`. `None` generates an ObjectId.
+    ///
+    /// Searches in all of the above return the stored id.
     ///
     /// SQLite vec, SQLite VSS, and SurrealDB ignore `id` on insert and keep their
     /// existing id generation. Documents they return leave `id` unset.
@@ -99,6 +112,12 @@ impl Document {
     /// - Qdrant: a UUID or an unsigned `u64` decimal (`0` through `u64::MAX`).
     ///   Empty, negative, overflowing, and other strings are rejected. Upsert
     ///   replaces the point; the last copy in a batch wins.
+    /// - Chroma, Pinecone: any non-empty string; upsert replaces the record.
+    /// - Weaviate: a UUID; the object with that id is replaced.
+    /// - Milvus: any non-empty string with a `VarChar` primary key (upserted).
+    ///   `autoId` collections reject it.
+    /// - Redis: the key's id part (after the prefix); the old hash is replaced.
+    /// - MongoDB: a string `_id`; the document with that `_id` is replaced.
     /// - SQLite vec, SQLite VSS, and SurrealDB ignore this value.
     ///
     /// ```

@@ -26,6 +26,23 @@ pub trait VectorStore: Send + Sync {
     ) -> Result<Vec<Document>, Box<dyn Error>>;
 }
 
+/// The id each document is written with: its own [`Document::id`] when set, otherwise
+/// one from `generate`. Fails on an empty id before anything is sent, so a bad id can't
+/// look like a successful write.
+#[allow(dead_code)] // Unused when no store using it is enabled.
+pub(crate) fn document_ids(
+    docs: &[Document],
+    mut generate: impl FnMut() -> String,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    docs.iter()
+        .map(|doc| match doc.id.as_deref() {
+            Some("") => Err("document id must not be empty".into()),
+            Some(id) => Ok(id.to_string()),
+            None => Ok(generate()),
+        })
+        .collect()
+}
+
 impl<VS, F> From<VS> for Box<dyn VectorStore<Options = F>>
 where
     VS: 'static + VectorStore<Options = F>,
@@ -89,5 +106,39 @@ impl<O: Sync + Send> schemas::Retriever for Retriever<O> {
         self.vstore
             .similarity_search(query, self.num_docs, &self.options)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn document_ids_keep_caller_ids_and_generate_the_rest_in_order() {
+        let mut next = 0;
+        let ids = document_ids(
+            &[
+                Document::new("a"),
+                Document::new("b").with_id("doc-b"),
+                Document::new("c"),
+            ],
+            || {
+                next += 1;
+                format!("gen-{next}")
+            },
+        )
+        .unwrap();
+        assert_eq!(ids, ["gen-1", "doc-b", "gen-2"]);
+        assert!(document_ids(&[], || unreachable!()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn document_ids_reject_empty_ids() {
+        let err = document_ids(
+            &[Document::new("a"), Document::new("b").with_id("")],
+            || "gen".into(),
+        )
+        .unwrap_err();
+        assert_eq!(err.to_string(), "document id must not be empty");
     }
 }
