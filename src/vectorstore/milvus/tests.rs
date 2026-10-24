@@ -651,6 +651,76 @@ async fn auto_id_collections_return_milvus_ids_and_get_loaded() {
         .await
         .unwrap_err();
     assert!(err.to_string().contains("1 ids for 2 rows"), "{err}");
+
+    // autoId keys can't take caller ids; nothing is written.
+    let no_write = server
+        .mock("POST", Matcher::Regex("entities/(insert|upsert)".into()))
+        .expect(0)
+        .create_async()
+        .await;
+    let err = store
+        .add_documents(
+            &[Document::new("alpha").with_id("doc-1")],
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("autoId"), "{err}");
+    no_write.assert_async().await;
+}
+
+#[tokio::test]
+async fn caller_ids_are_upserted_as_primary_keys() {
+    let mut server = Server::new_async().await;
+    let _describe = server
+        .mock("POST", "/v2/vectordb/collections/describe")
+        .with_body(describe("LoadStateLoaded", "COSINE", false).to_string())
+        .create_async()
+        .await;
+    let insert = server
+        .mock("POST", "/v2/vectordb/entities/insert")
+        .expect(0)
+        .create_async()
+        .await;
+    let upsert = server
+        .mock("POST", "/v2/vectordb/entities/upsert")
+        .match_request(|request| {
+            let rows = body_of(request)["data"].clone();
+            let rows = rows.as_array().unwrap();
+            rows.len() == 2
+                && rows[0]["pk"] == json!("doc-1")
+                && rows[1]["pk"]
+                    .as_str()
+                    .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok())
+        })
+        .with_body(ok(json!({ "upsertCount": 2 })))
+        .expect(1)
+        .create_async()
+        .await;
+    let store = builder(&server).create_collection(false).build().unwrap();
+    let ids = store
+        .add_documents(
+            &[
+                Document::new("alpha").with_id("doc-1"),
+                Document::new("beta"),
+            ],
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ids[0], "doc-1");
+    assert!(uuid::Uuid::parse_str(&ids[1]).is_ok(), "{ids:?}");
+    upsert.assert_async().await;
+    insert.assert_async().await;
+
+    let err = store
+        .add_documents(
+            &[Document::new("alpha").with_id("")],
+            &VecStoreOptions::default().with_embedder(crate::test_utils::PanickingEmbedder),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("must not be empty"), "{err}");
 }
 
 #[tokio::test(start_paused = true)]
@@ -1078,6 +1148,28 @@ async fn milvus_live_round_trip() {
         .unwrap();
     assert_eq!(hits[0].page_content, "alpha");
 
+    // Caller ids are upserted: writing one again replaces the row, and searches return it.
+    let ids_ns = VecStoreOptions::default().with_name_space("ids");
+    store
+        .add_documents(
+            &[Document::new("alpha")
+                .with_id("doc-1")
+                .with_metadata([("old".to_string(), json!(true))].into())],
+            &ids_ns,
+        )
+        .await
+        .unwrap();
+    let ids = store
+        .add_documents(&[Document::new("beta").with_id("doc-1")], &ids_ns)
+        .await
+        .unwrap();
+    assert_eq!(ids, ["doc-1"]);
+    let hits = store.similarity_search("query", 5, &ids_ns).await.unwrap();
+    assert_eq!(hits.len(), 1, "{hits:?}");
+    assert_eq!(hits[0].id.as_deref(), Some("doc-1"));
+    assert_eq!(hits[0].page_content, "beta");
+    assert!(!hits[0].metadata.contains_key("old"), "{hits:?}");
+
     // An existing L2 collection (created elsewhere, autoId, not loaded) works as is.
     let client = reqwest::Client::new();
     let post = |path: &str, body: Value| {
@@ -1129,6 +1221,11 @@ async fn milvus_live_round_trip() {
         .await
         .unwrap_err();
     assert!(err.to_string().contains("no JSON field"), "{err}");
+    let err = l2_store
+        .add_documents(&[Document::new("alpha").with_id("doc-1")], &opt)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("autoId"), "{err}");
 
     // A collection with a different dimension is a clear Milvus error.
     let wide = live(&collection)

@@ -165,6 +165,42 @@ async fn add_documents_sends_the_ids_it_returns_and_batches_by_100() {
 }
 
 #[tokio::test]
+async fn add_documents_upserts_caller_ids_and_rejects_empty_ones_first() {
+    let mut server = Server::new_async().await;
+    let store = store(&server, StoreBuilder::new());
+    let upsert = server
+        .mock("POST", "/vectors/upsert")
+        .match_body(Matcher::PartialJson(json!({
+            "vectors": [{ "id": "doc-1" }, { "id": "doc-2" }],
+        })))
+        .with_body("{\"upsertedCount\":2}")
+        .expect(1)
+        .create_async()
+        .await;
+    let ids = store
+        .add_documents(
+            &[
+                Document::new("alpha").with_id("doc-1"),
+                Document::new("beta").with_id("doc-2"),
+            ],
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ids, ["doc-1", "doc-2"]);
+    upsert.assert_async().await;
+
+    let err = store
+        .add_documents(
+            &[Document::new("alpha").with_id("")],
+            &VecStoreOptions::default().with_embedder(PanickingEmbedder),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("must not be empty"), "{err}");
+}
+
+#[tokio::test]
 async fn add_documents_skips_empty_input_and_reports_errors() {
     let mut server = Server::new_async().await;
     let store = store(&server, StoreBuilder::new());
@@ -429,4 +465,33 @@ async fn pinecone_live_round_trip() {
         .await
         .unwrap();
     assert!(other_namespace.is_empty());
+
+    // Caller ids: writing one again replaces the vector, and searches return it.
+    let ids_ns = VecStoreOptions::default().with_name_space(format!("{namespace}-ids"));
+    store
+        .add_documents(
+            &[Document::new("alpha")
+                .with_id("doc-1")
+                .with_metadata([("old".to_string(), json!(true))].into())],
+            &ids_ns,
+        )
+        .await
+        .unwrap();
+    let ids = store
+        .add_documents(&[Document::new("beta").with_id("doc-1")], &ids_ns)
+        .await
+        .unwrap();
+    assert_eq!(ids, ["doc-1"]);
+    let mut found = vec![];
+    for _ in 0..20 {
+        found = store.similarity_search("beta", 5, &ids_ns).await.unwrap();
+        if found.first().is_some_and(|d| d.page_content == "beta") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].id.as_deref(), Some("doc-1"));
+    assert_eq!(found[0].page_content, "beta");
+    assert!(!found[0].metadata.contains_key("old"), "{found:?}");
 }

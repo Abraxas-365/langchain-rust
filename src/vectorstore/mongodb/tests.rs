@@ -345,6 +345,14 @@ async fn empty_input_zero_limit_and_bad_filters_skip_the_network() {
         .await
         .unwrap_err();
     assert!(err.to_string().contains("not valid BSON"), "{err}");
+    let err = store
+        .add_documents(
+            &[Document::new("alpha"), Document::new("beta").with_id("")],
+            &VecStoreOptions::default().with_embedder(crate::test_utils::PanickingEmbedder),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.to_string(), "document id must not be empty");
 
     struct ShortEmbedder;
     #[async_trait::async_trait]
@@ -595,6 +603,48 @@ async fn mongodb_vector_live_round_trip() {
     let found = search("beta", tenant("tenant-d"), 1).await;
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].page_content, "beta");
+
+    // Caller ids become string `_id`s; writing one again replaces the document.
+    let ids = store
+        .add_documents(
+            &[
+                Document::new("alpha")
+                    .with_id("doc-1")
+                    .with_metadata([("old".to_string(), json!(true))].into()),
+                Document::new("beta"),
+            ],
+            &tenant("tenant-e"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ids[0], "doc-1");
+    assert!(ObjectId::parse_str(&ids[1]).is_ok(), "{ids:?}");
+    let ids = store
+        .add_documents(
+            &[Document::new("beta").with_id("doc-1")],
+            &tenant("tenant-e"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ids, ["doc-1"]);
+    let replaced = store
+        .collection()
+        .find_one(doc! { "_id": "doc-1" })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(replaced.get_str("text").unwrap(), "beta");
+    assert!(replaced
+        .get_document("metadata")
+        .unwrap()
+        .get("old")
+        .is_none());
+    let found = search("beta", tenant("tenant-e"), 2).await;
+    assert_eq!(found.len(), 2, "the replace didn't add a document");
+    assert!(
+        found.iter().any(|d| d.id.as_deref() == Some("doc-1")),
+        "{found:?}"
+    );
 
     // Two stores racing to create differently-defined indexes on a fresh collection:
     // the loser gets "duplicate index names" and uses the winner's index.

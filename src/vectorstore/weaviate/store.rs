@@ -13,7 +13,7 @@ use serde_json::{json, Map, Value};
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore},
+    vectorstore::{document_ids, VecStoreOptions, VectorStore},
 };
 
 /// Objects per `/v1/batch/objects` request.
@@ -305,7 +305,11 @@ impl Store {
 impl VectorStore for Store {
     type Options = WeaviateOptions;
 
-    /// Embeds the documents and inserts them in batches, returning their new ids.
+    /// Embeds the documents and inserts them in batches, returning their ids.
+    ///
+    /// A [`Document::id`] must be a UUID; Weaviate's batch endpoint replaces an
+    /// existing object with the same id. Ids are returned in Weaviate's lowercase
+    /// hyphenated form, which is also what searches return.
     async fn add_documents(
         &self,
         docs: &[Document],
@@ -314,6 +318,14 @@ impl VectorStore for Store {
         if docs.is_empty() {
             return Ok(vec![]);
         }
+        let ids = document_ids(docs, || uuid::Uuid::new_v4().to_string())?
+            .into_iter()
+            .map(|id| {
+                uuid::Uuid::parse_str(&id)
+                    .map(|uuid| uuid.hyphenated().to_string())
+                    .map_err(|_| format!("Weaviate object ids must be UUIDs, got {id:?}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
         let embeddings = embedder.embed_documents(&texts).await?;
@@ -328,10 +340,6 @@ impl VectorStore for Store {
         self.ensure_schema().await?;
 
         let namespace = self.namespace(opt);
-        let ids: Vec<String> = docs
-            .iter()
-            .map(|_| uuid::Uuid::new_v4().to_string())
-            .collect();
         let objects: Vec<Value> = docs
             .iter()
             .zip(&embeddings)

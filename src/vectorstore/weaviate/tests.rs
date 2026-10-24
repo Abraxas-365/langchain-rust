@@ -309,6 +309,49 @@ async fn ids_match_what_was_sent_and_batches_hold_100_objects() {
 }
 
 #[tokio::test]
+async fn caller_ids_must_be_uuids_and_are_sent_normalized() {
+    let mut server = Server::new_async().await;
+    let store = store(&server, StoreBuilder::new());
+    server
+        .mock("GET", "/v1/schema/Docs")
+        .with_body(schema(&[("text", "text"), ("nameSpace", "text")]))
+        .create_async()
+        .await;
+    let batch = server
+        .mock("POST", "/v1/batch/objects")
+        .match_body(Matcher::PartialJson(json!({
+            "objects": [{ "id": "6f1c2a8e-0b1d-4c3e-9f00-0123456789ab" }],
+        })))
+        .with_body_from_request(batch_ok)
+        .expect(1)
+        .create_async()
+        .await;
+    // Uppercase / simple forms are accepted and sent the way Weaviate returns them.
+    let ids = store
+        .add_documents(
+            &[Document::new("alpha").with_id("6F1C2A8E0B1D4C3E9F000123456789AB")],
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ids, ["6f1c2a8e-0b1d-4c3e-9f00-0123456789ab"]);
+    batch.assert_async().await;
+
+    // Non-UUID and empty ids fail before embedding or any request.
+    let opts = VecStoreOptions::default().with_embedder(PanickingEmbedder);
+    for bad in ["doc-1", ""] {
+        let err = store
+            .add_documents(&[Document::new("alpha").with_id(bad)], &opts)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("UUID") || err.to_string().contains("must not be empty"),
+            "{bad:?}: {err}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn per_object_batch_failures_and_http_errors_are_reported() {
     let mut server = Server::new_async().await;
     let store = store(&server, StoreBuilder::new());
@@ -723,6 +766,31 @@ async fn weaviate_live_round_trip() {
             .collect::<Vec<_>>(),
         ["beta"]
     );
+
+    // Caller ids: writing one again replaces the object, and searches return it.
+    let id = uuid::Uuid::new_v4().to_string();
+    new_store()
+        .add_documents(
+            &[Document::new("alpha")
+                .with_id(&id)
+                .with_metadata([("source".to_string(), json!("old.txt"))].into())],
+            &tenant("ids"),
+        )
+        .await
+        .unwrap();
+    let ids = new_store()
+        .add_documents(&[Document::new("beta").with_id(&id)], &tenant("ids"))
+        .await
+        .unwrap();
+    assert_eq!(ids, [id.as_str()]);
+    let found = store
+        .similarity_search("beta", 5, &tenant("ids"))
+        .await
+        .unwrap();
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].id.as_deref(), Some(id.as_str()));
+    assert_eq!(found[0].page_content, "beta");
+    assert_ne!(found[0].metadata.get("source"), Some(&json!("old.txt")));
 
     reqwest::Client::new()
         .delete(format!(

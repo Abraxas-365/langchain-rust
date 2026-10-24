@@ -8,7 +8,7 @@ use serde_json::{json, Map, Value};
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore},
+    vectorstore::{document_ids, VecStoreOptions, VectorStore},
 };
 
 /// Distance function of a new collection. Existing collections keep theirs.
@@ -157,7 +157,12 @@ impl Store {
 impl VectorStore for Store {
     type Options = ChromaOptions;
 
-    /// Embeds and upserts the documents, returning their new ids.
+    /// Embeds and upserts the documents, returning their ids.
+    ///
+    /// Chroma's upsert merges metadata into an existing record, so documents with a
+    /// [`Document::id`] are deleted first and then written: the new version fully
+    /// replaces the old one. The two calls aren't atomic; if the upsert fails, those
+    /// ids are gone until the write is retried.
     async fn add_documents(
         &self,
         docs: &[Document],
@@ -166,6 +171,7 @@ impl VectorStore for Store {
         if docs.is_empty() {
             return Ok(vec![]);
         }
+        let ids = document_ids(docs, || uuid::Uuid::new_v4().to_string())?;
         let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
         let embeddings = embedder.embed_documents(&texts).await?;
@@ -177,10 +183,6 @@ impl VectorStore for Store {
             )
             .into());
         }
-        let ids: Vec<String> = docs
-            .iter()
-            .map(|_| uuid::Uuid::new_v4().to_string())
-            .collect();
 
         let body = json!({
             "ids": ids,
@@ -188,6 +190,16 @@ impl VectorStore for Store {
             "documents": texts,
             "metadatas": self.metadatas(docs, opt),
         });
+        let caller_ids: Vec<&str> = docs.iter().filter_map(|d| d.id.as_deref()).collect();
+        if !caller_ids.is_empty() {
+            send(
+                self.client
+                    .post(format!("{}/delete", self.collection_url))
+                    .json(&json!({ "ids": caller_ids })),
+                &self.api_key,
+            )
+            .await?;
+        }
         send(
             self.client
                 .post(format!("{}/upsert", self.collection_url))

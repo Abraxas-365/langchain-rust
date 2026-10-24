@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error, future::Future, sync::Arc, time::D
 use async_trait::async_trait;
 use futures::TryStreamExt;
 use mongodb::{
-    bson::{doc, Bson, Document as BsonDocument},
+    bson::{doc, oid::ObjectId, Bson, Document as BsonDocument},
     Collection, SearchIndexModel, SearchIndexType,
 };
 use serde_json::Value;
@@ -310,6 +310,12 @@ impl Store {
 impl VectorStore for Store {
     type Options = VecStoreOptions<Value>;
 
+    /// Embeds and stores the documents, returning their `_id`s (hex for generated
+    /// ObjectIds).
+    ///
+    /// A [`Document::id`] is stored as a string `_id` and replaces the document with
+    /// that `_id` (`replace_one` with upsert). Documents without one are inserted
+    /// together and get an ObjectId.
     async fn add_documents(
         &self,
         docs: &[Document],
@@ -318,6 +324,15 @@ impl VectorStore for Store {
         if docs.is_empty() {
             return Ok(Vec::new());
         }
+        // `_id`s are fixed before inserting so the result order is the input order.
+        let ids: Vec<Bson> = docs
+            .iter()
+            .map(|doc| match doc.id.as_deref() {
+                Some("") => Err("document id must not be empty"),
+                Some(id) => Ok(Bson::String(id.to_string())),
+                None => Ok(Bson::ObjectId(ObjectId::new())),
+            })
+            .collect::<Result<_, _>>()?;
         let embedder = opt.embedder.as_ref().unwrap_or(&self.embedder);
         let texts: Vec<String> = docs.iter().map(|d| d.page_content.clone()).collect();
         let vectors = embedder.embed_documents(&texts).await?;
@@ -333,24 +348,39 @@ impl VectorStore for Store {
         let stored = docs
             .iter()
             .zip(&vectors)
-            .map(|(doc, vector)| self.to_bson(doc, vector, namespace))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let inserted = self.collection.insert_many(stored).await?;
-        let mut ids: Vec<(usize, String)> = inserted
-            .inserted_ids
-            .into_iter()
-            .map(|(i, id)| match id {
-                Bson::ObjectId(id) => (i, id.to_hex()),
-                other => (i, other.to_string()),
+            .zip(&ids)
+            .map(|((doc, vector), id)| {
+                let mut stored = self.to_bson(doc, vector, namespace)?;
+                stored.insert("_id", id.clone());
+                Ok(stored)
             })
-            .collect();
-        ids.sort_by_key(|(i, _)| *i);
+            .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
+
+        let (replaced, inserted): (Vec<_>, Vec<_>) = stored
+            .into_iter()
+            .partition(|stored| matches!(stored.get("_id"), Some(Bson::String(_))));
+        if !inserted.is_empty() {
+            self.collection.insert_many(inserted).await?;
+        }
+        for stored in replaced {
+            let filter = doc! { "_id": stored.get("_id").cloned().unwrap_or(Bson::Null) };
+            self.collection
+                .replace_one(filter, stored)
+                .upsert(true)
+                .await?;
+        }
 
         self.ensure_index(vectors[0].len())
             .await
             .map_err(|e| -> Box<dyn Error> { e.to_string().into() })?;
-        Ok(ids.into_iter().map(|(_, id)| id).collect())
+        Ok(ids
+            .into_iter()
+            .map(|id| match id {
+                Bson::ObjectId(id) => id.to_hex(),
+                Bson::String(id) => id,
+                other => other.to_string(),
+            })
+            .collect())
     }
 
     async fn similarity_search(
