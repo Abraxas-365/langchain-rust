@@ -19,8 +19,8 @@ mod error;
 pub use error::*;
 
 mod typed;
-pub(crate) use typed::strip_reasoning;
 pub use typed::TypedOutputParser;
+pub(crate) use typed::{extract_json, strip_reasoning};
 
 mod boolean_parser;
 pub use boolean_parser::BooleanParser;

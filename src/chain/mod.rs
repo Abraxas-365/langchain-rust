@@ -28,6 +28,12 @@ pub use conversational_retrieval_qa::*;
 mod router;
 pub use router::*;
 
+mod api;
+pub use api::{
+    APIChain, API_CHAIN_DEFAULT_INPUT_KEY, API_CHAIN_DEFAULT_OUTPUT_KEY, API_CHAIN_REQUEST_KEY,
+    API_CHAIN_RESPONSE_KEY,
+};
+
 mod constitutional;
 pub use constitutional::{
     ConstitutionalChain, ConstitutionalOutput, ConstitutionalPrinciple, CritiqueRevision,
