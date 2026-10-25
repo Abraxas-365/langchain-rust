@@ -3,12 +3,12 @@ use std::{collections::HashMap, error::Error, sync::Arc};
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
-use surrealdb::{Connection, Surreal};
+use surrealdb::{types::RecordId, Connection, Surreal};
 
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore},
+    vectorstore::{vectorstore::in_id_order, VecStoreOptions, VectorStore},
 };
 
 // INSERT INTO documents {
@@ -177,10 +177,7 @@ impl<C: Connection> VectorStore for Store<C> {
 
         let query_vector = self.embedder.embed_query(query).await?;
 
-        let collection_predicate = match &self.collection_table_name {
-            Some(_) => " AND metadata[$collection_metadata_key] = $collection_name ",
-            None => "",
-        };
+        let collection_predicate = self.collection_predicate();
 
         let mut result = self
             .db
@@ -214,12 +211,101 @@ impl<C: Connection> VectorStore for Store<C> {
                 page_content: row.text,
                 metadata: row.metadata,
                 score: row.similarity,
-                id: None,
+                id: Some(row.id),
             })
             .collect();
 
         Ok(documents)
     }
+
+    /// Deletes records of this collection by id (the key `add_documents` returned).
+    /// On a shared table only this collection's records are deleted. `filters` and
+    /// `name_space` are rejected: they can't narrow a lookup by id here.
+    async fn delete(&self, ids: &[String], opt: &Self::Options) -> Result<(), Box<dyn Error>> {
+        reject_id_options(opt)?;
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let collection_predicate = self.collection_predicate();
+        self.db
+            .query(format!("DELETE $records WHERE true {collection_predicate}"))
+            .bind(("records", self.record_ids(ids)))
+            .bind(("collection_name", self.collection_name.to_owned()))
+            .bind(("collection_metadata_key", self.get_collection_metdata_key()))
+            .await?
+            .check()?;
+        Ok(())
+    }
+
+    /// Fetches records of this collection by id, in request order (score 0).
+    async fn get_by_ids(
+        &self,
+        ids: &[String],
+        opt: &Self::Options,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        reject_id_options(opt)?;
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let collection_predicate = self.collection_predicate();
+        let mut result = self
+            .db
+            .query(format!(
+                "SELECT record::id(id) as id, text, metadata FROM $records \
+                 WHERE true {collection_predicate}"
+            ))
+            .bind(("records", self.record_ids(ids)))
+            .bind(("collection_name", self.collection_name.to_owned()))
+            .bind(("collection_metadata_key", self.get_collection_metdata_key()))
+            .await?
+            .check()?;
+        let rows: Vec<Value> = result.take(0)?;
+        let docs = rows
+            .into_iter()
+            .map(serde_json::from_value::<StoredRow>)
+            .map(|row| {
+                row.map(|row| Document {
+                    page_content: row.text,
+                    metadata: row.metadata.unwrap_or_default(),
+                    score: 0.0,
+                    id: Some(row.id),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(in_id_order(ids, docs))
+    }
+}
+
+impl<C: Connection> Store<C> {
+    /// Restricts a query to this collection when it shares a table with others.
+    fn collection_predicate(&self) -> &'static str {
+        match &self.collection_table_name {
+            Some(_) => " AND metadata[$collection_metadata_key] = $collection_name ",
+            None => "",
+        }
+    }
+
+    /// The records named by `ids` (keys in this store's table).
+    fn record_ids(&self, ids: &[String]) -> Vec<RecordId> {
+        let table = self.get_collection_table_name();
+        ids.iter()
+            .map(|id| RecordId::new(table, id.as_str()))
+            .collect()
+    }
+}
+
+fn reject_id_options(opt: &VecStoreOptions<Value>) -> Result<(), Box<dyn Error>> {
+    if opt.filters.is_some() || opt.name_space.is_some() {
+        return Err("surrealdb delete/get_by_ids don't support filters or name_space".into());
+    }
+    Ok(())
+}
+
+#[derive(Deserialize, Debug)]
+struct StoredRow {
+    id: String,
+    text: String,
+    metadata: Option<HashMap<String, Value>>,
 }
 
 #[derive(Deserialize, Debug)]

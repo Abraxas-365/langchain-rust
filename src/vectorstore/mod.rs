@@ -12,6 +12,9 @@ pub mod sqlite_vss;
 #[cfg(feature = "sqlite-vec")]
 pub mod sqlite_vec;
 
+#[cfg(any(feature = "sqlite-vec", feature = "sqlite-vss"))]
+mod sqlite_rows;
+
 #[cfg(feature = "surrealdb")]
 pub mod surrealdb;
 

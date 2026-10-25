@@ -7,7 +7,10 @@ use sqlx::{AssertSqlSafe, Pool, Row, Sqlite};
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore},
+    vectorstore::{
+        sqlite_rows::{delete_rows, reject_id_options, rows_by_id},
+        VecStoreOptions, VectorStore,
+    },
 };
 
 pub struct Store {
@@ -136,6 +139,7 @@ impl VectorStore for Store {
 
         let rows = sqlx::query(AssertSqlSafe(format!(
             r#"SELECT
+                    e.rowid AS id,
                     text,
                     metadata,
                     distance
@@ -158,6 +162,7 @@ impl VectorStore for Store {
                 let page_content: String = row.try_get("text")?;
                 let metadata_json: Value = row.try_get("metadata")?;
                 let score: f64 = row.try_get("distance")?;
+                let id: i64 = row.try_get("id")?;
 
                 let metadata = if let Value::Object(obj) = metadata_json {
                     obj.into_iter().collect()
@@ -169,11 +174,29 @@ impl VectorStore for Store {
                     page_content,
                     metadata,
                     score,
-                    id: None,
+                    id: Some(id.to_string()),
                 })
             })
             .collect::<Result<Vec<Document>, sqlx::Error>>()?;
 
         Ok(docs)
+    }
+
+    /// Deletes rows (and their vectors) by the rowid `add_documents` returned. Ids that
+    /// aren't integers or don't exist are ignored.
+    async fn delete(&self, ids: &[String], opt: &Self::Options) -> Result<(), Box<dyn Error>> {
+        reject_id_options(opt)?;
+        let table = &self.table;
+        delete_rows(&self.pool, table, &format!("vss_{table}"), ids).await
+    }
+
+    /// Fetches rows by rowid, in request order (score 0).
+    async fn get_by_ids(
+        &self,
+        ids: &[String],
+        opt: &Self::Options,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        reject_id_options(opt)?;
+        rows_by_id(&self.pool, &self.table, ids).await
     }
 }
