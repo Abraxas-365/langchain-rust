@@ -12,6 +12,9 @@ pub mod openai;
 pub mod voyage;
 pub use error::*;
 
+mod vectors;
+pub use vectors::{combine_vectors, cosine_similarity};
+
 #[cfg(feature = "fastembed")]
 mod fastembed;
 #[cfg(feature = "fastembed")]
