@@ -65,6 +65,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Router Chain (LLM picks the chain)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/router_chain.rs)
   - [x] [Constitutional Chain (critique and revise against principles)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/constitutional_chain.rs)
   - [x] [Transform Chain (your own function as a chain step)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/transform_chain.rs)
+  - [x] [API Chain (answer from an HTTP API, allowed URLs only)](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/api_chain.rs)
 
 - Output parsers
 
