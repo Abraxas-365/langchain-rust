@@ -14,6 +14,9 @@ pub use error::*;
 pub mod thinking;
 pub use thinking::{ThinkingBlock, ThinkingConfig, ThinkingDisplay, ThinkingEffort};
 
+mod tokens;
+pub use tokens::{calculate_max_tokens, count_tokens, model_context_size};
+
 /// The result of an LLM call.
 ///
 /// When the model asks for tools, `tool_calls` holds them (same type for every provider)

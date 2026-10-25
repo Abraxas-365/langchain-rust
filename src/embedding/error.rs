@@ -42,4 +42,8 @@ pub enum EmbedderError {
     #[cfg(feature = "bedrock")]
     #[error("Bedrock error: {0}")]
     BedrockError(String),
+
+    /// Bad input to a vector helper such as [`combine_vectors`](super::combine_vectors).
+    #[error("Invalid vectors: {0}")]
+    InvalidVectors(String),
 }

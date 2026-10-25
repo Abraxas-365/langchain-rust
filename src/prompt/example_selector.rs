@@ -9,7 +9,10 @@ use std::{
 use async_trait::async_trait;
 
 use super::{PromptArgs, PromptError, PromptFromatter, PromptTemplate};
-use crate::{embedding::Embedder, schemas::messages::value_to_text};
+use crate::{
+    embedding::{cosine_similarity, Embedder},
+    schemas::messages::value_to_text,
+};
 
 /// Chooses the examples to put in a few-shot prompt for a given input.
 ///
@@ -326,17 +329,5 @@ impl ExampleSelector for SemanticSimilarityExampleSelector {
             .take(self.k)
             .map(|(_, example)| example.clone())
             .collect())
-    }
-}
-
-/// Cosine similarity; 0 when either vector is all zeros.
-fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
-    let dot: f64 = a.iter().zip(b).map(|(x, y)| x * y).sum();
-    let norm = |v: &[f64]| v.iter().map(|x| x * x).sum::<f64>().sqrt();
-    let denominator = norm(a) * norm(b);
-    if denominator == 0.0 {
-        0.0
-    } else {
-        dot / denominator
     }
 }
