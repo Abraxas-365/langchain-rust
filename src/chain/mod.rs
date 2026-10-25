@@ -43,6 +43,9 @@ pub use llm_math::{
     LLM_MATH_EXPRESSION_KEY,
 };
 
+mod transform;
+pub use transform::TransformChain;
+
 pub mod options;
 
 #[cfg(test)]
