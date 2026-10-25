@@ -20,28 +20,28 @@ use crate::{
 
 /// Tool that records the inputs it receives and echoes a fixed answer (or fails).
 #[derive(Clone)]
-struct RecordingTool {
+pub(super) struct RecordingTool {
     name: String,
     answer: Result<String, String>,
     inputs: Arc<StdMutex<Vec<Value>>>,
 }
 
 impl RecordingTool {
-    fn ok(name: &str, answer: &str) -> Self {
+    pub(super) fn ok(name: &str, answer: &str) -> Self {
         Self {
             name: name.into(),
             answer: Ok(answer.into()),
             inputs: Default::default(),
         }
     }
-    fn failing(name: &str, err: &str) -> Self {
+    pub(super) fn failing(name: &str, err: &str) -> Self {
         Self {
             name: name.into(),
             answer: Err(err.into()),
             inputs: Default::default(),
         }
     }
-    fn inputs(&self) -> Vec<Value> {
+    pub(super) fn inputs(&self) -> Vec<Value> {
         self.inputs.lock().unwrap().clone()
     }
 }

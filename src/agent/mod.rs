@@ -10,6 +10,9 @@ pub use chat::*;
 mod open_ai_tools;
 pub use open_ai_tools::*;
 
+mod react;
+pub use react::*;
+
 mod error;
 pub use error::*;
 
