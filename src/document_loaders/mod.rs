@@ -28,6 +28,9 @@ mod html_to_markdown_loader;
 #[cfg(feature = "html-to-markdown")]
 pub use html_to_markdown_loader::*;
 
+mod assemblyai_loader;
+pub use assemblyai_loader::*;
+
 mod error;
 pub use error::*;
 
