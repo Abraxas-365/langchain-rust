@@ -14,6 +14,7 @@ const DEFAULT_COLLECTION_NAME: &str = "langchain";
 const DEFAULT_PRE_DELETE_COLLECTION: bool = false;
 const DEFAULT_EMBEDDING_STORE_TABLE_NAME: &str = "langchain_pg_embedding";
 const DEFAULT_COLLECTION_STORE_TABLE_NAME: &str = "langchain_pg_collection";
+const DEFAULT_EXTENSION_NAME: &str = "vector";
 
 pub struct StoreBuilder<F> {
     pool: Option<Pool<Postgres>>,
@@ -28,6 +29,7 @@ pub struct StoreBuilder<F> {
     collection_metadata: HashMap<String, Value>,
     vstore_options: VecStoreOptions<F>,
     hns_index: Option<HNSWIndex>,
+    extension_name: String,
 }
 
 impl StoreBuilder<PgFilter> {
@@ -46,6 +48,7 @@ impl StoreBuilder<PgFilter> {
             collection_metadata: HashMap::new(),
             vstore_options: VecStoreOptions::new(),
             hns_index: None,
+            extension_name: DEFAULT_EXTENSION_NAME.into(),
         }
     }
 
@@ -104,11 +107,25 @@ impl StoreBuilder<PgFilter> {
         self
     }
 
+    /// The Postgres extension that provides the `vector` type, created with
+    /// `CREATE EXTENSION IF NOT EXISTS` on build. Default `vector` (pgvector); use
+    /// `vectors` for [pgvecto.rs](https://github.com/tensorchord/pgvecto.rs), which keeps
+    /// pgvector's `vector` type and `<=>` operator under another extension name. Must be
+    /// a plain identifier (letters, digits, `_`).
+    ///
+    /// `hns_index` emits pgvector's `USING hnsw`, which pgvecto.rs doesn't have; create
+    /// its index yourself (`USING vectors (embedding vector_cos_ops)`).
+    pub fn extension_name(mut self, extension_name: &str) -> Self {
+        self.extension_name = extension_name.into();
+        self
+    }
+
     // Finalize the builder and construct the Store object
     pub async fn build(self) -> Result<Store, Box<dyn Error>> {
         if self.embedder.is_none() {
             return Err("Embedder is required".into());
         }
+        check_extension_name(&self.extension_name)?;
         let pool = self.get_pool().await?;
         let mut tx = pool.begin().await?;
         self.create_vector_extension_if_not_exists(&mut tx).await?;
@@ -219,10 +236,10 @@ impl StoreBuilder<PgFilter> {
             .execute(&mut **tx)
             .await?;
 
-        // Create the vector extension if it doesn't already exist
-        sqlx::query("CREATE EXTENSION IF NOT EXISTS vector")
-            .execute(&mut **tx)
-            .await?;
+        // Create the vector extension if it doesn't already exist. The name was checked to be
+        // a plain identifier in `build`.
+        let sql = format!("CREATE EXTENSION IF NOT EXISTS {}", self.extension_name);
+        sqlx::query(AssertSqlSafe(sql)).execute(&mut **tx).await?;
 
         Ok(())
     }
@@ -238,12 +255,6 @@ impl StoreBuilder<PgFilter> {
         // https://github.com/langchain-ai/langchain/issues/12933
         // For more information see:
         // https://www.postgresql.org/docs/16/explicit-locking.html#ADVISORY-LOCKS
-        let create_extension_sql = format!("CREATE EXTENSION IF NOT EXISTS vector");
-        sqlx::query(AssertSqlSafe(create_extension_sql))
-            .execute(&mut **tx)
-            .await?;
-
-        // Use advisory lock as before
         sqlx::query("SELECT pg_advisory_xact_lock($1)")
             .bind(PG_LOCK_ID_COLLECTION_TABLE)
             .execute(&mut **tx)
@@ -321,5 +332,68 @@ impl StoreBuilder<PgFilter> {
         }
 
         Ok(())
+    }
+}
+
+/// Only plain identifiers, since the name goes into SQL unquoted.
+fn check_extension_name(name: &str) -> Result<(), Box<dyn Error>> {
+    let mut chars = name.chars();
+    let valid = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if valid {
+        Ok(())
+    } else {
+        Err(format!("invalid extension name {name:?}: use letters, digits and `_`").into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extension_name_defaults_to_pgvector() {
+        assert_eq!(StoreBuilder::new().extension_name, "vector");
+        assert_eq!(
+            StoreBuilder::new().extension_name("vectors").extension_name,
+            "vectors"
+        );
+    }
+
+    #[test]
+    fn extension_names_must_be_plain_identifiers() {
+        for ok in ["vector", "vectors", "_x", "vchord2", "Vector_1"] {
+            assert!(check_extension_name(ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            "",
+            "1vector",
+            "vector; DROP TABLE x",
+            "vector--",
+            "\"vector\"",
+            "my-ext",
+            "vector ",
+            "vectór",
+        ] {
+            let err = check_extension_name(bad).unwrap_err().to_string();
+            assert!(err.contains("invalid extension name"), "{bad}: {err}");
+        }
+    }
+
+    #[tokio::test]
+    async fn build_rejects_a_bad_extension_name_before_connecting() {
+        let err = StoreBuilder::new()
+            .embedder(crate::test_utils::FakeEmbedder::new(3, &[]))
+            // Nothing listens here; the name check must fail first.
+            .connection_url("postgres://u:p@127.0.0.1:1/db")
+            .extension_name("vector; DROP TABLE t")
+            .build()
+            .await
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(err.contains("invalid extension name"), "{err}");
     }
 }

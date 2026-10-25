@@ -26,6 +26,7 @@ async fn main() {
         .pre_delete_collection(true)
         .connection_url("postgresql://username:password@localhost:5432/langchain-rust")
         .vector_dimensions(1536)
+        // On pgvecto.rs (extension `vectors`) add `.extension_name("vectors")`.
         .build()
         .await
         .unwrap();
