@@ -1,7 +1,7 @@
 use mockito::{Matcher, Server, ServerGuard};
 use serde_json::{json, Value};
 
-use super::*;
+use super::{store::BATCH_SIZE, *};
 use crate::{
     schemas::Document,
     test_utils::FakeEmbedder,
@@ -654,6 +654,211 @@ async fn search_on_a_missing_collection_is_empty_and_errors_are_reported() {
     );
 }
 
+const ID_A: &str = "6a1c3f4e-0000-4000-8000-00000000000a";
+const ID_B: &str = "6a1c3f4e-0000-4000-8000-00000000000b";
+
+#[tokio::test]
+async fn get_by_ids_queries_by_id_within_the_namespace_in_request_order() {
+    let mut server = Server::new_async().await;
+    let store = store(&server, StoreBuilder::new().namespace("tenant"));
+    server
+        .mock("GET", "/v1/schema/Docs")
+        .with_body(schema(&[("text", "text"), ("source", "text")]))
+        .create_async()
+        .await;
+    let captured = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let sink = captured.clone();
+    let graphql = server
+        .mock("POST", "/v1/graphql")
+        .match_request(move |request| {
+            *sink.lock().unwrap() = graphql_query(request);
+            true
+        })
+        .with_body(
+            json!({ "data": { "Get": { "Docs": [
+                { "text": "alpha", "source": "a.txt", "_additional": { "id": ID_A } },
+                { "text": "beta", "source": null, "_additional": { "id": ID_B } },
+            ] } } })
+            .to_string(),
+        )
+        .expect(1)
+        .create_async()
+        .await;
+    let docs = store
+        .get_by_ids(
+            &[ID_B.to_uppercase(), "not-a-uuid".into(), ID_A.into()],
+            &VecStoreOptions::default(),
+        )
+        .await
+        .unwrap();
+    graphql.assert_async().await;
+    let ids: Vec<_> = docs.iter().map(|d| d.id.as_deref().unwrap()).collect();
+    assert_eq!(ids, [ID_B, ID_A]);
+    assert_eq!(docs[0].page_content, "beta");
+    assert!(docs[0].metadata.is_empty());
+    assert_eq!(docs[1].metadata["source"], json!("a.txt"));
+    assert_eq!(docs[1].score, 0.0);
+
+    let query = captured.lock().unwrap().clone();
+    assert!(query.starts_with("{ Get { Docs(where: "), "{query}");
+    assert!(query.contains("limit: 2"), "{query}");
+    assert!(query.contains("text source _additional { id }"), "{query}");
+    let by_id = |id: &str| format!(r#"{{operator: Equal, path: ["id"], valueText: "{id}"}}"#);
+    assert!(query.contains(&by_id(ID_A)), "{query}");
+    assert!(query.contains(&by_id(ID_B)), "{query}");
+    assert!(!query.contains("not-a-uuid"), "{query}");
+    assert!(
+        query.contains(r#"{operator: Equal, path: ["nameSpace"], valueText: "tenant"}"#),
+        "{query}"
+    );
+    assert!(query.contains("operator: And"), "{query}");
+    assert!(query.contains("operator: Or"), "{query}");
+}
+
+#[tokio::test]
+async fn get_by_ids_batches_and_skips_missing_collections_and_bad_ids() {
+    let mut server = Server::new_async().await;
+    let store = store(&server, StoreBuilder::new());
+    let graphql = server
+        .mock("POST", "/v1/graphql")
+        .expect(0)
+        .create_async()
+        .await;
+    // No UUIDs: no request at all, not even the schema.
+    let schema_mock = server
+        .mock("GET", "/v1/schema/Docs")
+        .with_status(404)
+        .expect(1)
+        .create_async()
+        .await;
+    let opt = VecStoreOptions::default();
+    assert!(store
+        .get_by_ids(&["x".into()], &opt)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(store
+        .get_by_ids(&[ID_A.into()], &opt)
+        .await
+        .unwrap()
+        .is_empty());
+    schema_mock.assert_async().await;
+    graphql.assert_async().await;
+    schema_mock.remove_async().await;
+    graphql.remove_async().await;
+
+    server
+        .mock("GET", "/v1/schema/Docs")
+        .with_body(schema(&[("text", "text")]))
+        .create_async()
+        .await;
+    let batches = server
+        .mock("POST", "/v1/graphql")
+        .with_body(r#"{"data":{"Get":{"Docs":[]}}}"#)
+        .expect(2)
+        .create_async()
+        .await;
+    let many: Vec<String> = (0..BATCH_SIZE + 1)
+        .map(|_| uuid::Uuid::new_v4().to_string())
+        .collect();
+    assert!(store.get_by_ids(&many, &opt).await.unwrap().is_empty());
+    batches.assert_async().await;
+    batches.remove_async().await;
+
+    server
+        .mock("POST", "/v1/graphql")
+        .with_body(r#"{"errors":[{"message":"boom"}]}"#)
+        .create_async()
+        .await;
+    let err = store.get_by_ids(&many, &opt).await.unwrap_err();
+    assert_eq!(err.to_string(), "Weaviate GraphQL error: boom");
+}
+
+#[tokio::test]
+async fn delete_batch_deletes_by_id_within_the_scope() {
+    let mut server = Server::new_async().await;
+    let store = store(&server, StoreBuilder::new());
+    server
+        .mock("GET", "/v1/schema/Docs")
+        .with_body(schema(&[("text", "text")]))
+        .create_async()
+        .await;
+    let delete = server
+        .mock("DELETE", "/v1/batch/objects")
+        .match_body(Matcher::Json(json!({
+            "match": {
+                "class": "Docs",
+                "where": {
+                    "operator": "And",
+                    "operands": [
+                        { "operator": "Or", "operands": [
+                            { "path": ["id"], "operator": "Equal", "valueText": ID_A },
+                        ] },
+                        { "path": ["nameSpace"], "operator": "Equal", "valueText": "t" },
+                    ],
+                },
+            },
+            "output": "minimal",
+        })))
+        .with_body(r#"{"results":{"matches":1,"successful":1,"failed":0}}"#)
+        .expect(1)
+        .create_async()
+        .await;
+    store
+        .delete(
+            &[ID_A.to_uppercase(), "nope".into()],
+            &VecStoreOptions::default().with_name_space("t"),
+        )
+        .await
+        .unwrap();
+    delete.assert_async().await;
+    delete.remove_async().await;
+
+    let batches = server
+        .mock("DELETE", "/v1/batch/objects")
+        .with_body(r#"{"results":{"failed":0}}"#)
+        .expect(2)
+        .create_async()
+        .await;
+    let many: Vec<String> = (0..BATCH_SIZE + 1)
+        .map(|_| uuid::Uuid::new_v4().to_string())
+        .collect();
+    let opt = VecStoreOptions::default();
+    store.delete(&many, &opt).await.unwrap();
+    store.delete(&["nope".into()], &opt).await.unwrap();
+    batches.assert_async().await;
+    batches.remove_async().await;
+
+    server
+        .mock("DELETE", "/v1/batch/objects")
+        .with_body(r#"{"results":{"failed":2}}"#)
+        .create_async()
+        .await;
+    let err = store.delete(&[ID_A.into()], &opt).await.unwrap_err();
+    assert!(err.to_string().contains("failed to delete 2"), "{err}");
+}
+
+#[tokio::test]
+async fn delete_on_a_missing_collection_sends_nothing() {
+    let mut server = Server::new_async().await;
+    let store = store(&server, StoreBuilder::new());
+    server
+        .mock("GET", "/v1/schema/Docs")
+        .with_status(404)
+        .create_async()
+        .await;
+    let delete = server
+        .mock("DELETE", "/v1/batch/objects")
+        .expect(0)
+        .create_async()
+        .await;
+    store
+        .delete(&[ID_A.into()], &VecStoreOptions::default())
+        .await
+        .unwrap();
+    delete.assert_async().await;
+}
+
 /// Against a real Weaviate without a vectorizer module:
 ///
 /// ```sh
@@ -791,6 +996,44 @@ async fn weaviate_live_round_trip() {
     assert_eq!(found[0].id.as_deref(), Some(id.as_str()));
     assert_eq!(found[0].page_content, "beta");
     assert_ne!(found[0].metadata.get("source"), Some(&json!("old.txt")));
+
+    // get_by_ids / delete honour the namespace; unknown and non-UUID ids are ignored.
+    let other = uuid::Uuid::new_v4().to_string();
+    let ask = vec![
+        other.clone(),
+        "not-a-uuid".to_string(),
+        id.to_uppercase(),
+        ids[0].clone(),
+    ];
+    let got = store.get_by_ids(&ask, &tenant("ids")).await.unwrap();
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert_eq!(got[0].id.as_deref(), Some(id.as_str()));
+    assert_eq!(got[0].page_content, "beta");
+    assert_eq!(got[0].score, 0.0);
+    assert!(store
+        .get_by_ids(&ask, &tenant("tenant"))
+        .await
+        .unwrap()
+        .is_empty());
+    store.delete(&ask, &tenant("tenant")).await.unwrap();
+    assert_eq!(
+        store.get_by_ids(&ask, &tenant("ids")).await.unwrap().len(),
+        1
+    );
+    store.delete(&ask, &tenant("ids")).await.unwrap();
+    assert!(store
+        .get_by_ids(&ask, &tenant("ids"))
+        .await
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        store
+            .similarity_search("alpha", 5, &VecStoreOptions::default())
+            .await
+            .unwrap()
+            .len(),
+        4
+    );
 
     reqwest::Client::new()
         .delete(format!(

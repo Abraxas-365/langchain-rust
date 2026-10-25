@@ -12,7 +12,7 @@ use tokio::sync::OnceCell;
 use crate::{
     embedding::Embedder,
     schemas::Document,
-    vectorstore::{VecStoreOptions, VectorStore},
+    vectorstore::{vectorstore::in_id_order, VecStoreOptions, VectorStore},
 };
 
 /// Projected `vectorSearchScore`. Not a field anyone stores.
@@ -226,6 +226,16 @@ impl Store {
             Some(Bson::Int64(s)) => s as f64,
             other => return Err(format!("search result without a score: {other:?}").into()),
         };
+        let mut doc = self.stored_document(stored)?;
+        doc.score = score;
+        Ok(doc)
+    }
+
+    /// A stored document without its score (0).
+    pub(super) fn stored_document(
+        &self,
+        mut stored: BsonDocument,
+    ) -> Result<Document, Box<dyn Error>> {
         let page_content = match stored.remove(&self.text_key) {
             Some(Bson::String(text)) => text,
             Some(other) => {
@@ -249,8 +259,31 @@ impl Store {
         Ok(Document {
             page_content,
             metadata,
-            score,
+            score: 0.0,
             id,
+        })
+    }
+
+    /// The `find`/`delete_many` filter for ids: each id matches a string `_id` (caller
+    /// ids) or, when it is 24 hex characters, the generated ObjectId it names. ANDed with
+    /// the namespace and the user's MQL filter.
+    pub(super) fn id_filter(
+        &self,
+        ids: &[String],
+        namespace: Option<&str>,
+        filters: Option<&Value>,
+    ) -> Result<BsonDocument, Box<dyn Error>> {
+        let mut any_of: Vec<Bson> = Vec::with_capacity(ids.len());
+        for id in ids {
+            any_of.push(Bson::String(id.clone()));
+            if let Ok(oid) = ObjectId::parse_str(id) {
+                any_of.push(Bson::ObjectId(oid));
+            }
+        }
+        let by_id = doc! { "_id": { "$in": any_of } };
+        Ok(match self.filter(namespace, filters)? {
+            None => by_id,
+            Some(scope) => doc! { "$and": [by_id, scope] },
         })
     }
 
@@ -415,5 +448,53 @@ impl VectorStore for Store {
             docs.push(doc);
         }
         Ok(docs)
+    }
+
+    /// Deletes by id (caller string ids or generated ObjectId hex). The namespace
+    /// (option or store default) and `filters` narrow what is deleted.
+    async fn delete(&self, ids: &[String], opt: &Self::Options) -> Result<(), Box<dyn Error>> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let namespace = opt.name_space.as_deref().or(self.namespace.as_deref());
+        let filter = self.id_filter(ids, namespace, opt.filters.as_ref())?;
+        self.collection.delete_many(filter).await?;
+        Ok(())
+    }
+
+    /// Fetches by id in request order (score 0). The namespace (option or store default)
+    /// and `filters` narrow what is returned.
+    async fn get_by_ids(
+        &self,
+        ids: &[String],
+        opt: &Self::Options,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let namespace = opt.name_space.as_deref().or(self.namespace.as_deref());
+        let filter = self.id_filter(ids, namespace, opt.filters.as_ref())?;
+        let found: Vec<BsonDocument> = self
+            .collection
+            .find(filter)
+            .projection(doc! { &self.embedding_key: 0 })
+            .await?
+            .try_collect()
+            .await?;
+        let docs = found
+            .into_iter()
+            .map(|stored| self.stored_document(stored))
+            .collect::<Result<Vec<_>, _>>()?;
+        // Generated ids come back as lowercase hex, whatever case they were asked in.
+        let returned: std::collections::HashSet<&str> =
+            docs.iter().filter_map(|d| d.id.as_deref()).collect();
+        let wanted: Vec<String> = ids
+            .iter()
+            .map(|id| match ObjectId::parse_str(id) {
+                Ok(oid) if !returned.contains(id.as_str()) => oid.to_hex(),
+                _ => id.clone(),
+            })
+            .collect();
+        Ok(in_id_order(&wanted, docs))
     }
 }

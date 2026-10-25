@@ -13,7 +13,7 @@ use serde_json::{json, Map, Value};
 use crate::{
     embedding::embedder_trait::Embedder,
     schemas::Document,
-    vectorstore::{document_ids, VecStoreOptions, VectorStore},
+    vectorstore::{document_ids, vectorstore::in_id_order, VecStoreOptions, VectorStore},
 };
 
 /// Objects per `/v1/batch/objects` request.
@@ -299,6 +299,49 @@ impl Store {
         }
         Ok(Some(fields))
     }
+
+    /// The `where` filter matching any of `ids`, within the namespace and `filters`.
+    fn id_filter(&self, ids: &[String], opt: &WeaviateOptions) -> Value {
+        let by_id = json!({
+            "operator": "Or",
+            "operands": ids
+                .iter()
+                .map(|id| json!({ "path": ["id"], "operator": "Equal", "valueText": id }))
+                .collect::<Vec<_>>(),
+        });
+        match self.where_filter(opt) {
+            Some(scope) => json!({ "operator": "And", "operands": [by_id, scope] }),
+            None => by_id,
+        }
+    }
+
+    /// A GraphQL `Get` hit as a document. Score is the certainty, or minus the
+    /// distance, or 0 when neither was selected.
+    fn hit_document(&self, hit: Value) -> Option<Document> {
+        let Value::Object(mut properties) = hit else {
+            return None;
+        };
+        let additional = properties.remove("_additional").unwrap_or_default();
+        let score = additional["certainty"]
+            .as_f64()
+            .or_else(|| additional["distance"].as_f64().map(|d| -d))
+            .unwrap_or_default();
+        let id = additional["id"].as_str().map(str::to_string);
+        let page_content = match properties.remove(&self.text_key) {
+            Some(Value::String(text)) => text,
+            Some(Value::Null) | None => String::new(),
+            Some(other) => other.to_string(),
+        };
+        Some(Document {
+            page_content,
+            metadata: properties
+                .into_iter()
+                .filter(|(_, v)| !v.is_null())
+                .collect(),
+            score,
+            id,
+        })
+    }
 }
 
 #[async_trait]
@@ -425,37 +468,86 @@ impl VectorStore for Store {
             .unwrap_or_default();
         Ok(hits
             .into_iter()
-            .filter_map(|hit| {
-                let Value::Object(mut properties) = hit else {
-                    return None;
-                };
-                let additional = properties.remove("_additional").unwrap_or_default();
-                let score = additional["certainty"]
-                    .as_f64()
-                    .or_else(|| additional["distance"].as_f64().map(|d| -d))
-                    .unwrap_or_default();
-                let id = additional["id"].as_str().map(str::to_string);
-                let page_content = match properties.remove(&self.text_key) {
-                    Some(Value::String(text)) => text,
-                    Some(Value::Null) | None => String::new(),
-                    Some(other) => other.to_string(),
-                };
-                Some(Document {
-                    page_content,
-                    metadata: properties
-                        .into_iter()
-                        .filter(|(_, v)| !v.is_null())
-                        .collect(),
-                    score,
-                    id,
-                })
-            })
+            .filter_map(|hit| self.hit_document(hit))
             .filter(|doc| {
                 opt.score_threshold
                     .is_none_or(|threshold| doc.score >= f64::from(threshold))
             })
             .collect())
     }
+
+    /// Deletes the ids within the namespace (option or store default) and `filters`,
+    /// with one batch delete per 100 ids. Ids that aren't UUIDs can't exist and are skipped.
+    async fn delete(&self, ids: &[String], opt: &WeaviateOptions) -> Result<(), Box<dyn Error>> {
+        let ids = lookup_ids(ids);
+        if ids.is_empty() || self.schema().await?.is_none() {
+            return Ok(());
+        }
+        for batch in ids.chunks(BATCH_SIZE) {
+            let body = json!({
+                "match": { "class": self.class_name, "where": self.id_filter(batch, opt) },
+                "output": "minimal",
+            });
+            let response = self
+                .request(Method::DELETE, "/v1/batch/objects", Some(&body))
+                .await?;
+            let failed = response["results"]["failed"].as_u64().unwrap_or(0);
+            if failed > 0 {
+                return Err(format!("Weaviate failed to delete {failed} object(s)").into());
+            }
+        }
+        Ok(())
+    }
+
+    /// The documents with these ids within the namespace and `filters`, in request
+    /// order (score 0). Ids come back in Weaviate's lowercase hyphenated form.
+    async fn get_by_ids(
+        &self,
+        ids: &[String],
+        opt: &WeaviateOptions,
+    ) -> Result<Vec<Document>, Box<dyn Error>> {
+        let ids = lookup_ids(ids);
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let Some(fields) = self.fields().await? else {
+            return Ok(vec![]); // Nothing was ever added.
+        };
+        let mut docs = Vec::with_capacity(ids.len());
+        for batch in ids.chunks(BATCH_SIZE) {
+            let graphql = format!(
+                "{{ Get {{ {class}(where: {filter}, limit: {limit}) {{ {fields} _additional {{ id }} }} }} }}",
+                class = self.class_name,
+                filter = graphql_literal(&self.id_filter(batch, opt))?,
+                limit = batch.len(),
+                fields = fields.join(" "),
+            );
+            let response = self
+                .request(
+                    Method::POST,
+                    "/v1/graphql",
+                    Some(&json!({ "query": graphql })),
+                )
+                .await?;
+            if let Some(message) = weaviate_error(&response.to_string()) {
+                return Err(format!("Weaviate GraphQL error: {message}").into());
+            }
+            let hits = response["data"]["Get"][&self.class_name]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            docs.extend(hits.into_iter().filter_map(|hit| self.hit_document(hit)));
+        }
+        Ok(in_id_order(&ids, docs))
+    }
+}
+
+/// Request ids in Weaviate's canonical form, dropping the ones that aren't UUIDs.
+fn lookup_ids(ids: &[String]) -> Vec<String> {
+    ids.iter()
+        .filter_map(|id| uuid::Uuid::parse_str(id).ok())
+        .map(|uuid| uuid.hyphenated().to_string())
+        .collect()
 }
 
 #[cfg(test)]

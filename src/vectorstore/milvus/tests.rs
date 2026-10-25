@@ -10,7 +10,7 @@ use mockito::{Matcher, Server, ServerGuard};
 use serde_json::{json, Value};
 
 use super::{
-    store::{milvus_result, parse_schema, score, Schema, NAMESPACE_PARAM},
+    store::{milvus_result, parse_schema, score, Schema, BATCH_SIZE, NAMESPACE_PARAM},
     *,
 };
 use crate::{
@@ -429,6 +429,23 @@ async fn rows_and_documents() {
         json!({ "source": "a.txt", "n": 1, "year": 2024 })
     );
 
+    // Milvus 2.5 search hits call the primary key `id`, unless `id` is a real field.
+    let doc = store.to_document(hit(json!({ "id": "id2", "text": "hi" })), &schema);
+    assert_eq!(doc.id.as_deref(), Some("id2"));
+    assert!(doc.metadata.is_empty());
+    let with_id_field = Schema {
+        output_fields: vec!["text".into(), "id".into()],
+        ..schema.clone()
+    };
+    let doc = store.to_document(
+        hit(json!({ "pk": "p", "id": "user-field", "text": "hi" })),
+        &with_id_field,
+    );
+    assert_eq!(doc.id.as_deref(), Some("p"));
+    assert_eq!(doc.metadata["id"], json!("user-field"));
+    let doc = store.to_document(hit(json!({ "id": "x", "text": "hi" })), &with_id_field);
+    assert_eq!(doc.id, None);
+
     // Odd shapes: object metadata, non-object JSON, invalid JSON, non-string text.
     for (metadata, expected) in [
         (json!({ "a": 1 }), json!({ "a": 1 })),
@@ -721,6 +738,168 @@ async fn caller_ids_are_upserted_as_primary_keys() {
         .await
         .unwrap_err();
     assert!(err.to_string().contains("must not be empty"), "{err}");
+}
+
+#[tokio::test]
+async fn get_by_ids_queries_primary_keys_in_scope_and_keeps_request_order() {
+    let mut server = Server::new_async().await;
+    let _describe = server
+        .mock("POST", "/v2/vectordb/collections/describe")
+        .with_body(describe("LoadStateLoaded", "COSINE", false).to_string())
+        .create_async()
+        .await;
+    let query = server
+        .mock("POST", "/v2/vectordb/entities/query")
+        .match_body(Matcher::Json(json!({
+            "collectionName": "docs",
+            "filter": "pk in {__lc_ids} and (namespace == {__lc_namespace} and (year > {y}))",
+            "exprParams": { "__lc_ids": ["b", "nope", "a"], "__lc_namespace": "t", "y": 2000 },
+            "outputFields": ["text", "metadata", "year", "pk"],
+            "limit": 3,
+        })))
+        .with_body(ok(json!([
+            { "pk": "a", "text": "alpha", "metadata": "{\"k\":1}", "year": 2001 },
+            { "pk": "b", "text": "beta", "metadata": null, "year": null },
+        ])))
+        .expect(1)
+        .create_async()
+        .await;
+    let store = builder(&server).namespace("t").build().unwrap();
+    let opt = VecStoreOptions::default()
+        .with_filters(json!({ "expr": "year > {y}", "params": { "y": 2000 } }));
+    let docs = store
+        .get_by_ids(&["b", "nope", "a"].map(String::from), &opt)
+        .await
+        .unwrap();
+    query.assert_async().await;
+    let ids: Vec<_> = docs.iter().map(|d| d.id.as_deref().unwrap()).collect();
+    assert_eq!(ids, ["b", "a"]);
+    assert_eq!(docs[0].page_content, "beta");
+    assert!(docs[0].metadata.is_empty());
+    assert_eq!(docs[1].metadata["k"], json!(1));
+    assert_eq!(docs[1].metadata["year"], json!(2001));
+    assert_eq!(docs[1].score, 0.0);
+
+    // The ids parameter name is reserved.
+    let err = store
+        .get_by_ids(
+            &["a".to_string()],
+            &VecStoreOptions::default()
+                .with_filters(json!({ "expr": "pk in {__lc_ids}", "params": { "__lc_ids": [] } })),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("reserved"), "{err}");
+}
+
+#[tokio::test]
+async fn id_lookups_on_int64_keys_skip_non_numeric_ids_and_batch() {
+    let mut server = Server::new_async().await;
+    let _describe = server
+        .mock("POST", "/v2/vectordb/collections/describe")
+        .with_body(describe("LoadStateLoaded", "L2", true).to_string())
+        .create_async()
+        .await;
+    let delete = server
+        .mock("POST", "/v2/vectordb/entities/delete")
+        .match_body(Matcher::Json(json!({
+            "collectionName": "docs",
+            // Inlined, not a template param: params lose 64-bit precision.
+            "filter": "pk in [469993837398851826, -7] and (namespace == {__lc_namespace})",
+            "exprParams": { "__lc_namespace": "t" },
+        })))
+        .with_body(ok(json!({})))
+        .expect(1)
+        .create_async()
+        .await;
+    let query = server
+        .mock("POST", "/v2/vectordb/entities/query")
+        .match_body(Matcher::Json(json!({
+            "collectionName": "docs",
+            "filter": "pk in [7, 42]",
+            "outputFields": ["text", "metadata", "year", "pk"],
+            "limit": 3,
+        })))
+        .with_body(ok(
+            json!([{ "pk": 42, "text": "alpha" }, { "pk": 7, "text": "beta" }]),
+        ))
+        .expect(1)
+        .create_async()
+        .await;
+    let store = builder(&server).build().unwrap();
+    let opt = VecStoreOptions::default();
+    store
+        .delete(
+            &["469993837398851826".into(), "x".into(), "-7".into()],
+            &VecStoreOptions::default().with_name_space("t"),
+        )
+        .await
+        .unwrap();
+    // Nothing numeric: no request.
+    store.delete(&["x".into()], &opt).await.unwrap();
+    assert!(store
+        .get_by_ids(&["x".into()], &opt)
+        .await
+        .unwrap()
+        .is_empty());
+    // Non-canonical numbers still match, and come back canonical.
+    let docs = store
+        .get_by_ids(&["007".into(), "x".into(), "+42".into()], &opt)
+        .await
+        .unwrap();
+    let ids: Vec<_> = docs.iter().map(|d| d.id.as_deref().unwrap()).collect();
+    assert_eq!(ids, ["7", "42"]);
+    assert_eq!(docs[0].score, 0.0);
+    delete.assert_async().await;
+    query.assert_async().await;
+    delete.remove_async().await;
+
+    let batches = server
+        .mock("POST", "/v2/vectordb/entities/delete")
+        .with_body(ok(json!({})))
+        .expect(2)
+        .create_async()
+        .await;
+    let many: Vec<String> = (0..BATCH_SIZE + 1).map(|i| i.to_string()).collect();
+    store.delete(&many, &opt).await.unwrap();
+    batches.assert_async().await;
+    batches.remove_async().await;
+
+    server
+        .mock("POST", "/v2/vectordb/entities/delete")
+        .with_body(json!({ "code": 1100, "message": "bad filter" }).to_string())
+        .create_async()
+        .await;
+    let err = store.delete(&["1".into()], &opt).await.unwrap_err();
+    assert_eq!(err.to_string(), "Milvus error 1100: bad filter");
+}
+
+#[tokio::test]
+async fn id_lookups_on_a_missing_collection_or_empty_input_send_nothing() {
+    let mut server = Server::new_async().await;
+    let describe = server
+        .mock("POST", "/v2/vectordb/collections/describe")
+        .with_body(not_found())
+        .expect(2)
+        .create_async()
+        .await;
+    let entities = server
+        .mock("POST", Matcher::Regex("^/v2/vectordb/entities/".into()))
+        .expect(0)
+        .create_async()
+        .await;
+    let store = builder(&server).build().unwrap();
+    let opt = VecStoreOptions::default();
+    store.delete(&[], &opt).await.unwrap();
+    assert!(store.get_by_ids(&[], &opt).await.unwrap().is_empty());
+    store.delete(&["a".into()], &opt).await.unwrap();
+    assert!(store
+        .get_by_ids(&["a".into()], &opt)
+        .await
+        .unwrap()
+        .is_empty());
+    describe.assert_async().await;
+    entities.assert_async().await;
 }
 
 #[tokio::test(start_paused = true)]
@@ -1170,6 +1349,26 @@ async fn milvus_live_round_trip() {
     assert_eq!(hits[0].page_content, "beta");
     assert!(!hits[0].metadata.contains_key("old"), "{hits:?}");
 
+    // get_by_ids / delete by primary key, scoped by namespace and filters.
+    let ask = vec!["nope".to_string(), "doc-1".to_string()];
+    let got = store.get_by_ids(&ask, &ids_ns).await.unwrap();
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert_eq!(got[0].id.as_deref(), Some("doc-1"));
+    assert_eq!(got[0].page_content, "beta");
+    assert_eq!(got[0].score, 0.0);
+    assert!(!got[0].metadata.contains_key("namespace"), "{got:?}");
+    let tenant = VecStoreOptions::default().with_name_space("tenant");
+    assert!(store.get_by_ids(&ask, &tenant).await.unwrap().is_empty());
+    assert_eq!(store.get_by_ids(&ask, &opt).await.unwrap().len(), 1);
+    let excluded = VecStoreOptions::default()
+        .with_name_space("ids")
+        .with_filters(json!("text == \"alpha\""));
+    store.delete(&ask, &excluded).await.unwrap();
+    store.delete(&ask, &tenant).await.unwrap();
+    assert_eq!(store.get_by_ids(&ask, &ids_ns).await.unwrap().len(), 1);
+    store.delete(&ask, &ids_ns).await.unwrap();
+    assert!(store.get_by_ids(&ask, &ids_ns).await.unwrap().is_empty());
+
     // An existing L2 collection (created elsewhere, autoId, not loaded) works as is.
     let client = reqwest::Client::new();
     let post = |path: &str, body: Value| {
@@ -1212,6 +1411,22 @@ async fn milvus_live_round_trip() {
     assert_eq!(hits[0].page_content, "beta");
     assert!((hits[0].score - -0.4).abs() < 1e-5, "{}", hits[0].score);
     assert!(hits[0].score > hits[1].score);
+    // Int64 keys: ids round-trip as strings; non-numeric ones can't match.
+    let mut ask: Vec<String> = ids.iter().rev().cloned().collect();
+    ask.push("not-a-number".to_string());
+    let got = l2_store.get_by_ids(&ask, &opt).await.unwrap();
+    assert_eq!(
+        got.iter()
+            .map(|d| d.page_content.as_str())
+            .collect::<Vec<_>>(),
+        ["beta", "alpha"]
+    );
+    assert_eq!(got[0].id.as_deref(), Some(ids[1].as_str()));
+    l2_store.delete(&ask[..1], &opt).await.unwrap();
+    l2_store.delete(&["x".to_string()], &opt).await.unwrap();
+    let got = l2_store.get_by_ids(&ask, &opt).await.unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].id.as_deref(), Some(ids[0].as_str()));
     // No metadata/namespace fields: those writes fail clearly.
     let err = l2_store
         .add_documents(
