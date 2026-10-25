@@ -206,6 +206,54 @@ mod tests {
         drop_tables(&store).await;
     }
 
+    /// pgvecto.rs names its extension `vectors` but keeps pgvector's `vector` type and
+    /// `<=>`. Run against it with e.g.
+    /// `docker run -d -e POSTGRES_PASSWORD=pw -p 5433:5432 tensorchord/pgvecto-rs:pg17-v0.4.0`
+    /// and `PGVECTORS_TEST_URL=postgres://postgres:pw@127.0.0.1:5433/postgres cargo test
+    /// --features postgres --lib pgvecto_rs -- --ignored`.
+    #[tokio::test]
+    #[ignore]
+    async fn pgvecto_rs_extension_name() {
+        let Ok(url) = std::env::var("PGVECTORS_TEST_URL") else {
+            eprintln!("PGVECTORS_TEST_URL not set, skipping");
+            return;
+        };
+        let (collection, embed_table, coll_table) = table_names("vectors");
+        let builder = || {
+            StoreBuilder::new()
+                .embedder(embedder())
+                .connection_url(&url)
+                .vector_dimensions(3)
+                .collection_name(&collection)
+                .collection_table_name(&coll_table)
+                .embedder_table_name(&embed_table)
+        };
+        // There is no `vector` extension on pgvecto.rs, so the default fails.
+        let err = builder().build().await.err().unwrap().to_string();
+        assert!(err.contains("vector"), "{err}");
+
+        let store = builder().extension_name("vectors").build().await.unwrap();
+        let ids = store
+            .add_documents(
+                &["far", "mid", "near"].map(Document::new),
+                &VecStoreOptions::default(),
+            )
+            .await
+            .unwrap();
+        let found = store
+            .similarity_search("query", 2, &VecStoreOptions::default())
+            .await
+            .unwrap();
+        let contents: Vec<_> = found.iter().map(|d| d.page_content.as_str()).collect();
+        assert_eq!(contents, ["near", "mid"]);
+        store
+            .delete(&ids[2..], &VecStoreOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(row_count(&store).await, 2);
+        drop_tables(&store).await;
+    }
+
     /// Arbitrary ids, generated UUIDs, in-batch replacement, and search ordering.
     #[tokio::test]
     #[ignore]

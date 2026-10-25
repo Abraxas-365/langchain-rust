@@ -1,7 +1,6 @@
 use std::{collections::HashMap, error::Error, sync::Arc};
 
 use async_trait::async_trait;
-use pgvector::Vector;
 use serde_json::{json, Value};
 use sqlx::{AssertSqlSafe, Pool, Postgres, Row};
 use uuid::Uuid;
@@ -11,6 +10,23 @@ use crate::{
     schemas::Document,
     vectorstore::{vectorstore::in_id_order, VecStoreOptions, VectorStore},
 };
+
+/// pgvector's text form, `[1,0.5,-2]`, bound as text and cast with `::vector`. Unlike the
+/// binary format it is the same for pgvector and pgvecto.rs. Values are stored as `f32`
+/// (what the `vector` type holds); `Display` gives the shortest text that reads back as
+/// the same `f32`.
+pub(crate) fn vector_literal(vector: &[f64]) -> String {
+    let mut text = String::with_capacity(vector.len() * 10 + 2);
+    text.push('[');
+    for (i, x) in vector.iter().enumerate() {
+        if i > 0 {
+            text.push(',');
+        }
+        text.push_str(&(*x as f32).to_string());
+    }
+    text.push(']');
+    text
+}
 
 pub struct Store {
     pub(crate) embedder: Arc<dyn Embedder>,
@@ -216,15 +232,14 @@ impl VectorStore for Store {
             let id = doc.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
             ids.push(id.clone());
 
-            let vector_value =
-                Vector::from(vector.into_iter().map(|x| *x as f32).collect::<Vec<f32>>());
+            let vector_value = vector_literal(vector);
 
             // Replace document, embedding, and metadata only when the existing row
             // already belongs to this collection. A zero-row update means the id is
             // owned elsewhere; roll the whole batch back and do not change ownership.
             let result = sqlx::query(AssertSqlSafe(format!(
                 r#"INSERT INTO {}
-(uuid, document, embedding, cmetadata, collection_id) VALUES ($1, $2, $3, $4, $5)
+(uuid, document, embedding, cmetadata, collection_id) VALUES ($1, $2, $3::vector, $4, $5)
 ON CONFLICT (uuid) DO UPDATE
 SET document = EXCLUDED.document,
     embedding = EXCLUDED.embedding,
@@ -279,7 +294,7 @@ WHERE {}.collection_id = EXCLUDED.collection_id"#,
             FROM (
                 SELECT
                     filtered_embedding_dims.*,
-                    embedding <=> $2 AS distance
+                    (embedding <=> $2::vector)::float8 AS distance
                 FROM
                     filtered_embedding_dims
                     JOIN {} ON filtered_embedding_dims.collection_id = {}.uuid
@@ -303,12 +318,7 @@ WHERE {}.collection_id = EXCLUDED.collection_id"#,
 
         let rows = sqlx::query(AssertSqlSafe(sql))
             .bind(vector_dims as i64)
-            .bind(&Vector::from(
-                query_vector
-                    .into_iter()
-                    .map(|x| x as f32)
-                    .collect::<Vec<f32>>(),
-            ))
+            .bind(vector_literal(&query_vector))
             .bind(limit as i32)
             .fetch_all(&self.pool)
             .await?;
@@ -403,4 +413,41 @@ fn reject_query_options(opt: &PgOptions) -> Result<(), Box<dyn Error>> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::vector_literal;
+
+    #[test]
+    fn vector_literal_is_pgvector_text() {
+        assert_eq!(vector_literal(&[]), "[]");
+        assert_eq!(vector_literal(&[1.0]), "[1]");
+        assert_eq!(vector_literal(&[1.0, 0.5, -2.0, 0.0]), "[1,0.5,-2,0]");
+        assert_eq!(
+            vector_literal(&[1e-8, 3e20]),
+            "[0.00000001,300000000000000000000]"
+        );
+        // f32 text, not f64's "0.3333333333333333".
+        assert_eq!(vector_literal(&[1.0 / 3.0]), "[0.33333334]");
+    }
+
+    #[test]
+    fn vector_literal_round_trips_as_f32() {
+        let values = [
+            0.1,
+            -0.333_333_333_3,
+            1.0 / 7.0,
+            123_456.789,
+            f64::from(f32::MIN_POSITIVE),
+        ];
+        let text = vector_literal(&values);
+        let parsed: Vec<f32> = text
+            .trim_matches(|c| c == '[' || c == ']')
+            .split(',')
+            .map(|x| x.parse().unwrap())
+            .collect();
+        let expected: Vec<f32> = values.iter().map(|x| *x as f32).collect();
+        assert_eq!(parsed, expected);
+    }
 }
