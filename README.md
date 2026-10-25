@@ -91,6 +91,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [Calculator](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/calculator_tool.rs)
   - [x] Serpapi/Google
   - [x] DuckDuckGo Search
+  - [x] [Exa web search](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/exa_search.rs)
   - [x] [Wolfram/Math](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/wolfram_tool.rs)
   - [x] Command line
   - [x] [Text2Speech](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/speech2text_openai.rs)
