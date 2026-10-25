@@ -95,6 +95,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] Command line
   - [x] [Text2Speech](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/speech2text_openai.rs)
   - [x] Wikipedia
+  - [x] [Perplexity web search](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/perplexity_search.rs)
 
 - Semantic Routing
 
