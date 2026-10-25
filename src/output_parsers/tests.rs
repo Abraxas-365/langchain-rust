@@ -5,8 +5,9 @@ use serde_json::{json, Map, Value};
 
 use super::{
     typed::{extract_json, strip_reasoning},
-    BooleanParser, CommaSeparatedListParser, JsonParser, OutputParser, OutputParserError,
-    RegexParser, ResponseSchema, StructuredOutputParser, TypedOutputParser,
+    BooleanParser, CombiningParser, CommaSeparatedListParser, JsonParser, OutputParser,
+    OutputParserError, RegexDictParser, RegexParser, ResponseSchema, StructuredOutputParser,
+    TypedOutputParser,
 };
 use crate::{
     chain::{Chain, LLMChainBuilder},
@@ -314,6 +315,26 @@ async fn typed_parsers_work_as_chain_output_parsers() {
         serde_json::from_str::<Value>(&movie).unwrap(),
         json!({"title": "Up", "year": 2009, "genres": []})
     );
+    assert_eq!(
+        run(
+            RegexDictParser::new([("b", "B"), ("a", "A")]).into(),
+            "B: 1\nA: 2"
+        )
+        .await,
+        r#"{"a":"2","b":"1"}"#
+    );
+    assert_eq!(
+        run(
+            CombiningParser::new(
+                RegexDictParser::new([("z", "Z")]),
+                JsonParser::<Value>::new()
+            )
+            .into(),
+            "Z: 1\n\n{\"a\": [true]}"
+        )
+        .await,
+        r#"{"a":[true],"z":"1"}"#
+    );
 
     // A failed parse is a chain error.
     let chain = LLMChainBuilder::new()
@@ -346,4 +367,230 @@ fn parsers_are_send_and_sync() {
     assert_send_sync::<RegexParser>();
     assert_send_sync::<StructuredOutputParser>();
     assert_send_sync::<JsonParser<std::rc::Rc<u8>>>();
+    assert_send_sync::<RegexDictParser>();
+    assert_send_sync::<CombiningParser>();
+}
+
+// The text from langchaingo's `TestRegexDict`.
+const REGEX_DICT_TEXT: &str = r#"We have just received a new result from the LLM, and our next step is
+to filter and read its format using regular expressions to identify specific fields,
+such as:
+
+- Action: Search
+- Action Input: How to use this class?
+- Additional Fields: "N/A"
+
+To exclude irrelevant information from our return dictionary, we can instruct the LLM to
+use a specific command that notifies us when it doesn't know the answer."#;
+
+fn action_dict() -> RegexDictParser {
+    RegexDictParser::new([("action", "Action"), ("action_input", "Action Input")])
+}
+
+fn map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+    pairs
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+#[test]
+fn regex_dict_parser_reads_each_label() {
+    assert_eq!(
+        action_dict().parse_output(REGEX_DICT_TEXT).unwrap(),
+        map(&[
+            ("action", "Search"),
+            ("action_input", "How to use this class?")
+        ])
+    );
+    // "Action:" is not found inside "Action Input:", and values are trimmed.
+    assert_eq!(
+        action_dict()
+            .parse_output("Action Input:  rust 2024  \nAction: search")
+            .unwrap(),
+        map(&[("action", "search"), ("action_input", "rust 2024")])
+    );
+    // A value ends at the first sentence-ending period (kept) or the end of the line;
+    // periods inside numbers and URLs don't end it.
+    assert_eq!(
+        RegexDictParser::new([("a", "A")])
+            .parse_output("A: one. two\nB: x")
+            .unwrap(),
+        map(&[("a", "one.")])
+    );
+    assert_eq!(
+        RegexDictParser::new([("a", "A"), ("b", "B")])
+            .parse_output("A: 37.4 million (2023).\tMore text.\nB: see https://x.org/a.html")
+            .unwrap(),
+        map(&[
+            ("a", "37.4 million (2023)."),
+            ("b", "see https://x.org/a.html")
+        ])
+    );
+    assert_eq!(
+        RegexDictParser::new([("a", "A")])
+            .parse_output("A: done.\n")
+            .unwrap(),
+        map(&[("a", "done.")])
+    );
+    assert_eq!(
+        RegexDictParser::new([("a", "A")])
+            .parse_output("A:\nB: x")
+            .unwrap(),
+        map(&[("a", "")])
+    );
+    // Reasoning is skipped.
+    assert_eq!(
+        RegexDictParser::new([("name", "Name"), ("age", "Age")])
+            .parse_output("<think>Name: no</think>Name: John\nAge: 30")
+            .unwrap(),
+        map(&[("name", "John"), ("age", "30")])
+    );
+}
+
+#[test]
+fn regex_dict_parser_skips_the_no_update_value() {
+    assert_eq!(
+        action_dict()
+            .with_no_update_value("Search")
+            .parse_output(REGEX_DICT_TEXT)
+            .unwrap(),
+        map(&[("action_input", "How to use this class?")])
+    );
+    assert_eq!(
+        RegexDictParser::new([("a", "A"), ("b", "B")])
+            .with_no_update_value("N/A")
+            .parse_output("A: N/A\nB: 2")
+            .unwrap(),
+        map(&[("b", "2")])
+    );
+}
+
+#[test]
+fn regex_dict_parser_labels_are_literal() {
+    // langchaingo puts the label into the regex as is; here `.`, `(` or `?` are literal.
+    let parser = RegexDictParser::new([("cost", "Cost (USD)?")]);
+    assert_eq!(
+        parser.parse_output("Cost (USD)?: 12\n").unwrap(),
+        map(&[("cost", "12")])
+    );
+    let err = parsing_error(parser.parse_output("Cost USD: 12"));
+    assert!(err.contains("no `Cost (USD)?:`"), "{err}");
+    let dotted = RegexDictParser::new([("v", "a.b")]);
+    assert!(dotted.parse_output("axb: 1").is_err());
+}
+
+#[test]
+fn regex_dict_parser_needs_each_label_exactly_once() {
+    let err = parsing_error(action_dict().parse_output("Action: search"));
+    assert!(err.contains("no `Action Input:`"), "{err}");
+    assert!(err.contains("Action: search"), "{err}");
+    let err = parsing_error(action_dict().parse_output("Action: a\nAction Input: x\nAction: b"));
+    assert!(err.contains("`Action:` appears more than once"), "{err}");
+}
+
+#[test]
+fn regex_dict_parser_instructions_list_the_labels() {
+    assert_eq!(
+        action_dict().format_instructions(),
+        "Your answer must contain these lines, each once:\nAction: <value>\nAction Input: <value>"
+    );
+    assert!(action_dict()
+        .with_no_update_value("N/A")
+        .format_instructions()
+        .ends_with("\nWrite N/A as the value you don't know."));
+}
+
+// The text from langchaingo's `TestCombine`.
+const COMBINE_TEXT: &str = "```json\n{\n    \"answer\": \"Paris\",\n    \"source\": \"https://en.wikipedia.org/wiki/France\"\n}\n```\n\n//Confidence: A, Explanation: Paris is the capital of France according to Wikipedia.";
+
+fn confidence() -> RegexParser {
+    RegexParser::new(r"Confidence: (?P<confidence>A|B|C), Explanation: (?P<explanation>.*)")
+        .unwrap()
+}
+
+#[test]
+fn combining_parser_merges_each_part() {
+    let parser = CombiningParser::new(
+        StructuredOutputParser::new([
+            ResponseSchema::new("answer", "The answer to the question"),
+            ResponseSchema::new("source", "A link to the source"),
+        ]),
+        confidence(),
+    );
+    assert_eq!(
+        Value::Object(parser.parse_output(COMBINE_TEXT).unwrap()),
+        json!({
+            "answer": "Paris",
+            "source": "https://en.wikipedia.org/wiki/France",
+            "confidence": "A",
+            "explanation": "Paris is the capital of France according to Wikipedia.",
+        })
+    );
+
+    let three = CombiningParser::new(
+        RegexDictParser::new([("key1", "Key1")]),
+        RegexDictParser::new([("key2", "Key2")]),
+    )
+    .with(JsonParser::<Value>::new());
+    assert_eq!(
+        Value::Object(
+            three
+                .parse_output(
+                    "<think>a\n\nb</think>\n\nKey1: value1\r\n  \r\nKey2: value2\n\n{\"n\": 3}\n\n\n"
+                )
+                .unwrap()
+        ),
+        json!({"key1": "value1", "key2": "value2", "n": 3})
+    );
+}
+
+#[test]
+fn combining_parser_later_parts_win_on_shared_keys() {
+    let parser = CombiningParser::new(
+        RegexDictParser::new([("k", "K")]),
+        JsonParser::<Value>::new(),
+    );
+    assert_eq!(
+        Value::Object(parser.parse_output("K: first\n\n{\"k\": 2}").unwrap()),
+        json!({"k": 2})
+    );
+}
+
+#[test]
+fn combining_parser_errors() {
+    let parser = CombiningParser::new(confidence(), RegexDictParser::new([("k", "K")]));
+    let err = parsing_error(parser.parse_output("\n\n\n\n"));
+    assert!(
+        err.contains("expected 2 parts separated by blank lines, got 0"),
+        "{err}"
+    );
+    let err = parsing_error(parser.parse_output("K: 1"));
+    assert!(err.contains("got 1"), "{err}");
+    let err = parsing_error(parser.parse_output("a\n\nb\n\nc"));
+    assert!(err.contains("got 3"), "{err}");
+    // A part's own error says which part failed.
+    let err = parsing_error(parser.parse_output("Confidence: A, Explanation: x\n\nJ: 1"));
+    assert!(err.starts_with("part 2: no `K:`"), "{err}");
+
+    let not_an_object = CombiningParser::new(confidence(), JsonParser::<Value>::new());
+    let err = parsing_error(not_an_object.parse_output("Confidence: B, Explanation: y\n\n[1]"));
+    assert!(
+        err.starts_with("part 2: expected a JSON object, got [1]"),
+        "{err}"
+    );
+}
+
+#[test]
+fn combining_parser_instructions_number_the_parts() {
+    let parser = CombiningParser::new(
+        RegexDictParser::new([("a", "A")]),
+        RegexDictParser::new([("b", "B")]),
+    );
+    assert_eq!(
+        parser.format_instructions(),
+        "Your answer must have 2 parts, in this order, separated by a blank line. No part may contain a blank line itself.\n\n\
+         Part 1:\nYour answer must contain these lines, each once:\nA: <value>\n\n\
+         Part 2:\nYour answer must contain these lines, each once:\nB: <value>"
+    );
 }
