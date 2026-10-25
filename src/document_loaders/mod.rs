@@ -31,6 +31,9 @@ pub use html_to_markdown_loader::*;
 mod assemblyai_loader;
 pub use assemblyai_loader::*;
 
+mod notion_loader;
+pub use notion_loader::*;
+
 mod error;
 pub use error::*;
 
