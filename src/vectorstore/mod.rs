@@ -39,6 +39,9 @@ pub mod chroma;
 #[cfg(feature = "pinecone")]
 pub mod pinecone;
 
+#[cfg(feature = "mariadb")]
+pub mod mariadb;
+
 mod vectorstore;
 
 pub use options::*;
