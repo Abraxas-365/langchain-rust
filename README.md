@@ -253,6 +253,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
     ```
 
   - [x] [AssemblyAI audio transcripts](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/assemblyai_loader.rs)
+  - [x] Notion export (`NotionDirectoryLoader::new("./Export-...")`, Markdown & CSV export)
 
 ## Installation
 
