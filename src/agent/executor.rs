@@ -2,7 +2,7 @@ use std::{collections::HashMap, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
-use serde_json::json;
+use serde_json::{json, Value};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
@@ -10,6 +10,7 @@ use super::{
     agent::{Agent, PlanEvent},
     AgentError,
 };
+use crate::chain::chain_trait::{DEFAULT_OUTPUT_KEY, DEFAULT_RESULT_KEY};
 use crate::observability::traced;
 use crate::schemas::{LogTools, Message};
 use crate::{
@@ -54,6 +55,58 @@ const MAX_ITERATIONS_OUTPUT: &str = "Max iterations reached";
 /// Error message of a run stopped through `with_cancellation`.
 const CANCELLED: &str = "agent run cancelled";
 
+/// Key of the steps in [`Chain::execute`]'s output, with
+/// [`AgentExecutor::with_return_intermediate_steps`].
+pub const INTERMEDIATE_STEPS_KEY: &str = "intermediate_steps";
+
+/// Tool name of the step recorded for an output the agent couldn't parse (see
+/// [`ParserErrorHandler`]).
+pub const PARSER_ERROR_TOOL: &str = "_Exception";
+
+/// Turns a parse error's message into the observation the model sees.
+type ErrorFormatter = Arc<dyn Fn(&str) -> String + Send + Sync>;
+
+/// Lets a run go on when the model's output can't be parsed (an
+/// [`AgentError::OutputParse`], e.g. a [`ReActAgent`](crate::agent::ReActAgent) turn
+/// without `Action:`), or names a tool that doesn't exist. Instead of failing, the run
+/// records a step whose observation tells the model what was wrong, and asks again. Each
+/// retry counts toward `max_iterations`.
+///
+/// ```rust,ignore
+/// let executor = AgentExecutor::from_agent(agent).with_parser_error_handler(
+///     ParserErrorHandler::new().with_formatter(|err| {
+///         format!("{err}. Answer with Action/Action Input or Final Answer.")
+///     }),
+/// );
+/// ```
+#[derive(Clone, Default)]
+pub struct ParserErrorHandler {
+    formatter: Option<ErrorFormatter>,
+}
+
+impl ParserErrorHandler {
+    /// Sends the parse error's message as is.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Builds the observation from the parse error's message.
+    pub fn with_formatter<F>(mut self, formatter: F) -> Self
+    where
+        F: Fn(&str) -> String + Send + Sync + 'static,
+    {
+        self.formatter = Some(Arc::new(formatter));
+        self
+    }
+
+    fn observation(&self, message: &str) -> String {
+        match &self.formatter {
+            Some(format) => format(message),
+            None => message.to_string(),
+        }
+    }
+}
+
 pub struct AgentExecutor<A>
 where
     A: Agent,
@@ -63,6 +116,8 @@ where
     break_if_error: bool,
     pub memory: Option<Arc<Mutex<dyn BaseMemory>>>,
     cancellation: Option<CancellationToken>,
+    parser_error_handler: Option<ParserErrorHandler>,
+    return_intermediate_steps: bool,
 }
 
 impl<A> AgentExecutor<A>
@@ -76,7 +131,24 @@ where
             break_if_error: false,
             memory: None,
             cancellation: None,
+            parser_error_handler: None,
+            return_intermediate_steps: false,
         }
+    }
+
+    /// Sends unparseable model output and unknown tool names back to the model instead
+    /// of failing the run. See [`ParserErrorHandler`].
+    pub fn with_parser_error_handler(mut self, handler: ParserErrorHandler) -> Self {
+        self.parser_error_handler = Some(handler);
+        self
+    }
+
+    /// Adds the run's steps to [`Chain::execute`]'s output, under
+    /// [`INTERMEDIATE_STEPS_KEY`]: a JSON array of
+    /// `{"tool", "tool_input", "log", "observation"}`, in the order they ran.
+    pub fn with_return_intermediate_steps(mut self, return_steps: bool) -> Self {
+        self.return_intermediate_steps = return_steps;
+        self
     }
 
     pub fn with_max_iterations(mut self, max_iterations: i32) -> Self {
@@ -205,6 +277,7 @@ where
     ) -> Result<RunOutput, ChainError> {
         let mut input_variables = input_variables.clone();
         let name_to_tools = self.get_name_to_tools();
+        let tool_names: Vec<String> = self.agent.get_tools().iter().map(|t| t.name()).collect();
         let mut steps: Vec<(AgentAction, String)> = Vec::new();
         let mut tokens: Option<TokenUsage> = None;
         if let Some(memory) = &self.memory {
@@ -216,7 +289,7 @@ where
 
         loop {
             let plan_span = tracing::info_span!("agent.plan", step = steps.len());
-            let (agent_event, usage) = async {
+            let planned = async {
                 if emitter.is_streaming() {
                     self.plan_streaming(&steps, input_variables.clone(), &emitter)
                         .await
@@ -227,8 +300,38 @@ where
                 }
             }
             .instrument(plan_span)
-            .await
-            .map_err(|e| ChainError::AgentError(format!("Error in agent planning: {}", e)))?;
+            .await;
+            let (agent_event, usage) = match (planned, &self.parser_error_handler) {
+                (Ok(planned), _) => planned,
+                (
+                    Err(AgentError::OutputParse {
+                        message,
+                        llm_output,
+                    }),
+                    Some(handler),
+                ) => {
+                    tracing::info!(error = %message, "agent output not parsed, asking again");
+                    let observation = handler.observation(&message);
+                    steps.push((
+                        AgentAction {
+                            tool: PARSER_ERROR_TOOL.into(),
+                            tool_input: "Invalid or incomplete response".into(),
+                            log: llm_output,
+                        },
+                        observation,
+                    ));
+                    if self.max_iterations_reached(&steps) {
+                        return Ok(self.max_iterations_output(steps, tokens));
+                    }
+                    continue;
+                }
+                (Err(e), _) => {
+                    return Err(ChainError::AgentError(format!(
+                        "Error in agent planning: {}",
+                        e
+                    )))
+                }
+            };
             if let Some(usage) = usage {
                 tokens.get_or_insert_with(TokenUsage::default).add(&usage);
             }
@@ -237,12 +340,38 @@ where
                 AgentEvent::Action(actions) => {
                     for action in actions {
                         tracing::debug!("Action: {:?}", action.tool_input);
-                        let tool = name_to_tools
-                            .get(&action.tool.trim().replace(" ", "_"))
-                            .ok_or_else(|| {
-                                AgentError::ToolError(format!("Tool {} not found", action.tool))
-                            })
-                            .map_err(|e| ChainError::AgentError(e.to_string()))?;
+                        let Some(tool) = name_to_tools.get(&action.tool.trim().replace(" ", "_"))
+                        else {
+                            if self.parser_error_handler.is_none() {
+                                return Err(ChainError::AgentError(
+                                    AgentError::ToolError(format!(
+                                        "Tool {} not found",
+                                        action.tool
+                                    ))
+                                    .to_string(),
+                                ));
+                            }
+                            let observation = format!(
+                                "{} is not a valid tool, try one of [{}].",
+                                action.tool,
+                                tool_names.join(", ")
+                            );
+                            // Shown like a tool call that failed, so streams see it.
+                            emitter
+                                .emit(AgentStreamEvent::ToolStart {
+                                    tool: action.tool.clone(),
+                                    input: action.tool_input.clone(),
+                                })
+                                .await;
+                            emitter
+                                .emit(AgentStreamEvent::ToolEnd {
+                                    tool: action.tool.clone(),
+                                    output: observation.clone(),
+                                })
+                                .await;
+                            steps.push((action, observation));
+                            continue;
+                        };
 
                         emitter
                             .emit(AgentStreamEvent::ToolStart {
@@ -298,7 +427,7 @@ where
                             .await?;
 
                         let mut tools_ai_message_seen: HashMap<String, ()> = HashMap::default();
-                        for (action, observation) in steps {
+                        for (action, observation) in &steps {
                             // Only OpenAI-tools style agents encode `LogTools` in the log;
                             // other agents (e.g. ConversationalAgent) store raw LLM text.
                             // Thinking is not stored: providers only need it within the
@@ -326,20 +455,36 @@ where
                     return Ok(RunOutput {
                         output: finish.output,
                         tokens,
+                        steps,
                     });
                 }
             }
 
-            if let Some(max_iterations) = self.max_iterations {
-                if steps.len() >= max_iterations as usize {
-                    tracing::Span::current().record("steps", steps.len());
-                    tracing::warn!(max_iterations, "agent stopped: max iterations reached");
-                    return Ok(RunOutput {
-                        output: MAX_ITERATIONS_OUTPUT.to_string(),
-                        tokens,
-                    });
-                }
+            if self.max_iterations_reached(&steps) {
+                return Ok(self.max_iterations_output(steps, tokens));
             }
+        }
+    }
+
+    fn max_iterations_reached(&self, steps: &[(AgentAction, String)]) -> bool {
+        self.max_iterations
+            .is_some_and(|max| steps.len() >= max as usize)
+    }
+
+    fn max_iterations_output(
+        &self,
+        steps: Vec<(AgentAction, String)>,
+        tokens: Option<TokenUsage>,
+    ) -> RunOutput {
+        tracing::Span::current().record("steps", steps.len());
+        tracing::warn!(
+            max_iterations = self.max_iterations,
+            "agent stopped: max iterations reached"
+        );
+        RunOutput {
+            output: MAX_ITERATIONS_OUTPUT.to_string(),
+            tokens,
+            steps,
         }
     }
 
@@ -369,11 +514,29 @@ where
     }
 }
 
-/// What a run produced: the answer and, when the LLM reported them, the tokens used by
-/// all its model calls.
+/// What a run produced: the answer, the steps taken and, when the LLM reported them, the
+/// tokens used by all its model calls.
 struct RunOutput {
     output: String,
     tokens: Option<TokenUsage>,
+    steps: Vec<(AgentAction, String)>,
+}
+
+/// The steps as [`AgentExecutor::with_return_intermediate_steps`] returns them.
+fn steps_json(steps: &[(AgentAction, String)]) -> Value {
+    Value::Array(
+        steps
+            .iter()
+            .map(|(action, observation)| {
+                json!({
+                    "tool": action.tool,
+                    "tool_input": action.tool_input,
+                    "log": action.log,
+                    "observation": observation,
+                })
+            })
+            .collect(),
+    )
 }
 
 /// Where the agent loop sends its events: nowhere for `call`, a channel for `stream_events`.
@@ -411,5 +574,38 @@ where
     async fn invoke(&self, input_variables: PromptArgs) -> Result<String, ChainError> {
         let result = self.call(input_variables).await?;
         Ok(result.generation)
+    }
+
+    /// Like the default (`output` and `generate_result`), plus the run's steps under
+    /// [`INTERMEDIATE_STEPS_KEY`] with
+    /// [`with_return_intermediate_steps`](Self::with_return_intermediate_steps).
+    async fn execute(
+        &self,
+        input_variables: PromptArgs,
+    ) -> Result<HashMap<String, Value>, ChainError> {
+        let run = self.run(input_variables, Emitter(None)).await?;
+        let mut output = HashMap::new();
+        if self.return_intermediate_steps {
+            output.insert(INTERMEDIATE_STEPS_KEY.to_string(), steps_json(&run.steps));
+        }
+        let result = GenerateResult {
+            generation: run.output,
+            tokens: run.tokens,
+            ..Default::default()
+        };
+        output.insert(DEFAULT_OUTPUT_KEY.to_string(), json!(result.generation));
+        output.insert(DEFAULT_RESULT_KEY.to_string(), json!(result));
+        Ok(output)
+    }
+
+    fn get_output_keys(&self) -> Vec<String> {
+        let mut keys = vec![
+            DEFAULT_OUTPUT_KEY.to_string(),
+            DEFAULT_RESULT_KEY.to_string(),
+        ];
+        if self.return_intermediate_steps {
+            keys.push(INTERMEDIATE_STEPS_KEY.to_string());
+        }
+        keys
     }
 }

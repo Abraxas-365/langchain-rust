@@ -33,4 +33,11 @@ pub enum AgentError {
 
     #[error("Memory error: {0}")]
     MemoryError(#[from] MemoryError),
+
+    /// The model's output couldn't be parsed into an action or an answer. `message` says
+    /// what was wrong (it is what the model sees when the executor has a
+    /// [`ParserErrorHandler`](crate::agent::ParserErrorHandler)); `llm_output` is the raw
+    /// text.
+    #[error("{message}: `{llm_output}`")]
+    OutputParse { message: String, llm_output: String },
 }
