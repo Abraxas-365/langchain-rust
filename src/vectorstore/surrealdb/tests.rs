@@ -46,6 +46,7 @@ async fn add_and_search(store: &Store<Db>) {
     let results = store.similarity_search("cat", 2, &opts).await.unwrap();
     assert_eq!(results.len(), 2, "{results:?}");
     assert_eq!(results[0].page_content, "cats purr");
+    assert_eq!(results[0].id.as_deref(), Some(ids[0].as_str()));
     assert!((results[0].score - 1.0).abs() < 1e-9);
     assert_eq!(results[0].metadata["k"], json!("a"));
     assert_eq!(results[1].page_content, "kittens purr");
@@ -57,6 +58,45 @@ async fn add_and_search(store: &Store<Db>) {
         .await
         .unwrap();
     assert_eq!(thresholded.len(), 2);
+
+    get_and_delete(store, &ids).await;
+}
+
+/// `ids` are what `add_documents` returned for `docs()`.
+async fn get_and_delete(store: &Store<Db>, ids: &[String]) {
+    let opts = VecStoreOptions::<Value>::default();
+    // Request order, missing ids skipped, a repeated id returned once.
+    let ask = vec![
+        ids[2].clone(),
+        "missing".into(),
+        ids[0].clone(),
+        ids[2].clone(),
+    ];
+    let got = store.get_by_ids(&ask, &opts).await.unwrap();
+    let got_ids: Vec<_> = got.iter().map(|d| d.id.clone().unwrap()).collect();
+    assert_eq!(got_ids, [ids[2].clone(), ids[0].clone()]);
+    assert_eq!(got[0].page_content, "kittens purr");
+    assert_eq!(got[1].page_content, "cats purr");
+    assert_eq!(got[1].metadata["k"], json!("a"));
+    assert_eq!(got[1].score, 0.0);
+
+    store.delete(&ask, &opts).await.unwrap();
+    assert!(store.get_by_ids(&ask, &opts).await.unwrap().is_empty());
+    let left = store.similarity_search("cat", 10, &opts).await.unwrap();
+    let left: Vec<_> = left.iter().map(|d| d.page_content.as_str()).collect();
+    assert_eq!(left, ["dogs bark"]);
+
+    // Empty input is a no-op; scopes that can't narrow an id lookup are rejected.
+    store.delete(&[], &opts).await.unwrap();
+    assert!(store.get_by_ids(&[], &opts).await.unwrap().is_empty());
+    for bad in [
+        VecStoreOptions::<Value>::default().with_name_space("t"),
+        VecStoreOptions::<Value>::default().with_filters(json!({"k": "b"})),
+    ] {
+        assert!(store.get_by_ids(&ids[1..2], &bad).await.is_err());
+        assert!(store.delete(&ids[1..2], &bad).await.is_err());
+    }
+    assert_eq!(store.get_by_ids(&ids[1..2], &opts).await.unwrap().len(), 1);
 }
 
 #[tokio::test]
@@ -89,10 +129,12 @@ async fn shared_table_isolates_collections() {
     a.initialize().await.unwrap();
 
     let opts = VecStoreOptions::<Value>::default();
-    a.add_documents(&[Document::new("cats purr")], &opts)
+    let a_ids = a
+        .add_documents(&[Document::new("cats purr")], &opts)
         .await
         .unwrap();
-    b.add_documents(&[Document::new("dogs bark")], &opts)
+    let b_ids = b
+        .add_documents(&[Document::new("dogs bark")], &opts)
         .await
         .unwrap();
 
@@ -100,6 +142,16 @@ async fn shared_table_isolates_collections() {
     assert_eq!(results.len(), 1, "{results:?}");
     assert_eq!(results[0].page_content, "cats purr");
     assert_eq!(results[0].metadata["collection"], json!("a"));
+
+    // Id lookups don't cross collections on the shared table.
+    assert!(a.get_by_ids(&b_ids, &opts).await.unwrap().is_empty());
+    a.delete(&b_ids, &opts).await.unwrap();
+    let still_b = b.get_by_ids(&b_ids, &opts).await.unwrap();
+    assert_eq!(still_b.len(), 1);
+    assert_eq!(still_b[0].page_content, "dogs bark");
+    b.delete(&b_ids, &opts).await.unwrap();
+    assert!(b.get_by_ids(&b_ids, &opts).await.unwrap().is_empty());
+    assert_eq!(a.get_by_ids(&a_ids, &opts).await.unwrap().len(), 1);
 }
 
 #[tokio::test]
