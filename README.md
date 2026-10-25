@@ -252,6 +252,8 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
     let documents = stream.map(|x| x.unwrap()).collect::<Vec<_>>().await;
     ```
 
+  - [x] [AssemblyAI audio transcripts](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/assemblyai_loader.rs)
+
 ## Installation
 
 This library heavily relies on `serde_json` for its operation.
