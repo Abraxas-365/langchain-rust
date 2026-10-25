@@ -9,8 +9,8 @@ use langchain_rust::{
     language_models::llm::LLM,
     llm::{openai::OpenAI, OpenAIConfig},
     output_parsers::{
-        BooleanParser, CommaSeparatedListParser, JsonParser, ResponseSchema,
-        StructuredOutputParser, TypedOutputParser,
+        BooleanParser, CombiningParser, CommaSeparatedListParser, JsonParser, RegexDictParser,
+        ResponseSchema, StructuredOutputParser, TypedOutputParser,
     },
 };
 use serde::Deserialize;
@@ -106,4 +106,23 @@ async fn main() {
         "answer: {}, confidence: {}",
         fields["answer"], fields["confidence"]
     );
+
+    // Two formats in one answer: a JSON block, then labelled lines.
+    let combined = CombiningParser::new(
+        StructuredOutputParser::new([
+            ResponseSchema::new("city", "the capital city"),
+            ResponseSchema::new("country", "the country it is the capital of"),
+        ]),
+        RegexDictParser::new([("population", "Population"), ("source", "Source")])
+            .with_no_update_value("N/A"),
+    );
+    let answer = llm
+        .invoke(&format!(
+            "What is the capital of Japan, and roughly how many people live there?\n\n{}",
+            combined.format_instructions()
+        ))
+        .await
+        .unwrap();
+    let fields = combined.parse_output(&answer).unwrap();
+    println!("combined: {}", serde_json::Value::Object(fields));
 }
