@@ -50,6 +50,7 @@ This is the Rust language implementation of [LangChain](https://github.com/langc
   - [x] [SurrealDB](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_surrealdb/src/main.rs)
   - [x] [Weaviate](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_weaviate.rs)
   - [x] [Milvus](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_milvus.rs)
+  - [x] [MariaDB](https://github.com/Abraxas-365/langchain-rust/blob/main/examples/vector_store_mariadb.rs)
 
 - Chain
 
