@@ -34,5 +34,8 @@ pub use perplexity::*;
 mod exa;
 pub use exa::*;
 
+mod firecrawl;
+pub use firecrawl::*;
+
 mod calculator;
 pub use calculator::{evaluate_expression, format_number, Calculator, CalculatorError};
