@@ -116,6 +116,7 @@ impl Chain for ConversationalChain {
                     },
                     Err(e) => {
                         yield Err(e);
+                        return;
                     }
                 }
             }

@@ -195,6 +195,7 @@ impl Chain for ConversationalRetrieverChain {
                     },
                     Err(e) => {
                         yield Err(e);
+                        return;
                     }
                 }
             }
