@@ -352,6 +352,12 @@ cargo add langchain-rust --features mongodb
 cargo add langchain-rust --features redis
 ```
 
+#### With llm-budget (USD spend cap for `AgentExecutor::with_budget`)
+
+```bash
+cargo add langchain-rust --features llm-budget
+```
+
 Please remember to replace the feature flags `sqlite`, `postgres` or `surrealdb` based on your
 specific use case.
 

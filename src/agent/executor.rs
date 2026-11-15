@@ -54,6 +54,9 @@ pub type AgentEventStream<'a> =
 const MAX_ITERATIONS_OUTPUT: &str = "Max iterations reached";
 /// Error message of a run stopped through `with_cancellation`.
 const CANCELLED: &str = "agent run cancelled";
+/// Start of the error message of a run stopped through `with_budget`.
+#[cfg(feature = "llm-budget")]
+const OVER_BUDGET: &str = "agent run stopped by its budget";
 
 /// Key of the steps in [`Chain::execute`]'s output, with
 /// [`AgentExecutor::with_return_intermediate_steps`].
@@ -118,6 +121,8 @@ where
     cancellation: Option<CancellationToken>,
     parser_error_handler: Option<ParserErrorHandler>,
     return_intermediate_steps: bool,
+    #[cfg(feature = "llm-budget")]
+    budget: Option<(Arc<llm_budget::AgentBudget>, llm_budget::ModelPrice)>,
 }
 
 impl<A> AgentExecutor<A>
@@ -133,6 +138,8 @@ where
             cancellation: None,
             parser_error_handler: None,
             return_intermediate_steps: false,
+            #[cfg(feature = "llm-budget")]
+            budget: None,
         }
     }
 
@@ -176,6 +183,81 @@ where
     pub fn with_cancellation(mut self, token: CancellationToken) -> Self {
         self.cancellation = Some(token);
         self
+    }
+
+    /// Caps what runs spend in US dollars. The usage each model call reports is priced
+    /// with `price` and booked against `budget`; once the budget is spent (or killed with
+    /// `budget.kill`), the run stops before its next model call or tool call and returns a
+    /// `ChainError::AgentError` ("agent run stopped by its budget: ..."). Check
+    /// `budget.is_exhausted()` or `budget.is_killed()` to tell it apart from other
+    /// failures. Nothing is written to memory for a stopped run.
+    ///
+    /// A model call that has been made is always booked, so `budget.spent_usd()` matches
+    /// the bill (it can end slightly above the cap). Calls whose LLM reports no usage
+    /// cost nothing here. The budget is shared by every run of this executor, and by
+    /// anything else that holds it; give each run its own `AgentBudget` for a per-run cap.
+    ///
+    /// ```rust,ignore
+    /// use llm_budget::{AgentBudget, PriceTable};
+    ///
+    /// let budget = Arc::new(AgentBudget::builder("support-agent", 0.50).build()?);
+    /// let price = PriceTable::builtin().require("gpt-4o")?.clone();
+    /// let executor = AgentExecutor::from_agent(agent).with_budget(budget.clone(), price);
+    /// ```
+    #[cfg(feature = "llm-budget")]
+    pub fn with_budget(
+        mut self,
+        budget: Arc<llm_budget::AgentBudget>,
+        price: llm_budget::ModelPrice,
+    ) -> Self {
+        self.budget = Some((budget, price));
+        self
+    }
+
+    /// Books the cost of one model call against the budget, if there is one.
+    #[cfg(feature = "llm-budget")]
+    fn charge_budget(&self, usage: &TokenUsage) {
+        let Some((budget, price)) = &self.budget else {
+            return;
+        };
+        let usage = llm_budget::Usage {
+            input_tokens: usage.prompt_tokens.into(),
+            cached_input_tokens: usage.cache_read_tokens.into(),
+            cache_write_tokens: usage.cache_creation_tokens.into(),
+            output_tokens: usage.completion_tokens.into(),
+        };
+        let ctx = llm_budget::ChargeContext::new()
+            .model(price.model.clone())
+            .tokens(usage.input_tokens, usage.output_tokens);
+        budget.charge_usd_force(price.cost_usage(&usage), ctx);
+    }
+
+    #[cfg(not(feature = "llm-budget"))]
+    fn charge_budget(&self, _usage: &TokenUsage) {}
+
+    /// Fails when the budget, if there is one, has nothing left or was killed.
+    #[cfg(feature = "llm-budget")]
+    fn check_budget(&self) -> Result<(), ChainError> {
+        match &self.budget {
+            Some((budget, _)) if budget.is_killed() || budget.is_exhausted() => {
+                tracing::warn!(
+                    spent_usd = budget.spent_usd(),
+                    limit_usd = budget.limit_usd(),
+                    "agent stopped: budget spent"
+                );
+                Err(ChainError::AgentError(format!(
+                    "{OVER_BUDGET}: ${:.6} spent of ${:.6}",
+                    budget.spent_usd(),
+                    budget.limit_usd()
+                )))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    #[cfg(not(feature = "llm-budget"))]
+    fn check_budget(&self) -> Result<(), ChainError> {
+        Ok(())
     }
 
     fn get_name_to_tools(&self) -> HashMap<String, Arc<dyn Tool>> {
@@ -288,6 +370,7 @@ where
         }
 
         loop {
+            self.check_budget()?;
             let plan_span = tracing::info_span!("agent.plan", step = steps.len());
             let planned = async {
                 if emitter.is_streaming() {
@@ -333,11 +416,13 @@ where
                 }
             };
             if let Some(usage) = usage {
+                self.charge_budget(&usage);
                 tokens.get_or_insert_with(TokenUsage::default).add(&usage);
             }
 
             match agent_event {
                 AgentEvent::Action(actions) => {
+                    self.check_budget()?;
                     for action in actions {
                         tracing::debug!("Action: {:?}", action.tool_input);
                         let Some(tool) = name_to_tools.get(&action.tool.trim().replace(" ", "_"))
