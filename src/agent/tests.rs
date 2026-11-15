@@ -1295,162 +1295,115 @@ async fn agent_usage_live_ollama() {
     assert!(!usages.is_empty(), "{events:?}");
 }
 
-// ---- USD budget (feature `llm-budget`) ----
+// ---- with_usage_limit ----
 
-#[cfg(feature = "llm-budget")]
-mod budget {
-    use super::*;
-    use llm_budget::{AgentBudget, ModelPrice};
+/// `usage_tools_run` with the tool and the LLM returned for inspection.
+fn usage_limit_run() -> (
+    RecordingTool,
+    FakeLLM,
+    AgentExecutor<impl crate::agent::Agent>,
+) {
+    let tool = RecordingTool::ok("t", "obs");
+    let llm = FakeLLM::with_results([
+        with_usage(
+            GenerateResult::default().with_tool_calls(vec![ToolCall::new("c1", "t", "q")]),
+            10,
+            2,
+        ),
+        with_usage(
+            GenerateResult {
+                generation: "done".into(),
+                ..Default::default()
+            },
+            30,
+            5,
+        ),
+    ]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(tool.clone())])
+        .build(llm.clone())
+        .unwrap();
+    (tool, llm, AgentExecutor::from_agent(agent))
+}
 
-    /// $0.001 per input token, $0.002 per output token, $0.0001 per cached input token.
-    fn price() -> ModelPrice {
-        ModelPrice {
-            model: "test-model".into(),
-            provider: "test".into(),
-            input_per_million: 1_000.0,
-            output_per_million: 2_000.0,
-            cache_read_per_million: Some(100.0),
-            cache_write_per_million: None,
-            max_input_tokens: None,
-        }
-    }
+#[tokio::test]
+async fn usage_limit_sees_the_running_total_and_lets_the_run_finish() {
+    let seen = Arc::new(StdMutex::new(Vec::new()));
+    let (tool, _, executor) = usage_limit_run();
+    let result = executor
+        .with_usage_limit({
+            let seen = seen.clone();
+            move |total: &TokenUsage| {
+                seen.lock().unwrap().push(total.clone());
+                total.total_tokens < 1_000
+            }
+        })
+        .call(prompt_args! {"input" => "q"})
+        .await
+        .unwrap();
+    assert_eq!(result.generation, "done");
+    assert_eq!(result.tokens, Some(TokenUsage::new(40, 7)));
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![TokenUsage::new(10, 2), TokenUsage::new(40, 7)]
+    );
+    assert_eq!(tool.inputs().len(), 1);
+}
 
-    fn budget(limit_usd: f64) -> Arc<AgentBudget> {
-        Arc::new(AgentBudget::builder("agent", limit_usd).build().unwrap())
-    }
+#[tokio::test]
+async fn usage_limit_stops_the_run_before_its_next_call() {
+    let memory = Arc::new(Mutex::new(SimpleMemory::new()));
+    let (tool, llm, executor) = usage_limit_run();
+    let err = executor
+        .with_memory(memory.clone())
+        .with_usage_limit(|total: &TokenUsage| total.total_tokens < 10)
+        .invoke(prompt_args! {"input" => "q"})
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("agent run stopped by its usage limit"),
+        "{err}"
+    );
+    assert!(tool.inputs().is_empty());
+    assert_eq!(llm.calls().len(), 1);
+    assert!(memory.lock().await.messages().await.unwrap().is_empty());
+}
 
-    fn assert_usd(actual: f64, expected: f64) {
-        assert!((actual - expected).abs() < 1e-9, "{actual} != {expected}");
-    }
+#[tokio::test]
+async fn usage_limit_stops_streams_too() {
+    let (tool, _, executor) = usage_limit_run();
+    let executor = executor.with_usage_limit(|total: &TokenUsage| total.total_tokens < 10);
+    let mut events = collect_events(&executor, "q").await;
+    let err = events.pop().unwrap().unwrap_err().to_string();
+    assert!(
+        err.contains("agent run stopped by its usage limit"),
+        "{err}"
+    );
+    assert_eq!(
+        events.into_iter().map(Result::unwrap).collect::<Vec<_>>(),
+        vec![AgentStreamEvent::Usage(TokenUsage::new(10, 2))]
+    );
+    assert!(tool.inputs().is_empty());
+}
 
-    /// Like `usage_tools_run` (a tool call at 10+2 tokens, then "done" at 30+5), with
-    /// the tool and the LLM returned for inspection.
-    fn tools_run() -> (
-        RecordingTool,
-        FakeLLM,
-        AgentExecutor<impl crate::agent::Agent>,
-    ) {
-        let tool = RecordingTool::ok("t", "obs");
-        let llm = FakeLLM::with_results([
-            with_usage(
-                GenerateResult::default().with_tool_calls(vec![ToolCall::new("c1", "t", "q")]),
-                10,
-                2,
-            ),
-            with_usage(
-                GenerateResult {
-                    generation: "done".into(),
-                    ..Default::default()
-                },
-                30,
-                5,
-            ),
-        ]);
-        let agent = OpenAiToolAgentBuilder::new()
-            .tools(&[Arc::new(tool.clone())])
-            .build(llm.clone())
-            .unwrap();
-        (tool, llm, AgentExecutor::from_agent(agent))
-    }
+#[tokio::test]
+async fn answer_that_crosses_the_usage_limit_is_returned() {
+    let (_, _, executor) = usage_limit_run();
+    let result = executor
+        .with_usage_limit(|total: &TokenUsage| total.total_tokens < 20)
+        .invoke(prompt_args! {"input" => "q"})
+        .await
+        .unwrap();
+    assert_eq!(result, "done");
+}
 
-    #[tokio::test]
-    async fn budget_books_every_model_call() {
-        let budget = budget(1.0);
-        let (_, _, executor) = tools_run();
-        let result = executor
-            .with_budget(budget.clone(), price())
-            .call(prompt_args! {"input" => "q"})
-            .await
-            .unwrap();
-        assert_eq!(result.generation, "done");
-        // (10 * 0.001 + 2 * 0.002) + (30 * 0.001 + 5 * 0.002)
-        assert_usd(budget.spent_usd(), 0.054);
-        assert_eq!(budget.audit_log().await.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn spent_budget_stops_the_run_before_its_tools() {
-        let budget = budget(0.01);
-        let memory = Arc::new(Mutex::new(SimpleMemory::new()));
-        let (tool, llm, executor) = tools_run();
-        let err = executor
-            .with_memory(memory.clone())
-            .with_budget(budget.clone(), price())
-            .invoke(prompt_args! {"input" => "q"})
-            .await
-            .unwrap_err();
-        assert!(
-            err.to_string().contains("agent run stopped by its budget"),
-            "{err}"
-        );
-        assert!(budget.is_exhausted());
-        // The first call is booked even though it crossed the cap.
-        assert_usd(budget.spent_usd(), 0.014);
-        assert!(tool.inputs().is_empty());
-        assert_eq!(llm.calls().len(), 1);
-        assert!(memory.lock().await.messages().await.unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn answer_that_crosses_the_cap_is_returned() {
-        let budget = budget(0.05);
-        let (_, _, executor) = tools_run();
-        let result = executor
-            .with_budget(budget.clone(), price())
-            .invoke(prompt_args! {"input" => "q"})
-            .await
-            .unwrap();
-        assert_eq!(result, "done");
-        assert_usd(budget.spent_usd(), 0.054);
-    }
-
-    #[tokio::test]
-    async fn killed_budget_stops_the_run_before_the_llm_is_called() {
-        let budget = budget(1.0);
-        budget.kill("stop");
-        let (_, llm, executor) = tools_run();
-        let err = executor
-            .with_budget(budget.clone(), price())
-            .invoke(prompt_args! {"input" => "q"})
-            .await
-            .unwrap_err();
-        assert!(
-            err.to_string().contains("agent run stopped by its budget"),
-            "{err}"
-        );
-        assert!(llm.calls().is_empty());
-    }
-
-    #[tokio::test]
-    async fn stream_events_stop_on_budget_too() {
-        let budget = budget(0.01);
-        let (tool, _, executor) = tools_run();
-        let executor = executor.with_budget(budget, price());
-        let mut events = collect_events(&executor, "q").await;
-        let err = events.pop().unwrap().unwrap_err().to_string();
-        assert!(err.contains("agent run stopped by its budget"), "{err}");
-        assert_eq!(
-            events.into_iter().map(Result::unwrap).collect::<Vec<_>>(),
-            vec![AgentStreamEvent::Usage(TokenUsage::new(10, 2))]
-        );
-        assert!(tool.inputs().is_empty());
-    }
-
-    #[tokio::test]
-    async fn cached_prompt_tokens_are_priced_at_the_cache_rate() {
-        let budget = budget(1.0);
-        let llm = FakeLLM::with_results([GenerateResult {
-            generation: "hi".into(),
-            tokens: Some(TokenUsage::new(1_000, 0).with_cache_tokens(800, 0)),
-            ..Default::default()
-        }]);
-        let agent = OpenAiToolAgentBuilder::new().build(llm).unwrap();
-        AgentExecutor::from_agent(agent)
-            .with_budget(budget.clone(), price())
-            .invoke(prompt_args! {"input" => "q"})
-            .await
-            .unwrap();
-        // 200 fresh * 0.001 + 800 cached * 0.0001
-        assert_usd(budget.spent_usd(), 0.28);
-    }
+#[tokio::test]
+async fn no_usage_limit_runs_as_before() {
+    let (tool, llm, executor) = usage_limit_run();
+    let result = executor.call(prompt_args! {"input" => "q"}).await.unwrap();
+    assert_eq!(result.generation, "done");
+    assert_eq!(result.tokens, Some(TokenUsage::new(40, 7)));
+    assert_eq!(tool.inputs().len(), 1);
+    assert_eq!(llm.calls().len(), 2);
 }
