@@ -1,4 +1,4 @@
-use std::{collections::HashMap, pin::Pin, sync::Arc};
+use std::{collections::HashMap, pin::Pin, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
@@ -56,6 +56,8 @@ const MAX_ITERATIONS_OUTPUT: &str = "Max iterations reached";
 const CANCELLED: &str = "agent run cancelled";
 /// Error message of a run stopped through `with_usage_limit`.
 const USAGE_LIMIT_REACHED: &str = "agent run stopped by its usage limit";
+/// Error message of a run stopped through `with_max_execution_time`.
+const TIMED_OUT: &str = "agent run exceeded its max execution time";
 
 /// Key of the steps in [`Chain::execute`]'s output, with
 /// [`AgentExecutor::with_return_intermediate_steps`].
@@ -124,6 +126,7 @@ where
     parser_error_handler: Option<ParserErrorHandler>,
     return_intermediate_steps: bool,
     usage_limit: Option<UsageLimit>,
+    max_execution_time: Option<Duration>,
 }
 
 impl<A> AgentExecutor<A>
@@ -140,6 +143,7 @@ where
             parser_error_handler: None,
             return_intermediate_steps: false,
             usage_limit: None,
+            max_execution_time: None,
         }
     }
 
@@ -205,6 +209,24 @@ where
         F: Fn(&TokenUsage) -> bool + Send + Sync + 'static,
     {
         self.usage_limit = Some(Arc::new(within_limit));
+        self
+    }
+
+    /// Stops runs that take longer than `limit` in total, counted from the start of each
+    /// run. The in-flight LLM or tool call is dropped and the run returns a
+    /// `ChainError::AgentError` ("agent run exceeded its max execution time"). Nothing is
+    /// written to memory for a stopped run.
+    ///
+    /// Like LangChain's `max_execution_time`, except that a model or tool call that hangs
+    /// is stopped too, not only the loop between steps, and the run fails instead of
+    /// returning a stop message (as `with_max_iterations` does).
+    ///
+    /// ```rust,ignore
+    /// let executor = AgentExecutor::from_agent(agent)
+    ///     .with_max_execution_time(Duration::from_secs(60));
+    /// ```
+    pub fn with_max_execution_time(mut self, limit: Duration) -> Self {
+        self.max_execution_time = Some(limit);
         self
     }
 
@@ -283,6 +305,15 @@ where
             error = tracing::field::Empty,
         );
         let run = self.run_inner(input_variables, emitter);
+        let run = async {
+            match self.max_execution_time {
+                Some(limit) => tokio::time::timeout(limit, run).await.unwrap_or_else(|_| {
+                    tracing::warn!(?limit, "agent stopped: max execution time reached");
+                    Err(ChainError::AgentError(format!("{TIMED_OUT} ({limit:?})")))
+                }),
+                None => run.await,
+            }
+        };
         let run = async {
             match &self.cancellation {
                 Some(token) => token
