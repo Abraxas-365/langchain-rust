@@ -1407,3 +1407,178 @@ async fn no_usage_limit_runs_as_before() {
     assert_eq!(tool.inputs().len(), 1);
     assert_eq!(llm.calls().len(), 2);
 }
+
+// ---- with_max_execution_time ----
+
+use std::time::Duration;
+
+/// Tool that takes `delay` (in tokio time) to answer.
+struct SlowTool {
+    delay: Duration,
+}
+
+#[async_trait]
+impl Tool for SlowTool {
+    fn name(&self) -> String {
+        "slow".into()
+    }
+    fn description(&self) -> String {
+        "slow tool".into()
+    }
+    async fn run(&self, _input: Value) -> Result<String, Box<dyn Error>> {
+        tokio::time::sleep(self.delay).await;
+        Ok("slow answer".into())
+    }
+}
+
+/// Tools agent that calls `slow` once and then answers "done".
+fn slow_tool_run(delay: Duration) -> (FakeLLM, AgentExecutor<impl crate::agent::Agent>) {
+    let llm = FakeLLM::new([tool_calls_json(&[("c1", "slow", "q")]), "done".into()]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(SlowTool { delay })])
+        .build(llm.clone())
+        .unwrap();
+    (llm, AgentExecutor::from_agent(agent))
+}
+
+/// Fails the test instead of hanging when a run is never stopped (time is paused, so
+/// this resolves as soon as everything else is idle).
+async fn bounded<F: std::future::Future>(run: F) -> F::Output {
+    tokio::time::timeout(Duration::from_secs(3600), run)
+        .await
+        .expect("the run was never stopped")
+}
+
+#[tokio::test(start_paused = true)]
+async fn max_execution_time_stops_a_hanging_model_call_and_skips_memory() {
+    let tool = RecordingTool::ok("t", "obs");
+    let llm = FakeLLM::new([tool_calls_json(&[("c1", "t", "q")])]).hang_when_exhausted();
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(tool.clone())])
+        .build(llm.clone())
+        .unwrap();
+    let memory = Arc::new(Mutex::new(SimpleMemory::new()));
+    let executor = AgentExecutor::from_agent(agent)
+        .with_memory(memory.clone())
+        .with_max_execution_time(Duration::from_secs(30));
+
+    let start = tokio::time::Instant::now();
+    let err = bounded(executor.invoke(prompt_args! {"input" => "q"}))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "Agent error: agent run exceeded its max execution time (30s)"
+    );
+    assert_eq!(start.elapsed(), Duration::from_secs(30));
+    assert_eq!(tool.inputs().len(), 1);
+    assert_eq!(
+        llm.calls().len(),
+        2,
+        "second plan was in flight when stopped"
+    );
+    assert!(memory.lock().await.messages().await.unwrap().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn max_execution_time_stops_a_slow_tool() {
+    let (llm, executor) = slow_tool_run(Duration::from_secs(600));
+    let executor = executor.with_max_execution_time(Duration::from_secs(5));
+    let start = tokio::time::Instant::now();
+    let err = bounded(executor.call(prompt_args! {"input" => "q"}))
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("agent run exceeded its max execution time"),
+        "{err}"
+    );
+    assert_eq!(start.elapsed(), Duration::from_secs(5));
+    assert_eq!(llm.calls().len(), 1, "no model call after the slow tool");
+}
+
+#[tokio::test(start_paused = true)]
+async fn max_execution_time_stops_streams_too() {
+    let (_, executor) = slow_tool_run(Duration::from_secs(600));
+    let executor = executor.with_max_execution_time(Duration::from_secs(5));
+    let mut events = bounded(collect_events(&executor, "q")).await;
+    let err = events.pop().unwrap().unwrap_err().to_string();
+    assert!(
+        err.contains("agent run exceeded its max execution time"),
+        "{err}"
+    );
+    assert!(matches!(
+        without_usage(events).as_slice(),
+        [Ok(AgentStreamEvent::ToolStart { .. })]
+    ));
+}
+
+#[tokio::test(start_paused = true)]
+async fn max_execution_time_counts_each_run_from_its_start() {
+    // Each run takes 3s; two in a row stay under a 5s limit because the clock restarts.
+    let llm = FakeLLM::new([
+        tool_calls_json(&[("c1", "slow", "q")]),
+        "first".into(),
+        tool_calls_json(&[("c2", "slow", "q")]),
+        "second".into(),
+    ]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(SlowTool {
+            delay: Duration::from_secs(3),
+        })])
+        .build(llm)
+        .unwrap();
+    let executor = AgentExecutor::from_agent(agent).with_max_execution_time(Duration::from_secs(5));
+    let first = bounded(executor.invoke(prompt_args! {"input" => "q"})).await;
+    let second = bounded(executor.invoke(prompt_args! {"input" => "q"})).await;
+    assert_eq!(first.unwrap(), "first");
+    assert_eq!(second.unwrap(), "second");
+}
+
+#[tokio::test(start_paused = true)]
+async fn run_within_max_execution_time_is_unaffected() {
+    let (llm, executor) = slow_tool_run(Duration::from_secs(4));
+    let result = bounded(
+        executor
+            .with_max_execution_time(Duration::from_secs(5))
+            .call(prompt_args! {"input" => "q"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.generation, "done");
+    assert_eq!(llm.calls().len(), 2);
+}
+
+/// Live: `OLLAMA_MODEL=qwen3:14b cargo test --lib max_execution_time_live -- --ignored`
+#[tokio::test]
+#[ignore]
+async fn max_execution_time_live_ollama() {
+    use crate::llm::{ollama::openai::OllamaConfig, openai::OpenAI};
+    let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "qwen3:14b".into());
+    let make = |limit: Duration| {
+        let llm = OpenAI::new(OllamaConfig::default()).with_model(&model);
+        let agent = OpenAiToolAgentBuilder::new()
+            .tools(&[Arc::new(RecordingTool::ok("weather", "sunny, 24C"))])
+            .build(llm)
+            .unwrap();
+        AgentExecutor::from_agent(agent).with_max_execution_time(limit)
+    };
+    let input = "Use the weather tool to check Lima, then answer in one sentence.";
+
+    // Far too short for a real model call: the request is dropped mid-flight.
+    let start = std::time::Instant::now();
+    let err = make(Duration::from_millis(50))
+        .invoke(prompt_args! {"input" => input})
+        .await
+        .unwrap_err();
+    println!("short limit: {err} after {:?}", start.elapsed());
+    assert!(err.to_string().contains("max execution time"), "{err}");
+    assert!(start.elapsed() < Duration::from_secs(2));
+
+    let answer = make(Duration::from_secs(300))
+        .invoke(prompt_args! {"input" => input})
+        .await
+        .unwrap();
+    println!("generous limit: {answer}");
+    assert!(!answer.is_empty());
+}
