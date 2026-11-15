@@ -54,6 +54,8 @@ pub type AgentEventStream<'a> =
 const MAX_ITERATIONS_OUTPUT: &str = "Max iterations reached";
 /// Error message of a run stopped through `with_cancellation`.
 const CANCELLED: &str = "agent run cancelled";
+/// Error message of a run stopped through `with_usage_limit`.
+const USAGE_LIMIT_REACHED: &str = "agent run stopped by its usage limit";
 
 /// Key of the steps in [`Chain::execute`]'s output, with
 /// [`AgentExecutor::with_return_intermediate_steps`].
@@ -65,6 +67,9 @@ pub const PARSER_ERROR_TOOL: &str = "_Exception";
 
 /// Turns a parse error's message into the observation the model sees.
 type ErrorFormatter = Arc<dyn Fn(&str) -> String + Send + Sync>;
+
+/// Tells from a run's total token usage whether the run may go on.
+type UsageLimit = Arc<dyn Fn(&TokenUsage) -> bool + Send + Sync>;
 
 /// Lets a run go on when the model's output can't be parsed (an
 /// [`AgentError::OutputParse`], e.g. a [`ReActAgent`](crate::agent::ReActAgent) turn
@@ -118,6 +123,7 @@ where
     cancellation: Option<CancellationToken>,
     parser_error_handler: Option<ParserErrorHandler>,
     return_intermediate_steps: bool,
+    usage_limit: Option<UsageLimit>,
 }
 
 impl<A> AgentExecutor<A>
@@ -133,6 +139,7 @@ where
             cancellation: None,
             parser_error_handler: None,
             return_intermediate_steps: false,
+            usage_limit: None,
         }
     }
 
@@ -175,6 +182,29 @@ where
     /// [`stream_events`](Self::stream_events)) also cancels a run.
     pub fn with_cancellation(mut self, token: CancellationToken) -> Self {
         self.cancellation = Some(token);
+        self
+    }
+
+    /// Stops runs once `within_limit` returns `false`. It is called after each model call
+    /// that reports usage, with the run's total so far; when it returns `false` the run
+    /// stops before its next tool call or model call and returns a
+    /// `ChainError::AgentError` ("agent run stopped by its usage limit"). An answer from
+    /// that last model call is still returned. Nothing is written to memory for a stopped
+    /// run.
+    ///
+    /// Use it for token caps, or to price the usage and cap what runs spend:
+    ///
+    /// ```rust,ignore
+    /// let executor = AgentExecutor::from_agent(agent)
+    ///     .with_usage_limit(|total: &TokenUsage| total.total_tokens < 20_000);
+    /// ```
+    ///
+    /// See `examples/agent_budget.rs` for a USD cap.
+    pub fn with_usage_limit<F>(mut self, within_limit: F) -> Self
+    where
+        F: Fn(&TokenUsage) -> bool + Send + Sync + 'static,
+    {
+        self.usage_limit = Some(Arc::new(within_limit));
         self
     }
 
@@ -332,11 +362,18 @@ where
                     )))
                 }
             };
+            let mut limit_reached = false;
             if let Some(usage) = usage {
-                tokens.get_or_insert_with(TokenUsage::default).add(&usage);
+                let total = tokens.get_or_insert_with(TokenUsage::default);
+                total.add(&usage);
+                limit_reached = self.usage_limit.as_ref().is_some_and(|f| !f(total));
             }
 
             match agent_event {
+                AgentEvent::Action(_) if limit_reached => {
+                    tracing::warn!(?tokens, "agent stopped: usage limit reached");
+                    return Err(ChainError::AgentError(USAGE_LIMIT_REACHED.into()));
+                }
                 AgentEvent::Action(actions) => {
                     for action in actions {
                         tracing::debug!("Action: {:?}", action.tool_input);

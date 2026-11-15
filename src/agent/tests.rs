@@ -1294,3 +1294,116 @@ async fn agent_usage_live_ollama() {
     println!("stream usages: {usages:?}");
     assert!(!usages.is_empty(), "{events:?}");
 }
+
+// ---- with_usage_limit ----
+
+/// `usage_tools_run` with the tool and the LLM returned for inspection.
+fn usage_limit_run() -> (
+    RecordingTool,
+    FakeLLM,
+    AgentExecutor<impl crate::agent::Agent>,
+) {
+    let tool = RecordingTool::ok("t", "obs");
+    let llm = FakeLLM::with_results([
+        with_usage(
+            GenerateResult::default().with_tool_calls(vec![ToolCall::new("c1", "t", "q")]),
+            10,
+            2,
+        ),
+        with_usage(
+            GenerateResult {
+                generation: "done".into(),
+                ..Default::default()
+            },
+            30,
+            5,
+        ),
+    ]);
+    let agent = OpenAiToolAgentBuilder::new()
+        .tools(&[Arc::new(tool.clone())])
+        .build(llm.clone())
+        .unwrap();
+    (tool, llm, AgentExecutor::from_agent(agent))
+}
+
+#[tokio::test]
+async fn usage_limit_sees_the_running_total_and_lets_the_run_finish() {
+    let seen = Arc::new(StdMutex::new(Vec::new()));
+    let (tool, _, executor) = usage_limit_run();
+    let result = executor
+        .with_usage_limit({
+            let seen = seen.clone();
+            move |total: &TokenUsage| {
+                seen.lock().unwrap().push(total.clone());
+                total.total_tokens < 1_000
+            }
+        })
+        .call(prompt_args! {"input" => "q"})
+        .await
+        .unwrap();
+    assert_eq!(result.generation, "done");
+    assert_eq!(result.tokens, Some(TokenUsage::new(40, 7)));
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![TokenUsage::new(10, 2), TokenUsage::new(40, 7)]
+    );
+    assert_eq!(tool.inputs().len(), 1);
+}
+
+#[tokio::test]
+async fn usage_limit_stops_the_run_before_its_next_call() {
+    let memory = Arc::new(Mutex::new(SimpleMemory::new()));
+    let (tool, llm, executor) = usage_limit_run();
+    let err = executor
+        .with_memory(memory.clone())
+        .with_usage_limit(|total: &TokenUsage| total.total_tokens < 10)
+        .invoke(prompt_args! {"input" => "q"})
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("agent run stopped by its usage limit"),
+        "{err}"
+    );
+    assert!(tool.inputs().is_empty());
+    assert_eq!(llm.calls().len(), 1);
+    assert!(memory.lock().await.messages().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn usage_limit_stops_streams_too() {
+    let (tool, _, executor) = usage_limit_run();
+    let executor = executor.with_usage_limit(|total: &TokenUsage| total.total_tokens < 10);
+    let mut events = collect_events(&executor, "q").await;
+    let err = events.pop().unwrap().unwrap_err().to_string();
+    assert!(
+        err.contains("agent run stopped by its usage limit"),
+        "{err}"
+    );
+    assert_eq!(
+        events.into_iter().map(Result::unwrap).collect::<Vec<_>>(),
+        vec![AgentStreamEvent::Usage(TokenUsage::new(10, 2))]
+    );
+    assert!(tool.inputs().is_empty());
+}
+
+#[tokio::test]
+async fn answer_that_crosses_the_usage_limit_is_returned() {
+    let (_, _, executor) = usage_limit_run();
+    let result = executor
+        .with_usage_limit(|total: &TokenUsage| total.total_tokens < 20)
+        .invoke(prompt_args! {"input" => "q"})
+        .await
+        .unwrap();
+    assert_eq!(result, "done");
+}
+
+#[tokio::test]
+async fn no_usage_limit_runs_as_before() {
+    let (tool, llm, executor) = usage_limit_run();
+    let result = executor.call(prompt_args! {"input" => "q"}).await.unwrap();
+    assert_eq!(result.generation, "done");
+    assert_eq!(result.tokens, Some(TokenUsage::new(40, 7)));
+    assert_eq!(tool.inputs().len(), 1);
+    assert_eq!(llm.calls().len(), 2);
+}
