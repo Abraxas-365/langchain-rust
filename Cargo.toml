@@ -105,6 +105,7 @@ redis = { version = "1.7", optional = true, default-features = false, features =
     "tokio-comp",
     "connection-manager",
 ] }
+llm-budget = { version = "0.8", optional = true, default-features = false }
 
 
 [features]
@@ -145,6 +146,8 @@ tree-sitter = [
     "dep:tree-sitter-typescript",
 ]
 bedrock = ["dep:aws-sdk-bedrockruntime", "dep:aws-smithy-types", "dep:aws-config"]
+# `llm::BudgetedLLM`: USD spend caps and budget slices for sub-chains (llm-budget).
+budget = ["dep:llm-budget"]
 
 [dev-dependencies]
 aws-smithy-eventstream = "0.61"
@@ -156,8 +159,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 redis-test = { version = "1.0", features = ["aio"] }
 # redis-test enables redis/aio, which needs a runtime even when the `redis` feature is off.
 redis = { version = "1.7", default-features = false, features = ["tokio-comp"] }
-# For examples/agent_budget.rs.
-llm-budget = { version = "0.4", default-features = false }
 
 [build-dependencies]
 cc = { version = "1.2", optional = true }
