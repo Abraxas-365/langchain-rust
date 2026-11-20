@@ -30,6 +30,10 @@ regex = "1.11"
 # Its `log` feature forwards events to `log` when no tracing subscriber is set (env_logger keeps working).
 tracing = { version = "0.1.41", features = ["log"] }
 reqwest-eventsource = "0.6.0"
+rmcp = { version = "3.11", default-features = false, features = [
+    "client",
+    "transport-streamable-http-client-reqwest",
+] }
 async-openai = { version = "0.42", default-features = false, features = [
     "native-tls",
     "chat-completion",
