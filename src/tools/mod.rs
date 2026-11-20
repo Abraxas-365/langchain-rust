@@ -34,6 +34,9 @@ pub use perplexity::*;
 mod exa;
 pub use exa::*;
 
+mod parallel_search;
+pub use parallel_search::ParallelSearch;
+
 mod firecrawl;
 pub use firecrawl::*;
 
