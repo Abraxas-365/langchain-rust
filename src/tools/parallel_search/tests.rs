@@ -154,13 +154,24 @@ async fn construction_and_invalid_input_do_not_contact_server() {
 #[tokio::test]
 async fn errors_are_not_returned_as_search_results_and_later_calls_still_work() {
     let mut server = Server::new_async().await;
-    let session = session_requests(&mut server, 3).await;
+    let session = session_requests(&mut server, 4).await;
     let tool_error = search_request(&mut server, "tool error")
         .with_header("content-type", "application/json")
         .with_body(rpc_result(json!({
             "content": [{"type": "text", "text": "Do not relay this upstream text"}],
             "isError": true
         })))
+        .create_async()
+        .await;
+    let rpc_error = search_request(&mut server, "rpc error")
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "jsonrpc": "2.0", "id": 1,
+                "error": {"code": -32603, "message": "Fixture remote diagnostic"}
+            })
+            .to_string(),
+        )
         .create_async()
         .await;
     let http_error = search_request(&mut server, "rate limit")
@@ -181,6 +192,12 @@ async fn errors_are_not_returned_as_search_results_and_later_calls_still_work() 
         .to_string();
     assert_eq!(error, "Parallel MCP returned a web search error");
     let error = search
+        .run(json!("rpc error"))
+        .await
+        .unwrap_err()
+        .to_string();
+    assert_eq!(error, "Parallel web search failed (MCP error -32603)");
+    let error = search
         .run(json!("rate limit"))
         .await
         .unwrap_err()
@@ -192,10 +209,28 @@ async fn errors_are_not_returned_as_search_results_and_later_calls_still_work() 
     );
     for request in session
         .into_iter()
-        .chain([tool_error, http_error, no_results])
+        .chain([tool_error, rpc_error, http_error, no_results])
     {
         request.assert_async().await;
     }
+}
+
+#[tokio::test]
+async fn initialization_error_does_not_relay_remote_response_body() {
+    let mut server = Server::new_async().await;
+    let initialize = anonymous_request(&mut server, "POST")
+        .match_body(Matcher::PartialJson(json!({"method": "initialize"})))
+        .with_status(400)
+        .with_body("Fixture remote diagnostic")
+        .create_async()
+        .await;
+    let error = tool(&server)
+        .run(json!("Cargo build documentation"))
+        .await
+        .unwrap_err()
+        .to_string();
+    assert_eq!(error, "Parallel MCP connection failed");
+    initialize.assert_async().await;
 }
 
 #[tokio::test]

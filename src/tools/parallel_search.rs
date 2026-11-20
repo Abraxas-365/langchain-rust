@@ -4,8 +4,10 @@ use async_trait::async_trait;
 use reqwest::redirect::Policy;
 use rmcp::{
     model::{CallToolRequestParams, CallToolResult, ClientConfig, Implementation},
+    service::{ClientInitializeError, ServiceError},
     transport::{
-        streamable_http_client::StreamableHttpClientTransportConfig, StreamableHttpClientTransport,
+        streamable_http_client::{StreamableHttpClientTransportConfig, StreamableHttpError},
+        DynamicTransportError, StreamableHttpClientTransport,
     },
     ServiceExt,
 };
@@ -74,7 +76,8 @@ impl ParallelSearch {
         );
         let mut session = timeout(SEARCH_TIMEOUT, client.serve(transport))
             .await
-            .map_err(|_| "Parallel MCP connection timed out")??;
+            .map_err(|_| "Parallel MCP connection timed out")?
+            .map_err(initialization_failure)?;
         let arguments = Map::from_iter([
             ("objective".into(), json!(query)),
             ("search_queries".into(), json!([query])),
@@ -85,7 +88,42 @@ impl ParallelSearch {
         )
         .await;
         let _ = session.close_with_timeout(CLOSE_TIMEOUT).await;
-        Ok(result.map_err(|_| "Parallel web search timed out")??)
+        result
+            .map_err(|_| "Parallel web search timed out")?
+            .map_err(|error| search_failure(error).into())
+    }
+}
+
+fn initialization_failure(error: ClientInitializeError) -> String {
+    let message = "Parallel MCP connection failed";
+    match error {
+        ClientInitializeError::TransportError { error, .. } => transport_failure(message, error),
+        ClientInitializeError::JsonRpcError(error) => {
+            format!("{message} (MCP error {})", error.code.0)
+        }
+        _ => message.into(),
+    }
+}
+
+fn search_failure(error: ServiceError) -> String {
+    let message = "Parallel web search failed";
+    match error {
+        ServiceError::TransportSend(error) => transport_failure(message, error),
+        ServiceError::McpError(error) => format!("{message} (MCP error {})", error.code.0),
+        _ => message.into(),
+    }
+}
+
+// Agents can see tool errors. Keep structured status codes and omit remote diagnostics.
+fn transport_failure(message: &str, error: DynamicTransportError) -> String {
+    match error
+        .error
+        .downcast_ref::<StreamableHttpError<reqwest::Error>>()
+    {
+        Some(StreamableHttpError::HttpStatus(error)) => {
+            format!("{message} (HTTP {})", error.status)
+        }
+        _ => message.into(),
     }
 }
 
