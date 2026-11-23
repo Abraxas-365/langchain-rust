@@ -37,5 +37,8 @@ pub use exa::*;
 mod firecrawl;
 pub use firecrawl::*;
 
+mod keenable;
+pub use keenable::*;
+
 mod calculator;
 pub use calculator::{evaluate_expression, format_number, Calculator, CalculatorError};
