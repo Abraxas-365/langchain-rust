@@ -30,7 +30,7 @@ regex = "1.11"
 # Its `log` feature forwards events to `log` when no tracing subscriber is set (env_logger keeps working).
 tracing = { version = "0.1.41", features = ["log"] }
 reqwest-eventsource = "0.6.0"
-rmcp = { version = "3.11", default-features = false, features = [
+rmcp = { version = "3.11", optional = true, default-features = false, features = [
     "client",
     "transport-streamable-http-client-reqwest",
 ] }
@@ -122,6 +122,7 @@ lopdf = ["dep:lopdf"]
 pdf-extract = ["dep:pdf-extract"]
 ollama = ["ollama-rs"]
 opensearch = ["dep:opensearch", "dep:aws-config"]
+parallel-search = ["dep:rmcp"]
 postgres = ["pgvector", "sqlx", "uuid"]
 mariadb = ["sqlx", "sqlx/mysql", "uuid"]
 qdrant = ["qdrant-client", "uuid"]
