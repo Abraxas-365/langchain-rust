@@ -34,6 +34,11 @@ pub use perplexity::*;
 mod exa;
 pub use exa::*;
 
+#[cfg(feature = "parallel-search")]
+mod parallel_search;
+#[cfg(feature = "parallel-search")]
+pub use parallel_search::ParallelSearch;
+
 mod firecrawl;
 pub use firecrawl::*;
 
