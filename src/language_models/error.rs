@@ -33,6 +33,11 @@ pub enum LLMError {
     #[error("Bedrock error: {0}")]
     BedrockError(#[from] BedrockError),
 
+    /// A [`BudgetedLLM`](crate::llm::BudgetedLLM) call refused by its budget.
+    #[cfg(feature = "budget")]
+    #[error("Budget error: {0}")]
+    BudgetError(#[from] llm_budget::BudgetError),
+
     #[error("Network request failed: {0}")]
     RequestError(#[from] ReqwestError),
 

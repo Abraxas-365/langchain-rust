@@ -1,9 +1,11 @@
 // Caps what an agent run spends in US dollars, with `with_usage_limit` and llm-budget's
 // per-model prices.
 //
-// cargo run --example agent_budget
+// cargo run --example agent_budget --features budget
+#[cfg(feature = "budget")]
 use std::sync::Arc;
 
+#[cfg(feature = "budget")]
 use langchain_rust::{
     agent::{AgentExecutor, OpenAiToolAgentBuilder},
     chain::Chain,
@@ -12,11 +14,14 @@ use langchain_rust::{
     prompt_args,
     tools::CommandExecutor,
 };
+#[cfg(feature = "budget")]
 use llm_budget::{PriceTable, Usage};
 
 /// Most a single run may spend.
+#[cfg(feature = "budget")]
 const CAP_USD: f64 = 0.01;
 
+#[cfg(feature = "budget")]
 #[tokio::main]
 async fn main() {
     let model = OpenAIModel::Gpt4oMini.to_string();
@@ -54,4 +59,11 @@ async fn main() {
         Ok(answer) => println!("Answer: {answer}"),
         Err(e) => println!("Stopped: {e}"),
     }
+}
+
+#[cfg(not(feature = "budget"))]
+fn main() {
+    println!("This example requires the 'budget' feature to be enabled.");
+    println!("Please run the command as follows:");
+    println!("cargo run --example agent_budget --features=budget");
 }
