@@ -1,5 +1,10 @@
 //! USD spend caps for any [`LLM`], with budget slices for sub-chains and sub-agents.
 //!
+//! **Experimental.** The `budget` feature exposes [`llm_budget`] types in its public API
+//! ([`AgentBudget`] in [`BudgetedLLM::new`], the re-exported [`Limit`] and
+//! `LLMError::BudgetError`), so it may change with llm-budget releases, including in
+//! ways that break code using this feature.
+//!
 //! [`BudgetedLLM`] reserves the most a call can cost before it is sent, refuses the call
 //! when that does not fit in what is left, and books what the provider reports when the
 //! call returns. Reservations go through one atomic ledger

@@ -105,7 +105,7 @@ redis = { version = "1.7", optional = true, default-features = false, features =
     "tokio-comp",
     "connection-manager",
 ] }
-llm-budget = { version = "0.8", optional = true, default-features = false }
+llm-budget = { version = "0.10", optional = true, default-features = false }
 
 
 [features]
@@ -147,6 +147,8 @@ tree-sitter = [
 ]
 bedrock = ["dep:aws-sdk-bedrockruntime", "dep:aws-smithy-types", "dep:aws-config"]
 # `llm::BudgetedLLM`: USD spend caps and budget slices for sub-chains (llm-budget).
+# Experimental: this feature exposes llm-budget types in its API and may change
+# with llm-budget releases.
 budget = ["dep:llm-budget"]
 
 [dev-dependencies]
