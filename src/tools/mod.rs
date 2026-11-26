@@ -40,5 +40,8 @@ pub use firecrawl::*;
 mod keenable;
 pub use keenable::*;
 
+mod specstream;
+pub use specstream::*;
+
 mod calculator;
 pub use calculator::{evaluate_expression, format_number, Calculator, CalculatorError};
